@@ -1,0 +1,5 @@
+{
+  "version": "3.11.16",
+  "url": "https://raw.githubusercontent.com/ODKI-tech/ODKI-VBT/refs/heads/main/Firmware/firmware-release/vbt_firmware_3.11.16_OTA.zip",
+  "notes": "Fixes a flat-guard window-sizing bug: on long sessions with significant accumulated raw drift, a slow rep could get misjudged as fast, shortening the stillness window needed to confirm a rep has ended. No user-visible symptom confirmed on hardware yet - found during a code review, fixed proactively. No BLE protocol changes - compatible with any existing app version."
+}
