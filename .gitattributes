@@ -1,7 +1,6 @@
 # Normalize text files to LF in the repo, let git convert on checkout
 # per the user's own core.autocrlf setting.
 * text=auto eol=lf
-
 # CAD / mechanical design files - never diff or line-ending-convert these
 *.step binary
 *.stp binary
