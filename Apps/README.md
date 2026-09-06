@@ -6,8 +6,8 @@ The ODKI VBT companion app connects to the sensor over Bluetooth Low Energy to c
 
 Download and setup instructions for each platform:
 
-- **[Android/](Android/)**
-- **[iOS/](iOS/)**
-- **[Windows/](Windows/)**
+- **[Android/](Android/)** — published.
+- **[iOS/](iOS/)** — not yet published.
+- **[Windows/](Windows/)** — not yet published.
 
-None of these are published yet — see each platform's README for current status.
+See each platform's README for current status and, once published, the download link.

@@ -17,4 +17,7 @@
 *.bin binary
 *.elf binary
 *.dat binary
+# App release
+*.apk binary
+*.zip binary
 Apps/Android/app-release/*.apk filter=lfs diff=lfs merge=lfs -text

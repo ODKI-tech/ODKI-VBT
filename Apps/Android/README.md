@@ -1,12 +1,12 @@
 # Android
 
-**Status: not yet published.** Link coming soon.
+**Status: published.** [Download the latest APK](app-release/odki-vbt-v1.0.0.apk) (v1.0.0).
 
 ## Download & install
 
 Distributed as a downloadable APK directly from [`app-release/`](app-release/) in this repository (sideload — no Google Play listing planned initially). Unlike the firmware (which self-checks for updates in-app), there's no auto-update mechanism for the app itself yet — check back here for a newer `.apk`.
 
-1. Download the latest `.apk` from [`app-release/`](app-release/) (the filename includes the version, e.g. `odki-vbt-v1.0.0.apk`).
+1. Download the latest `.apk` from [`app-release/`](app-release/) (the filename includes the version, currently `odki-vbt-v1.0.0.apk`).
 2. Android will likely warn that installing from outside the Play Store is blocked — go to **Settings → Apps → Special access → Install unknown apps**, select the app you downloaded with (e.g. your browser or file manager), and allow it. The exact wording/path varies a bit by Android version and manufacturer.
 3. Open the downloaded `.apk` and confirm the install.
 4. To update later, just download and install the newer `.apk` the same way — it installs over the existing app as long as it's signed with the same key, no need to uninstall first.
