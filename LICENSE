@@ -1,0 +1,30 @@
+ODKI VBT — License Overview
+============================
+
+This repository does not use a single license — the firmware and the
+hardware design are licensed separately, under different terms, because
+they're different kinds of work with different existing license
+ecosystems (software vs. hardware/creative-commons licensing). There is
+no third, overarching license beyond the two below; GitHub's automatic
+license detection looks for a single root LICENSE file, so it won't
+identify either one correctly from this file alone — read the two files
+themselves for the actual terms.
+
+- **Firmware** (`Firmware/`) — see [LICENSE-FIRMWARE](LICENSE-FIRMWARE):
+  GNU General Public License v3.0, modified by the Commons Clause License
+  Condition v1.0 (source-available: use, study, modify, and share for
+  non-commercial purposes; selling is reserved to ODKI).
+- **Hardware** (`Hardware/`) — see [LICENSE-HARDWARE](LICENSE-HARDWARE):
+  Creative Commons Attribution-NonCommercial-ShareAlike 4.0
+  International (CC BY-NC-SA 4.0), with the same commercial-sale
+  restriction reserved to ODKI.
+- **BLE protocol specification** (`Firmware/BLE_PROTOCOL.md` only, not
+  the firmware code that implements it) — released under CC0 1.0
+  (public domain), see the license note at the top of that file.
+- **Companion app** (`Apps/`) — closed-source, not covered by any
+  license in this repository; see the note in
+  [Apps/README.md](Apps/README.md).
+
+See [README.md](README.md) for a plain-language summary of what all this
+means in practice, and [CONTRIBUTING.md](CONTRIBUTING.md) for how
+contributions are licensed back (the CLA).

@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+
+# Python (Firmware/tools/vbt_log_viewer.py)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Arduino / PlatformIO build output (if ever built in-place instead of arduino-cli --output-dir)
+build/
+.pio/
+*.hex
+*.elf
+
+# Fusion 360 local sync/backup clutter (the intentional exports live in Hardware/CAD/*.f3d)
+*.f3d.backup
+*.f3z
+
+# Local debug-log captures (Firmware/tools/vbt_log_viewer.py input) - personal recordings, not repo content
+*.log
+
+# Editor scratch / OS trash
+*~

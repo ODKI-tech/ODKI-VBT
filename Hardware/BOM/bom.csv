@@ -1,0 +1,6 @@
+Component,Qty per unit,Key specs,Approx. unit cost (EUR)
+LiPo battery,1,"3.7V nominal, 400 mAh (1.48 Wh), Li-Po size code 602035 (6mm[T] x 20mm[W] x 35mm[L]), CE certified, must include built-in overcharge/overdischarge/short-circuit protection chip",~3.65-4.50 (sold in 2/5/10-pack bundles)
+Microcontroller,1,"Seeed Studio XIAO nRF52840 Sense - Nordic nRF52840 (ARM Cortex-M4, 64MHz), Bluetooth 5.0/5.4 + BLE Mesh + NFC, 256KB RAM, 1MB internal + 2MB onboard flash, onboard 6-axis IMU (LSM6DS3TR-C), onboard PDM microphone, integrated LiPo charge/discharge management, USB-C, standby <5uA, 21mm x 17.8mm",~14-52 (price varies significantly by seller - shop around)
+Neodymium magnet,3,"Round disc, 10mm diameter x 2.2mm thick (+/-0.1mm), ~2kg pull force per magnet",~0.21 (from a 52-pack + 2 steel plates at ~10.98)
+Power switch,1,"SPDT slide switch (1P2T, 3-pin, 2-position), panel-mount vertical slide, DC 50V / 0.5A rated, model SS12D00-G3, body without pins/knob 8x4x3.8mm, overall with knob 8x4x10mm, pin spacing 2.54mm",~0.05 (from a 200-pack at ~9.99)
+Hookup wire,2,"Generic stranded hookup wire, ~26-30AWG, ~5-10cm each - connects the power switch to WAKE_PIN and GND (see Firmware/DOCUMENTATION.md, PowerManager chapter)",negligible (offcuts from any reel)
