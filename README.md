@@ -1,6 +1,8 @@
 # ODKI VBT
 
-ODKI VBT is a source-available **Velocity-Based Training (VBT)** sensor — a small wireless device that clips onto a barbell (or is otherwise attached to the load being lifted) and measures bar velocity, displacement, and rep count in real time, streaming the results to a companion app over Bluetooth Low Energy. Build your own from the files here for personal or research use, or buy a ready-made, ODKI-branded unit — see the license note below for exactly what "source-available" means here.
+**[odki.tech](https://odki.tech)** — project site, pre-orders, and the companion app.
+
+ODKI VBT is a source-available **Velocity-Based Training (VBT)** sensor — a small wireless device that clips onto a barbell (or is otherwise attached to the load being lifted) and measures bar velocity, displacement, and rep count in real time, streaming the results to a companion app over Bluetooth Low Energy. Build your own from the files here for personal or research use, or buy a ready-made, ODKI-branded unit at [odki.tech](https://odki.tech) — see the license note below for exactly what "source-available" means here.
 
 Velocity-based training uses how *fast* a lift moves — not just the weight on the bar — to gauge effort, fatigue, and training intensity in real time, which is the whole reason this project exists: an accessible, understandable, hackable device to do that.
 
