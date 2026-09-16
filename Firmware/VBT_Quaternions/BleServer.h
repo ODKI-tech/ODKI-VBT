@@ -234,7 +234,7 @@ struct RuntimeConfigPacket {
   uint16_t accZBiasGyroMaxDegSx10;            // x10   -> degrees/s
   uint16_t accZBiasAccMagToleranceX1000;      // x1000 -> m/s^2
   uint16_t flatGuardMaxVelocityMmps;          // x1    -> mm/s
-  uint16_t flatGuardOverrideStillTimeMs;      // x1    -> ms (v3.11.5, anti-stall safety net - see RuntimeConfig)
+  uint8_t velocityOverrideFlatWindowSamples;  // direct, samples (v3.11.27, replaces flatGuardOverrideStillTimeMs - see RuntimeConfig)
   uint16_t velocityFlatBandMmps;              // x1    -> mm/s
   uint8_t maxVelocityFlatWindowSamples;       // direct, samples
   uint8_t minVelocityFlatWindowSamples;       // direct, samples
@@ -250,7 +250,11 @@ struct RuntimeConfigPacket {
   uint16_t emaAlphaX1000;                     // x1000 -> dimensionless [0,1]
   int16_t minCrossingExcursionMmps;           // x1    -> mm/s, negative
   uint16_t minCrossingDurationMs;             // x1    -> ms
-}; // 39 bytes (v3.11.24: was 40 - debugLogEnabled removed, see the
+}; // 38 bytes (v3.11.27: was 39 - flatGuardOverrideStillTimeMs (uint16_t)
+   // replaced by velocityOverrideFlatWindowSamples (uint8_t), see the
+   // version note in MotionTracker.cpp: the raw-quiet-time safety net was
+   // replaced by a fixed sample-count window over velZLive/worldAccZ.
+   // v3.11.24: was 40 before that - debugLogEnabled removed, see the
    // version note in MotionTracker.cpp: the raw-serial-log vs. BLE-stream
    // choice is now automatic, driven by whether a USB-serial connection
    // is open, not a stored Config field)
@@ -279,7 +283,7 @@ struct RuntimeConfigPacket {
 // Command (Write, 1 byte):
 //   0x00 STOP, 0x01 START, 0x02 CALIBRATE
 //
-// Config (Read/Write, 39 bytes, v3.11.0/v3.11.5/v3.11.24): see RuntimeConfigPacket above.
+// Config (Read/Write, 38 bytes, v3.11.0/v3.11.24/v3.11.27): see RuntimeConfigPacket above.
 //
 // ============================================================================
 // STANDARD SERVICES (Bluetooth SIG) - see the comment at the top of the file

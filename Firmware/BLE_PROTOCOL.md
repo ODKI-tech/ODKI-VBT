@@ -34,7 +34,7 @@ For *why* the protocol is shaped this way (why `Stream` is always raw, why `Corr
 | CorrectedCurve | `6c7325bb-1784-4d77-8b99-89ce838ac2ae` | Notify | 53 B |
 | SystemStatus | `6c7325bb-1784-4d77-8b99-89ce838ac2af` | Read, Notify | 2 B |
 | Command | `6c7325bb-1784-4d77-8b99-89ce838ac2b0` | Write | 1 B |
-| Config | `6c7325bb-1784-4d77-8b99-89ce838ac2b2` | Read, Write | 39 B |
+| Config | `6c7325bb-1784-4d77-8b99-89ce838ac2b2` | Read, Write | 38 B |
 | Battery Service | `0x180F` (standard) | — | — |
 | Battery Level | `0x2A19` (standard) | Read, Notify | 1 B |
 | Device Information Service | `0x180A` (standard) | — | — |
@@ -153,7 +153,7 @@ Any other value, or a write shorter than 1 byte, is silently ignored.
 
 ---
 
-## Config — `…c2b2`, Read/Write, 39 bytes
+## Config — `…c2b2`, Read/Write, 38 bytes
 
 Runtime-adjustable algorithm parameters, mirroring the firmware's `RuntimeConfig` struct field-for-field. **Not persisted to flash** — the firmware always boots from its compiled defaults, so a client that wants non-default settings must re-send this characteristic on every new connection. Reading it returns whatever configuration is currently active (defaults, until a client writes otherwise). A write is echoed back into the Read value immediately, before the firmware has necessarily applied it internally.
 
@@ -168,30 +168,32 @@ See [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#runtimeconfig-field-reference
 | 7 | 2 | `accZBiasGyroMaxDegSx10` | uint16 | ÷10 | degrees/s |
 | 9 | 2 | `accZBiasAccMagToleranceX1000` | uint16 | ÷1000 | m/s² |
 | 11 | 2 | `flatGuardMaxVelocityMmps` | uint16 | direct | mm/s |
-| 13 | 2 | `flatGuardOverrideStillTimeMs` | uint16 | direct | ms |
-| 15 | 2 | `velocityFlatBandMmps` | uint16 | direct | mm/s |
-| 17 | 1 | `maxVelocityFlatWindowSamples` | uint8 | direct | samples |
-| 18 | 1 | `minVelocityFlatWindowSamples` | uint8 | direct | samples |
-| 19 | 2 | `accelerationFlatBandX1000Mps2` | uint16 | ÷1000 | m/s² |
-| 21 | 1 | `maxAccelerationFlatWindowSamples` | uint8 | direct | samples |
-| 22 | 1 | `minAccelerationFlatWindowSamples` | uint8 | direct | samples |
-| 23 | 2 | `windowSaturationPeakVelocityMmps` | uint16 | direct | mm/s |
-| 25 | 2 | `phaseStartVelocityMmps` | uint16 | direct | mm/s |
-| 27 | 2 | `minPhaseDurationMs` | uint16 | direct | ms |
-| 29 | 2 | `maxPhaseDurationMs` | uint16 | direct | ms |
-| 31 | 1 | `phaseLookbackSamples` | uint8 | direct | samples |
-| 32 | 1 | `reversalConfirmSamples` | uint8 | direct | samples |
-| 33 | 2 | `emaAlphaX1000` | uint16 | ÷1000 | dimensionless, [0, 1] |
-| 35 | 2 | `minCrossingExcursionMmps` | **int16** | direct | mm/s, always ≤ 0 |
-| 37 | 2 | `minCrossingDurationMs` | uint16 | direct | ms |
+| 13 | 1 | `velocityOverrideFlatWindowSamples` | uint8 | direct | samples |
+| 14 | 2 | `velocityFlatBandMmps` | uint16 | direct | mm/s |
+| 16 | 1 | `maxVelocityFlatWindowSamples` | uint8 | direct | samples |
+| 17 | 1 | `minVelocityFlatWindowSamples` | uint8 | direct | samples |
+| 18 | 2 | `accelerationFlatBandX1000Mps2` | uint16 | ÷1000 | m/s² |
+| 20 | 1 | `maxAccelerationFlatWindowSamples` | uint8 | direct | samples |
+| 21 | 1 | `minAccelerationFlatWindowSamples` | uint8 | direct | samples |
+| 22 | 2 | `windowSaturationPeakVelocityMmps` | uint16 | direct | mm/s |
+| 24 | 2 | `phaseStartVelocityMmps` | uint16 | direct | mm/s |
+| 26 | 2 | `minPhaseDurationMs` | uint16 | direct | ms |
+| 28 | 2 | `maxPhaseDurationMs` | uint16 | direct | ms |
+| 30 | 1 | `phaseLookbackSamples` | uint8 | direct | samples |
+| 31 | 1 | `reversalConfirmSamples` | uint8 | direct | samples |
+| 32 | 2 | `emaAlphaX1000` | uint16 | ÷1000 | dimensionless, [0, 1] |
+| 34 | 2 | `minCrossingExcursionMmps` | **int16** | direct | mm/s, always ≤ 0 |
+| 36 | 2 | `minCrossingDurationMs` | uint16 | direct | ms |
 
-Every field is unsigned except `minCrossingExcursionMmps` at offset 35 — the one signed field in the packet.
+Every field is unsigned except `minCrossingExcursionMmps` at offset 34 — the one signed field in the packet.
 
-Python decode: `struct.unpack("<B8HBBHBBHHHHBBHhH", data)` — 23 fields, matching the table row order exactly (`H`×8, then `BB`, `H`, `BB`, `H`×4, `BB`, `H`, `h`, `H`).
+Python decode: `struct.unpack("<BHHHHHHBHBBHBBHHHHBBHhH", data)` — 23 fields, matching the table row order exactly (`B`, `H`×6, `B`, `H`, `BB`, `H`, `BB`, `H`×4, `BB`, `H`, `h`, `H`).
 
-A write shorter than 39 bytes is ignored entirely (the whole packet, not just the missing tail).
+A write shorter than 38 bytes is ignored entirely (the whole packet, not just the missing tail).
 
-**v3.11.24:** `debugLogEnabled` (offset 39) was removed — the packet shrank from 40 to 39 bytes. Whether the sensor prints its raw serial log or streams over BLE is now decided automatically from whether a USB-serial connection is open (see [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#lab-data-capture-serial-log)), not a field a client sends. A client built against the pre-v3.11.24 40-byte layout will have its Config writes silently ignored by v3.11.24+ firmware (`len < sizeof(RuntimeConfigPacket)` now means `len < 39`, not `< 40`) — update the packet size before talking to updated firmware.
+**v3.11.27:** `flatGuardOverrideStillTimeMs` (a uint16 duration, was offset 13) was removed and replaced by `velocityOverrideFlatWindowSamples` (a uint8 sample count) at the same offset — the packet shrank from 39 to 38 bytes. The old field gated a raw gyroscope/accelerometer quiet-time safety net that in practice almost never fired (it required a full, unbroken second with zero noise anywhere in it); the new field instead widens the SAME velocity/acceleration flatness tests the sensor already runs (to a fixed 30–60 sample window) once the corrected velocity estimate is outside `flatGuardMaxVelocityMps` — see [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#the-flat-guards-two-tier-design) for the full reasoning. A client built against the pre-v3.11.27 39-byte layout will have its Config writes silently ignored by v3.11.27+ firmware — update the packet size and field before talking to updated firmware.
+
+**v3.11.24:** `debugLogEnabled` (offset 39) was removed — the packet shrank from 40 to 39 bytes. Whether the sensor prints its raw serial log or streams over BLE is now decided automatically from whether a USB-serial connection is open (see [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#lab-data-capture-serial-log)), not a field a client sends.
 
 ---
 
@@ -214,8 +216,8 @@ There is no `.h`/`.cpp` in this firmware implementing the second stage — it's 
 
 ## License
 
-This document (`BLE_PROTOCOL.md` only — not the firmware source it describes, see [`LICENSE-FIRMWARE`](LICENSE-FIRMWARE) for that) is released under **CC0 1.0 Universal**: to the extent possible under law, the author(s) have waived all copyright and related or neighboring rights to this document. You may copy, modify, distribute, and use it — including commercially, including without attribution — with no conditions at all.
+This document (`BLE_PROTOCOL.md` only — not the firmware source it describes, see [`LICENSE-FIRMWARE`](../LICENSE-FIRMWARE) for that) is released under **CC0 1.0 Universal**: to the extent possible under law, the author(s) have waived all copyright and related or neighboring rights to this document. You may copy, modify, distribute, and use it — including commercially, including without attribution — with no conditions at all.
 
 Full legal text: <https://creativecommons.org/publicdomain/zero/1.0/legalcode>
 
-This applies only to the protocol *specification* in this file — implementing a compatible client (an app, a script, an integration) based on it is unrestricted. It does not relicense the firmware itself, which remains under [`LICENSE-FIRMWARE`](LICENSE-FIRMWARE).
+This applies only to the protocol *specification* in this file — implementing a compatible client (an app, a script, an integration) based on it is unrestricted. It does not relicense the firmware itself, which remains under [`LICENSE-FIRMWARE`](../LICENSE-FIRMWARE).

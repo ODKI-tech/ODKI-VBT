@@ -636,6 +636,52 @@ namespace {
   // branch (already re-anchored per v3.11.15) or bracket open/close
   // timing itself (unaffected - risingEdge/checkZeroCrossing() are
   // unchanged).
+  //
+  // v3.11.27: v3.11.26 bounded the drift, but user-reported (a second
+  // real deadlift capture, STACCO_3) it was still visibly wrong for
+  // seconds after every rep - traced to the ground contact that's
+  // unavoidable in a deadlift. Sequence found in the capture: the bar's
+  // eccentric descent already has an offset (from the EMA/rep-calib
+  // estimate accumulated earlier - v3.11.26 bounds how large this gets,
+  // it doesn't prevent it) that's grown past flatGuardMaxVelocityMps
+  // (0.20 m/s) by the time the bar makes contact; the impact itself
+  // (worldAccZ up to +3.2 m/s^2 in the capture) is real and expected, and
+  // velZ settles genuinely flat within under a second - but velZLive,
+  // still carrying the pre-impact offset, never comes back under 0.20,
+  // so the PRIMARY flat-guard path (velIsFlatNow's ceiling check) can
+  // never recognize this genuine rest. The existing safety net for
+  // exactly this case, flatGuardOverrideStillTimeS (v3.11.5), also never
+  // fired even once in the whole capture: it requires a full, unbroken
+  // 1.0s (100 samples) of raw gyroscope+accelerometer quiet, and
+  // post-impact ringdown realistically scatters small noise samples
+  // through that whole window - each one forces the FULL 1.0s to restart
+  // from scratch (absoluteFlat() needs every one of the last N samples
+  // under band), so in a bouncy/noisy real session it essentially never
+  // completes. Considered (and rejected, confirmed by simulating it
+  // against the SAME capture before implementing anything) simply
+  // dropping the flatGuardMaxVelocityMps ceiling from the primary path
+  // and relying only on the dynamic-window flatness tests: at high
+  // phasePeakVelocity the dynamic window shrinks to
+  // minVelocityFlatWindowSamples/minAccelerationFlatWindowSamples (as low
+  // as 2 samples/20ms), and a smooth velocity curve's acceleration
+  // crosses zero at every local peak by simple calculus - with only a
+  // 2-sample window, that momentary, few-millisecond crossing at the TOP
+  // of a fast rep is indistinguishable from a genuine stop. Confirmed
+  // directly in the capture's own first rep: without the ceiling,
+  // stepPhaseEngine() would have declared "flat" at t=1.423s with
+  // velZLive=1.0065 m/s - the exact peak of a clean 1.27 m/s pull, not a
+  // stop. So the ceiling stays on the fast/dynamic-window path (it's
+  // load-bearing there, not redundant), but flatGuardOverrideStillTimeS
+  // is REMOVED and replaced: once phaseOpen and fabs(velZLive) exceeds
+  // flatGuardMaxVelocityMps, both flatness tests switch from the dynamic
+  // window to RuntimeConfig::velocityOverrideFlatWindowSamples (fixed,
+  // 30-60 samples/300-600ms, configurable from the app) - still on
+  // velZLive/worldAccZ (the same smoothed signal the fast path already
+  // uses, not raw IMU noise, so it isn't fooled by isolated post-impact
+  // ringdown samples the way the raw-quiet override was), just over
+  // enough samples that a real pause (which holds flat for hundreds of
+  // ms) can't be confused with a fast rep's momentary peak (tens of ms).
+  // See stepPhaseEngine() and RuntimeConfig::velocityOverrideFlatWindowSamples.
   // ============================================================================
 
   // --- Sampling / orientation (Madgwick) ---
@@ -656,15 +702,16 @@ namespace {
   const float ACCZ_BIAS_TAU_S = 2.0f;
   const float ACCZ_BIAS_MAX_STEP = 1.5f;
   // v3.11.14: shared capacity of gyroMagQuietRing/accMagQuietRing (see
-  // declaration below) - the three gates that read them
-  // (accZBiasIdleStillTimeS, gyroBiasIdleStillTimeS,
-  // flatGuardOverrideStillTimeS) each use a different window length over
-  // the SAME rings, so the capacity has to cover the longest of the three
-  // - flatGuardOverrideStillTimeS defaults to 1.0s (100 samples), 200 (2s)
-  // is generous headroom for a higher value set over BLE (clamped in
+  // declaration below) - the gates that read them (accZBiasIdleStillTimeS,
+  // gyroBiasIdleStillTimeS) each use a different window length over the
+  // SAME rings, so the capacity has to cover the longer of the two - 200
+  // (2s) is generous headroom for a value set over BLE (clamped in
   // secondsToQuietSamples() below, otherwise it would read past the
   // array's bounds - the same bug as v3.11.12, impossible here by
-  // construction).
+  // construction). A third gate used to read these same rings too
+  // (flatGuardOverrideStillTimeS, defaulting to 1.0s/100 samples) - see
+  // the v3.11.27 version note near the top of the file for why it was
+  // replaced with a fixed window over velLiveRing/accZRing instead.
   const uint16_t BIAS_QUIET_RING_CAPACITY = 200;
 
   // --- Gyroscope bias, CONTINUOUS estimate (see RuntimeConfig::gyroBiasIdleStillTimeS) ---
@@ -816,12 +863,13 @@ namespace {
   // there was isolated noise/vibration). Always updated in
   // updateOrientationAndAcceleration() (even before START) - CANNOT reuse
   // velLiveRing/accZRing from stepPhaseEngine(), which only run while
-  // trackingActive. The three gates that depend on it
-  // (accZBiasIdleStillTimeS, gyroBiasIdleStillTimeS,
-  // flatGuardOverrideStillTimeS) each read a different window length over
-  // the SAME two rings via excursionFlat()/absoluteFlat() (see
+  // trackingActive. The gates that depend on it (accZBiasIdleStillTimeS,
+  // gyroBiasIdleStillTimeS) each read a different window length over the
+  // SAME two rings via excursionFlat()/absoluteFlat() (see
   // secondsToQuietSamples() and where they're used in
-  // updateOrientationAndAcceleration()/stepPhaseEngine()).
+  // updateOrientationAndAcceleration()). A third gate used to read these
+  // too (flatGuardOverrideStillTimeS, in stepPhaseEngine()) - removed in
+  // v3.11.27, see the version note near the top of the file.
   float gyroMagQuietRing[BIAS_QUIET_RING_CAPACITY] = {0};
   float accMagQuietRing[BIAS_QUIET_RING_CAPACITY] = {0};
   uint8_t quietRingFill = 0;
@@ -1632,25 +1680,30 @@ namespace {
     ringHead = (ringHead + 1) % FLAT_RING_CAPACITY;
     if (ringFill < FLAT_RING_CAPACITY) ringFill++;
 
-    bool velIsFlatNow = (!phaseOpen || (fabs(velZLive) <= activeConfig.flatGuardMaxVelocityMps)) &&
-                         excursionFlat(velLiveRing, ringFill, ringHead, FLAT_RING_CAPACITY, phaseVelWindowSamples, activeConfig.velocityFlatBandMps);
-    bool accelFlatNow = absoluteFlat(accZRing, ringFill, ringHead, FLAT_RING_CAPACITY, phaseAccWindowSamples, activeConfig.accelerationFlatBandMps2);
-    bool normalFlatCombined = velIsFlatNow && accelFlatNow;
-    // v3.11.5: safety net against the stall described on
-    // RuntimeConfig::flatGuardOverrideStillTimeS - based on RAW
-    // gyroscope + total acceleration stillness (gyroMagQuietRing/
-    // accMagQuietRing, see updateOrientationAndAcceleration()),
-    // independent of any current velocity estimate: if the sensor turns
-    // out to be still over THIS window, the Flat-guard triggers anyway,
-    // even if velZ_live (the estimate) still says no. v3.11.14: sliding
-    // window (same logic as velIsFlatNow/accelFlatNow above, see the
-    // version note at the top of the file) instead of the old cumulative
-    // counter - an isolated outlier costs at most 'window' samples, never
-    // a full reset of the wait.
-    bool quietForFlatGuardOverride = quietForDuration(activeConfig.flatGuardOverrideStillTimeS);
-    bool overrideFired = !normalFlatCombined && quietForFlatGuardOverride;
-    bool flatCombined = normalFlatCombined || overrideFired;
-    debugStateVar.flatGuardOverrideFired = overrideFired;
+    // v3.11.27: two-tier flat-guard, replacing the old dynamic-window +
+    // raw-quiet-override pair (see the version note below for the full
+    // reasoning and the real capture that drove this). Below
+    // flatGuardMaxVelocityMps (or while idle, phaseOpen==false), nothing
+    // changes here: the normal dynamic window (phaseVelWindowSamples/
+    // phaseAccWindowSamples, shrunk by accumulateIntoOpenPhase() as the
+    // phase's peak velocity grows) is fast and, under the ceiling, safe.
+    // Above it - the exact situation the ceiling exists to catch, a
+    // correction estimate that's drifted past the point where a small
+    // window could be trusted - both tests switch to a wider, FIXED
+    // window instead: still velZLive/worldAccZ (not raw IMU noise), just
+    // over enough samples (velocityOverrideFlatWindowSamples, 30-60) that
+    // a genuine pause (holds flat for hundreds of ms) can't be mistaken
+    // for the few-millisecond acceleration-crosses-zero instant at the
+    // PEAK of a fast rep - see stepPhaseEngine()'s call sites below and
+    // the version note for why that ambiguity rules out simply dropping
+    // the ceiling on the dynamic-window path itself.
+    bool aboveCeiling = phaseOpen && (fabs(velZLive) > activeConfig.flatGuardMaxVelocityMps);
+    uint16_t velWindow = aboveCeiling ? activeConfig.velocityOverrideFlatWindowSamples : phaseVelWindowSamples;
+    uint16_t accWindow = aboveCeiling ? activeConfig.velocityOverrideFlatWindowSamples : phaseAccWindowSamples;
+    bool velIsFlatNow = excursionFlat(velLiveRing, ringFill, ringHead, FLAT_RING_CAPACITY, velWindow, activeConfig.velocityFlatBandMps);
+    bool accelFlatNow = absoluteFlat(accZRing, ringFill, ringHead, FLAT_RING_CAPACITY, accWindow, activeConfig.accelerationFlatBandMps2);
+    bool flatCombined = velIsFlatNow && accelFlatNow;
+    debugStateVar.flatGuardOverrideFired = aboveCeiling && flatCombined;
     bool risingEdge = flatCombined && !wasFlatCombined;
     wasFlatCombined = flatCombined;
 
@@ -2134,6 +2187,14 @@ void MotionTracker::setConfig(const RuntimeConfig& config) {
   // BLE from a client must not be able to corrupt memory.
   if (activeConfig.maxVelocityFlatWindowSamples > FLAT_RING_CAPACITY) activeConfig.maxVelocityFlatWindowSamples = FLAT_RING_CAPACITY;
   if (activeConfig.maxAccelerationFlatWindowSamples > FLAT_RING_CAPACITY) activeConfig.maxAccelerationFlatWindowSamples = FLAT_RING_CAPACITY;
+  // v3.11.27: same protection for the above-ceiling fixed window - also
+  // indexes into FLAT_RING_CAPACITY (see stepPhaseEngine()). 30 is the
+  // documented minimum of its configurable 30-60 range; clamping the low
+  // end too keeps an out-of-range BLE value from shrinking it back down
+  // to something the peak-velocity ambiguity it exists to prevent could
+  // exploit.
+  if (activeConfig.velocityOverrideFlatWindowSamples > FLAT_RING_CAPACITY) activeConfig.velocityOverrideFlatWindowSamples = FLAT_RING_CAPACITY;
+  if (activeConfig.velocityOverrideFlatWindowSamples < 30) activeConfig.velocityOverrideFlatWindowSamples = 30;
   if (activeConfig.minVelocityFlatWindowSamples < 1) activeConfig.minVelocityFlatWindowSamples = 1;
   if (activeConfig.minAccelerationFlatWindowSamples < 1) activeConfig.minAccelerationFlatWindowSamples = 1;
   if (activeConfig.minVelocityFlatWindowSamples > activeConfig.maxVelocityFlatWindowSamples)

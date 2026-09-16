@@ -122,7 +122,7 @@ namespace {
     pkt.accZBiasGyroMaxDegSx10 = toFixedU16(cfg.accZBiasGyroMaxDegS, 10.0f);
     pkt.accZBiasAccMagToleranceX1000 = toFixedU16(cfg.accZBiasAccMagToleranceMps2, 1000.0f);
     pkt.flatGuardMaxVelocityMmps = toFixedU16(cfg.flatGuardMaxVelocityMps, 1000.0f);
-    pkt.flatGuardOverrideStillTimeMs = toFixedU16(cfg.flatGuardOverrideStillTimeS, 1000.0f);
+    pkt.velocityOverrideFlatWindowSamples = cfg.velocityOverrideFlatWindowSamples;
     pkt.velocityFlatBandMmps = toFixedU16(cfg.velocityFlatBandMps, 1000.0f);
     pkt.maxVelocityFlatWindowSamples = cfg.maxVelocityFlatWindowSamples;
     pkt.minVelocityFlatWindowSamples = cfg.minVelocityFlatWindowSamples;
@@ -150,7 +150,7 @@ namespace {
     cfg.accZBiasGyroMaxDegS = pkt.accZBiasGyroMaxDegSx10 / 10.0f;
     cfg.accZBiasAccMagToleranceMps2 = pkt.accZBiasAccMagToleranceX1000 / 1000.0f;
     cfg.flatGuardMaxVelocityMps = pkt.flatGuardMaxVelocityMmps / 1000.0f;
-    cfg.flatGuardOverrideStillTimeS = pkt.flatGuardOverrideStillTimeMs / 1000.0f;
+    cfg.velocityOverrideFlatWindowSamples = pkt.velocityOverrideFlatWindowSamples;
     cfg.velocityFlatBandMps = pkt.velocityFlatBandMmps / 1000.0f;
     cfg.maxVelocityFlatWindowSamples = pkt.maxVelocityFlatWindowSamples;
     cfg.minVelocityFlatWindowSamples = pkt.minVelocityFlatWindowSamples;

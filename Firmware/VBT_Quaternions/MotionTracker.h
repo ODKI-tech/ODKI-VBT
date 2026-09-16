@@ -158,7 +158,7 @@ struct MotionDebugState {
   bool velocityClampedToMax = false;
   bool bracketClosed = false; // a bracket closed on this sample (drift measured and applied retroactively)
   bool confirmedStillNow = false; // v3.11.2: the engine confirms stillness on this sample (== flatCombined) - drives the continuous re-alignment of the measurement anchor, see the end of stepPhaseEngine() in MotionTracker.cpp
-  bool flatGuardOverrideFired = false; // v3.11.5: the Flat-guard triggered on this sample ONLY thanks to RuntimeConfig::flatGuardOverrideStillTimeS (the normal test on velZ_live was not satisfied) - see stepPhaseEngine() in MotionTracker.cpp
+  bool flatGuardOverrideFired = false; // v3.11.27: the Flat-guard triggered on this sample via the wide, fixed-window path (RuntimeConfig::velocityOverrideFlatWindowSamples) because fabs(velZLive) was above flatGuardMaxVelocityMps at the time - see stepPhaseEngine() in MotionTracker.cpp
 };
 
 // Direction of the phase tracked as a rep - see repDirectionSign in
@@ -218,26 +218,32 @@ struct RuntimeConfig {
   // the raw value - this is the structural fix that makes the ceiling
   // usable without having to raise it.
   float flatGuardMaxVelocityMps = 0.20f;
-  // v3.11.5: safety net against a lockup still possible despite the fix
-  // above - reported by the user, hard to reproduce: if the CURRENT
-  // correction ESTIMATE (bracket EMA or rep calibration, see
-  // _live_predicted_offset in MotionTracker.cpp) accumulates enough error
-  // over a long stretch without ever a closed bracket (e.g. a series of
-  // touch-and-go reps with no real pauses), velZ_live can stay outside
-  // the ceiling above EVEN when the sensor is truly still - not because
-  // the sensor is drifting, but because the estimate used to judge it is
-  // the wrong one. Without a bracket closing, the estimate can never
-  // correct itself: a genuine stall. This field is a SEPARATE, longer
-  // threshold on the same consecutive-stillness counter already used for
-  // accZBiasIdleStillTimeS/gyroBiasIdleStillTimeS above (same pattern,
-  // RAW and independent of any velocity estimate - gyroscope magnitude
-  // and total acceleration, untouched by integration error): if the
-  // sensor turns out to be CONFIRMED still for longer than this, the
-  // Flat-guard triggers anyway, bypassing the ceiling/windows above - see
-  // stepPhaseEngine() in MotionTracker.cpp. Deliberately longer than
-  // gyroBiasIdleStillTimeS: it's a rare override, not the primary
-  // mechanism.
-  float flatGuardOverrideStillTimeS = 1.0f;
+  // v3.11.27: replaces flatGuardOverrideStillTimeS (removed - see the
+  // version note in MotionTracker.cpp). That field was a safety net
+  // against the SAME lockup this one addresses (the correction estimate
+  // stuck outside flatGuardMaxVelocityMps even while the sensor is truly
+  // still - e.g. after ground impact resets velZ but not the
+  // already-accumulated offset), but it tested RAW gyroscope/acceleration
+  // stillness over a full 1.0s window that had to be ENTIRELY clean - one
+  // noisy sample from post-impact ringdown anywhere in that second forced
+  // a full new second of waiting, so in practice it almost never fired.
+  // This field takes the opposite approach: once phaseOpen and
+  // fabs(velZLive) exceeds flatGuardMaxVelocityMps, BOTH flatness tests
+  // below (velocityFlatBandMps/accelerationFlatBandMps2 - same bands,
+  // unchanged) switch from the normal dynamic window (which shrinks to
+  // just minVelocityFlatWindowSamples/minAccelerationFlatWindowSamples,
+  // as low as 2 samples, once phasePeakVelocity passes
+  // windowSaturationPeakVelocityMps) to this fixed, wider one instead -
+  // still on velZLive/worldAccZ (the SAME smoothed, already-integrated
+  // signal the normal path uses, not raw IMU noise), just over enough
+  // samples that a genuine pause (which holds flat for hundreds of ms)
+  // can't be confused with the momentary, few-millisecond
+  // acceleration-crosses-zero instant that occurs at the PEAK of any
+  // sufficiently fast rep by simple calculus (dv/dt=0 there too) - which
+  // is exactly why the ceiling above exists for the normal dynamic-window
+  // path and can't simply be dropped there. Configurable 30-60 samples
+  // (300-600ms) from the app.
+  uint8_t velocityOverrideFlatWindowSamples = 45;
   // Excursion band (m/s) on the recent velocity window for it to be
   // considered "flat".
   float velocityFlatBandMps = 0.04f;
