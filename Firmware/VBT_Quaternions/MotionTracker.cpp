@@ -604,6 +604,38 @@ namespace {
   // that carried this flag is removed too (see BleServer.h) - the Config
   // characteristic shrinks from 40 to 39 bytes; firmware and app must be
   // updated together.
+  //
+  // v3.11.26: user-reported from a real capture (a heavy/slow deadlift rep
+  // - STACCO_2.log) - velZLive started diverging from velZ about 5s into
+  // the session and kept getting worse, reaching nearly DOUBLE the raw
+  // value before snapping back once the rep finally reversed. Root cause,
+  // confirmed by replaying the capture against both the current and a
+  // patched livePredictedOffset()/closeBracketFn(): a 150ms bracket
+  // (noise between two close reps) measured a rate of 0.54 m/s/s and, with
+  // the SAME activeConfig.emaAlpha=0.3 used for a bracket of any length,
+  // moved emaRate to 0.206 in one update; the very next bracket then
+  // stayed open for 8.95s (a slow eccentric with no still pause long
+  // enough to re-anchor it), during which livePredictedOffset() kept
+  // extrapolating that 0.206 rate LINEARLY and WITHOUT LIMIT over the
+  // growing elapsed time - by t=8.87s the predicted offset had reached
+  // 0.90 m/s, all from a rate seeded by 150ms of noise. Two-part fix,
+  // simulated against the real capture before implementing (drift-window
+  // max error 1.61 -> 0.30 m/s, RMS 0.87 -> 0.27 m/s; the 145 samples
+  // where velZLive exceeded 1.0 m/s while velZ itself stayed under 0.35
+  // m/s - a purely algorithmic artifact, not real motion - dropped to
+  // zero): (A) livePredictedOffset() caps the extrapolated elapsed time at
+  // EMA_EXTRAPOLATION_CAP_S=2.5s - past that the offset freezes at its
+  // best estimate instead of continuing to run away, and normal
+  // re-anchoring still corrects it the moment a real reference point
+  // shows up; (B) closeBracketFn()'s EMA update now scales
+  // activeConfig.emaAlpha down for brackets shorter than
+  // EMA_RATE_REFERENCE_DURATION_S=1.0s, so a 150ms bracket can no longer
+  // move emaRate nearly as much as a full-length one - addresses the
+  // error at its source (a bad rate being seeded) rather than only
+  // bounding its consequence. Neither change touches the repCalibCount>=2
+  // branch (already re-anchored per v3.11.15) or bracket open/close
+  // timing itself (unaffected - risingEdge/checkZeroCrossing() are
+  // unchanged).
   // ============================================================================
 
   // --- Sampling / orientation (Madgwick) ---
@@ -1448,7 +1480,21 @@ namespace {
       emaRate = rate;
       emaInitialized = true;
     } else {
-      emaRate = activeConfig.emaAlpha * rate + (1.0f - activeConfig.emaAlpha) * emaRate;
+      // v3.11.26 (fix B, see the version note below): a bracket's rate is
+      // only as trustworthy as the time it was measured over - a 150ms
+      // bracket (noise between two close reps) and a 1.5s bracket (a real
+      // rep) used to move emaRate by the SAME activeConfig.emaAlpha
+      // regardless, letting a single noisy short bracket seed a rate later
+      // extrapolated, unchanged, over a much longer stretch (see fix A in
+      // livePredictedOffset()). effectiveAlpha scales emaAlpha down for
+      // short brackets (basisTotal below EMA_RATE_REFERENCE_DURATION_S),
+      // capped at emaAlpha itself for anything at or above it - a full-
+      // length bracket updates exactly as before.
+      const float EMA_RATE_REFERENCE_DURATION_S = 1.0f;
+      float durationWeight = basisTotal / EMA_RATE_REFERENCE_DURATION_S;
+      if (durationWeight > 1.0f) durationWeight = 1.0f;
+      float effectiveAlpha = activeConfig.emaAlpha * durationWeight;
+      emaRate = effectiveAlpha * rate + (1.0f - effectiveAlpha) * emaRate;
     }
 
     for (uint8_t i = 0; i < closedPhaseCount; i++) {
@@ -1517,7 +1563,22 @@ namespace {
       return repCalibRate * sessionT + repCalibIntercept;
     }
     if (emaInitialized) {
-      return baselineRawVel + emaRate * (sessionT - bracketStartT);
+      // v3.11.26 (fix A - see the version note below): emaRate is
+      // extrapolated LINEARLY and, until this fix, WITHOUT LIMIT over the
+      // time elapsed since the last anchor - fine for a normal rep (under
+      // a second), but a long open bracket with no still pause to
+      // re-anchor it (a slow/heavy rep, or several touch-and-go reps back
+      // to back) lets even a small rate error compound into seconds of
+      // drift. Past EMA_EXTRAPOLATION_CAP_S the offset simply stops
+      // growing instead of running away - it's frozen at its best estimate
+      // rather than left to diverge further, and normal re-anchoring
+      // (checkZeroCrossing()/the confirmedStillNow block in
+      // stepPhaseEngine()) still corrects it the moment a real reference
+      // point becomes available.
+      const float EMA_EXTRAPOLATION_CAP_S = 2.5f;
+      float elapsed = sessionT - bracketStartT;
+      if (elapsed > EMA_EXTRAPOLATION_CAP_S) elapsed = EMA_EXTRAPOLATION_CAP_S;
+      return baselineRawVel + emaRate * elapsed;
     }
     return 0.0f;
   }
