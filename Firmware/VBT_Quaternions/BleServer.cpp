@@ -138,7 +138,6 @@ namespace {
     pkt.emaAlphaX1000 = toFixedU16(cfg.emaAlpha, 1000.0f);
     pkt.minCrossingExcursionMmps = toFixed16(cfg.minCrossingExcursionMps, 1000.0f);
     pkt.minCrossingDurationMs = toFixedU16(cfg.minCrossingDurationS, 1000.0f);
-    pkt.debugLogEnabled = cfg.debugLogEnabled ? 1 : 0;
     return pkt;
   }
 
@@ -167,7 +166,6 @@ namespace {
     cfg.emaAlpha = pkt.emaAlphaX1000 / 1000.0f;
     cfg.minCrossingExcursionMps = pkt.minCrossingExcursionMmps / 1000.0f;
     cfg.minCrossingDurationS = pkt.minCrossingDurationMs / 1000.0f;
-    cfg.debugLogEnabled = pkt.debugLogEnabled != 0;
     return cfg;
   }
 

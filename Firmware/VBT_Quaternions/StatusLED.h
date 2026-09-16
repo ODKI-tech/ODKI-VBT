@@ -30,6 +30,11 @@
 //   Connected, calibrated, tracking idle  -> GREEN
 //   Connected, calibrated, tracking active -> BLUE
 //
+// v3.11.23: "connected" (the first argument) means BLE OR USB-serial, see
+// deviceConnected() in VBT_Quaternions.ino - either is enough on its own
+// to leave "not connected"; the two transports run independently and
+// neither is disabled by the other being active.
+//
 // Does not reflect battery charge status: that uses the board's
 // dedicated hardware "CH" LED, driven directly by the BQ25100.
 namespace StatusLED {

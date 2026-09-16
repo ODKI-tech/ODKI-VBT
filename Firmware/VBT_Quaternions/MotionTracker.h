@@ -152,7 +152,10 @@ struct MotionDebugState {
   float velZLive = 0;
 
   // Report ONLY the current sample's event (reset on every update()).
-  bool velocityClampedToMax = false; // |velZ| exceeded the plausible maximum and was clamped
+  // v3.11.19: |velZLive| exceeded the plausible maximum and was clamped -
+  // was |velZ| (the raw, NEVER-touched integrator) through v3.11.18, see
+  // the version note in MotionTracker.cpp for why that was wrong.
+  bool velocityClampedToMax = false;
   bool bracketClosed = false; // a bracket closed on this sample (drift measured and applied retroactively)
   bool confirmedStillNow = false; // v3.11.2: the engine confirms stillness on this sample (== flatCombined) - drives the continuous re-alignment of the measurement anchor, see the end of stepPhaseEngine() in MotionTracker.cpp
   bool flatGuardOverrideFired = false; // v3.11.5: the Flat-guard triggered on this sample ONLY thanks to RuntimeConfig::flatGuardOverrideStillTimeS (the normal test on velZ_live was not satisfied) - see stepPhaseEngine() in MotionTracker.cpp
@@ -187,7 +190,7 @@ enum class RepDirection : uint8_t {
 // bracket mechanism absorbs an isolated shock anyway in the next drift
 // measurement.
 // accZBiasIdleStillTimeS/gyroBiasIdleStillTimeS/maxPlausibleVelocityMps/
-// repDirection/debugLogEnabled are unchanged from v3.10.x.
+// repDirection are unchanged from v3.10.x.
 struct RuntimeConfig {
   RepDirection repDirection = RepDirection::Up;
   float maxPlausibleVelocityMps = 4.0f;
@@ -269,10 +272,6 @@ struct RuntimeConfig {
   float minCrossingExcursionMps = -0.03f;
   // Minimum duration (s) of a cycle for it to contribute to calibration.
   float minCrossingDurationS = 0.3f;
-
-  // Raw data logging over Serial for lab analysis (OFF by default) - see
-  // the comment unchanged from v3.10.x in logSampleCsv()/BleServer.
-  bool debugLogEnabled = false;
 };
 
 namespace MotionTracker {

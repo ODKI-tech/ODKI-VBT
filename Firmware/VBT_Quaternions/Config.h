@@ -31,7 +31,7 @@
 namespace FirmwareVersion {
   const uint8_t MAJOR = 3;
   const uint8_t MINOR = 11;
-  const uint8_t PATCH = 16;
+  const uint8_t PATCH = 24;
 }
 
 namespace Config {

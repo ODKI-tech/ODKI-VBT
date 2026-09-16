@@ -34,7 +34,7 @@ For *why* the protocol is shaped this way (why `Stream` is always raw, why `Corr
 | CorrectedCurve | `6c7325bb-1784-4d77-8b99-89ce838ac2ae` | Notify | 53 B |
 | SystemStatus | `6c7325bb-1784-4d77-8b99-89ce838ac2af` | Read, Notify | 2 B |
 | Command | `6c7325bb-1784-4d77-8b99-89ce838ac2b0` | Write | 1 B |
-| Config | `6c7325bb-1784-4d77-8b99-89ce838ac2b2` | Read, Write | 40 B |
+| Config | `6c7325bb-1784-4d77-8b99-89ce838ac2b2` | Read, Write | 39 B |
 | Battery Service | `0x180F` (standard) | — | — |
 | Battery Level | `0x2A19` (standard) | Read, Notify | 1 B |
 | Device Information Service | `0x180A` (standard) | — | — |
@@ -42,7 +42,7 @@ For *why* the protocol is shaped this way (why `Stream` is always raw, why `Corr
 | Buttonless DFU Service | `00001530-1212-efde-1523-785feabcd123` | — | — |
 | DFU Control | `00001531-1212-efde-1523-785feabcd123` | Write, Notify | 1 B (command) |
 
-(The custom UUIDs all share the base `6c7325bb-1784-4d77-8b99-89ce838ac2ab`, incrementing only the last byte — `0xae` and `0xb1` are intentionally absent from the sequence, freed when the original custom Battery and Firmware-Version characteristics were replaced by the two standard SIG services above.)
+(The custom UUIDs all share the base `6c7325bb-1784-4d77-8b99-89ce838ac2ab`, incrementing only the last byte — `0xb1` is intentionally absent from the sequence, freed when the original custom Battery and Firmware-Version characteristics were replaced by the two standard SIG services above.)
 
 ---
 
@@ -153,7 +153,7 @@ Any other value, or a write shorter than 1 byte, is silently ignored.
 
 ---
 
-## Config — `…c2b2`, Read/Write, 40 bytes
+## Config — `…c2b2`, Read/Write, 39 bytes
 
 Runtime-adjustable algorithm parameters, mirroring the firmware's `RuntimeConfig` struct field-for-field. **Not persisted to flash** — the firmware always boots from its compiled defaults, so a client that wants non-default settings must re-send this characteristic on every new connection. Reading it returns whatever configuration is currently active (defaults, until a client writes otherwise). A write is echoed back into the Read value immediately, before the firmware has necessarily applied it internally.
 
@@ -184,13 +184,14 @@ See [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#runtimeconfig-field-reference
 | 33 | 2 | `emaAlphaX1000` | uint16 | ÷1000 | dimensionless, [0, 1] |
 | 35 | 2 | `minCrossingExcursionMmps` | **int16** | direct | mm/s, always ≤ 0 |
 | 37 | 2 | `minCrossingDurationMs` | uint16 | direct | ms |
-| 39 | 1 | `debugLogEnabled` | uint8 | direct | `0`/`1` |
 
 Every field is unsigned except `minCrossingExcursionMmps` at offset 35 — the one signed field in the packet.
 
-Python decode: `struct.unpack("<B8HBBHBBHHHHBBHhHB", data)` — 24 fields, matching the table row order exactly (`H`×8, then `BB`, `H`, `BB`, `H`×4, `BB`, `H`, `h`, `H`, `B`).
+Python decode: `struct.unpack("<B8HBBHBBHHHHBBHhH", data)` — 23 fields, matching the table row order exactly (`H`×8, then `BB`, `H`, `BB`, `H`×4, `BB`, `H`, `h`, `H`).
 
-A write shorter than 40 bytes is ignored entirely (the whole packet, not just the missing tail).
+A write shorter than 39 bytes is ignored entirely (the whole packet, not just the missing tail).
+
+**v3.11.24:** `debugLogEnabled` (offset 39) was removed — the packet shrank from 40 to 39 bytes. Whether the sensor prints its raw serial log or streams over BLE is now decided automatically from whether a USB-serial connection is open (see [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#lab-data-capture-serial-log)), not a field a client sends. A client built against the pre-v3.11.24 40-byte layout will have its Config writes silently ignored by v3.11.24+ firmware (`len < sizeof(RuntimeConfigPacket)` now means `len < 39`, not `< 40`) — update the packet size before talking to updated firmware.
 
 ---
 

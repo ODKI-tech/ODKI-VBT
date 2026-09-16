@@ -79,6 +79,7 @@
 */
 
 #include <Adafruit_TinyUSB.h>
+#include <ctype.h>  // tolower() - see handleSerialCommandLine() below
 #include "Config.h"
 #include "StatusLED.h"
 #include "BatteryMonitor.h"
@@ -88,6 +89,91 @@
 
 unsigned long lastBatteryCheckTime = 0;
 uint8_t streamDecimationCounter = 0;
+
+// v3.11.21: minimal non-blocking line reader for START/STOP/CALIBRATE over
+// serial - requested to drive tracking (and, v3.11.22, calibration) from
+// tools/vbt_live_monitor.py (a desktop GUI with no BLE access), without
+// adding a general command protocol. Config stays BLE-only (unchanged) -
+// it already has a typed BLE packet (see BleServer.h) a text command
+// would just duplicate. CALIBRATE (v3.11.22) is still exactly as blocking
+// and pose-sensitive here as it is over BLE (~2s, device must be held
+// still - see MotionTracker::calibrateOrientation()) - this only adds a
+// second way to TRIGGER it, not a safer one; the same care applies
+// whichever source sends it. Reads Serial.available() char-by-char
+// instead of Serial.readStringUntil()/parseInt() (which block up to
+// Serial's timeout, default 1s, when a line is incomplete) so a stray or
+// partial command can never stall the 100Hz sampling loop.
+char serialCmdBuf[16];
+uint8_t serialCmdLen = 0;
+
+bool serialCmdEqualsIgnoreCase(const char* a, const char* b) {
+  while (*a && *b) {
+    if (tolower((unsigned char)*a) != tolower((unsigned char)*b)) return false;
+    a++; b++;
+  }
+  return *a == *b;
+}
+
+void handleSerialCommandLine(const char* line) {
+  if (serialCmdEqualsIgnoreCase(line, "START")) {
+    if (!MotionTracker::isCalibrated()) {
+      Serial.println("START (serial) ignored: calibrate the device first (CALIBRATE command).");
+    } else {
+      MotionTracker::setTrackingActive(true);
+      BleServer::updateSystemStatus(true, true);
+      Serial.println("START (serial): tracking active.");
+    }
+  } else if (serialCmdEqualsIgnoreCase(line, "STOP")) {
+    MotionTracker::setTrackingActive(false);
+    BleServer::updateSystemStatus(MotionTracker::isCalibrated(), false);
+    Serial.println("STOP (serial): tracking stopped.");
+  } else if (serialCmdEqualsIgnoreCase(line, "CALIBRATE")) {
+    if (MotionTracker::isTrackingActive()) {
+      Serial.println("CALIBRATE (serial) ignored: stop tracking (STOP) before recalibrating.");
+    } else {
+      MotionTracker::calibrateOrientation();
+      BleServer::updateSystemStatus(true, false);
+      Serial.println("CALIBRATE (serial): calibration complete.");
+    }
+  } else if (line[0] != '\0') {
+    Serial.print("Unknown serial command: ");
+    Serial.println(line);
+  }
+}
+
+// v3.11.23: user-reported - the status LED (see StatusLED.h) kept blinking
+// red ("not connected") while driving the device entirely from
+// tools/vbt_live_monitor.py over serial, because it only ever looked at
+// BleServer::connected() - true "not connected" state for a workflow that
+// was never going to use BLE at all in that session. `Serial` (the native
+// USB CDC connection - Adafruit_USBD_CDC, see the `while (!Serial...)`
+// wait already used at the top of setup()) is truthy exactly when a host
+// has the port open (DTR asserted), the same signal a serial tool like
+// vbt_live_monitor.py provides just by being connected - no explicit
+// "hello" needed. deviceConnected() below is the single place that
+// combines the two: BLE and USB-serial are two independent, simultaneous
+// transports (nothing here disables one when the other is active), but
+// for the LED's purposes either one being present means the device isn't
+// sitting unconnected.
+bool deviceConnected() {
+  return BleServer::connected() || (bool)Serial;
+}
+
+void pollSerialCommands() {
+  while (Serial.available() > 0) {
+    char c = (char)Serial.read();
+    if (c == '\n' || c == '\r') {
+      if (serialCmdLen > 0) {
+        serialCmdBuf[serialCmdLen] = '\0';
+        handleSerialCommandLine(serialCmdBuf);
+        serialCmdLen = 0;
+      }
+    } else if (serialCmdLen < sizeof(serialCmdBuf) - 1) {
+      serialCmdBuf[serialCmdLen++] = c;
+    }
+    // else: overlong garbage line - silently dropped, buffer stays bounded
+  }
+}
 
 void setup() {
   PowerManager::begin();
@@ -144,7 +230,7 @@ void setup() {
     while (1) {
       // The LED keeps reflecting connection/state even in error
       // (blinks yellow if not connected, solid yellow if connected).
-      StatusLED::update(BleServer::connected(), false, false);
+      StatusLED::update(deviceConnected(), false, false);
       delay(100);
     }
   }
@@ -166,7 +252,7 @@ void loop() {
   }
 
   // --- LED: recomputed every cycle from the current state (see StatusLED.h) ---
-  StatusLED::update(BleServer::connected(), MotionTracker::isCalibrated(), MotionTracker::isTrackingActive());
+  StatusLED::update(deviceConnected(), MotionTracker::isCalibrated(), MotionTracker::isTrackingActive());
 
   // --- Commands received via BLE ---
   if (BleServer::takeCalibrateRequested()) {
@@ -190,6 +276,11 @@ void loop() {
     MotionTracker::setTrackingActive(false);
     BleServer::updateSystemStatus(MotionTracker::isCalibrated(), false);
   }
+
+  // --- Commands received via Serial (START/STOP/CALIBRATE - see the
+  // version note on pollSerialCommands() above) ---
+  pollSerialCommands();
+
   RuntimeConfig newConfig;
   if (BleServer::takeConfigUpdate(newConfig)) {
     MotionTracker::setConfig(newConfig);
@@ -249,17 +340,18 @@ void loop() {
       }
     }
 
-    // Fast streaming, decimated relative to the internal 100Hz -
-    // disabled while raw data logging over Serial is active
-    // (RuntimeConfig::debugLogEnabled): that log is already at 100Hz (5x
-    // denser than this 20Hz stream), so it would be redundant, and its
-    // notify() would compete for the same loop() cycle right when we're
-    // trying to get the cleanest possible capture (see the comment on
-    // the flag's declaration, MotionTracker.h).
+    // Fast streaming, decimated relative to the internal 100Hz - disabled
+    // while a USB-serial connection is open (v3.11.24: automatic, was
+    // gated on the manually-set RuntimeConfig::debugLogEnabled before -
+    // see the version note in MotionTracker.cpp and serialLogActive()
+    // there): the raw serial log that takes over in that case is already
+    // at 100Hz (5x denser than this 20Hz stream), so sending both would
+    // be redundant, and this notify() would compete for the same loop()
+    // cycle right when we're trying to get the cleanest possible capture.
     streamDecimationCounter++;
     if (streamDecimationCounter >= Config::STREAM_DECIMATION_FACTOR) {
       streamDecimationCounter = 0;
-      if (!MotionTracker::currentConfig().debugLogEnabled) {
+      if (!(bool)Serial) {
         BleServer::sendStream(MotionTracker::currentSample());
       }
     }

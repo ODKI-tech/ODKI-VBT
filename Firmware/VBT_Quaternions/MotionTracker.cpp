@@ -450,6 +450,160 @@ namespace {
   // phasePeakAcceleration is unaffected (still fabs(s.accZ)): raw
   // acceleration is not an integrated/drifting quantity, it has no
   // "corrected" counterpart to switch to.
+  //
+  // v3.11.17: user-reported - at a real stop the live velocity could sit
+  // away from zero (e.g. ~0.20 m/s) for up to about a second before
+  // resetting, well past what an athlete needs to move on to the next
+  // phase. Cause: closePhaseFn() reset phaseVelWindowSamples/
+  // phaseAccWindowSamples to the MAX window (maxVelocityFlatWindowSamples/
+  // maxAccelerationFlatWindowSamples, 30 samples/300ms by default) on every
+  // phase close - including a close caused BY flatness, i.e. the exact
+  // moment the engine had just proven stillness using a much smaller
+  // dynamic window (down to 2 samples for a fast rep, see
+  // computeDynamicWindowSamples()). While idle (phaseOpen==false) the
+  // ceiling test in stepPhaseEngine() is bypassed by construction (see
+  // velIsFlatNow there), so flatCombined depended solely on
+  // excursionFlat() over this now-oversized window - which still contained
+  // the tail of the deceleration into the very stillness just confirmed,
+  // so it kept evaluating false (blocking the baselineRawVel re-anchor,
+  // see the end of stepPhaseEngine()) until those samples aged out of the
+  // 30-sample lookback, up to ~300ms later. Worse, if raw drift crossed
+  // phaseStartVelocityMps in that gap (both it and flatGuardMaxVelocityMps
+  // default to the same 0.2 m/s), a spurious phase could reopen and reset
+  // the window to max again, compounding the delay until the session fell
+  // back on flatGuardOverrideStillTimeS (1.0s, independent of this
+  // estimate) to unstick it - the ~1s the user observed. Fix:
+  // closePhaseFn() (and resetTracking(), same pattern at session start)
+  // now reset the windows to the MIN size (minVelocityFlatWindowSamples/
+  // minAccelerationFlatWindowSamples) instead of the max - there is no
+  // "peak velocity" context to size against while idle, and the goal at
+  // that point is only to reconfirm stillness as fast as possible. A
+  // genuine stop now re-anchors within about one sample interval (10ms)
+  // instead of up to ~300ms, and no longer relies on
+  // flatGuardOverrideStillTimeS for the normal case.
+  //
+  // v3.11.18: user-reported, traced to a real capture (debugLogEnabled) -
+  // from a certain rep onward, every eccentric phase's data
+  // (eccPeakVelocity/eccMeanVelocity) turned out to belong to the WRONG
+  // repNumber, off by one, for the rest of the session (never
+  // resynchronizing on its own). Root cause: closePhaseFn()'s rep-number
+  // bookkeeping (currentRepNumberEngine/lastPhaseType) assumed phase closes
+  // always strictly ALTERNATE direction (eccentric, concentric, eccentric,
+  // concentric, ...) and only incremented currentRepNumberEngine on that
+  // alternation. In the diagnosed log, ONE concentric phase closed and was
+  // immediately followed by ANOTHER concentric phase in the same direction
+  // (visible in the raw log as a single, smooth, uninterrupted ascent -
+  // velocity climbing continuously with no reversal, no pause - silently
+  // split into two consecutive "rep" numbers by the engine) - almost
+  // certainly a spurious flat/reversal false-trigger from noise or a
+  // borderline threshold, not a real direction change; closeReason isn't
+  // logged today so the exact trigger of THIS specific split couldn't be
+  // pinned down further. Whatever the trigger, the alternation assumption
+  // has zero tolerance for it: once two same-direction phases close back to
+  // back, lastPhaseType ends up misaligned with the physical eccentric/
+  // concentric cycle, and every SUBSEQUENT eccentric close inherits the
+  // wrong (previous) repNumber, permanently, for the rest of the session -
+  // confirmed in the log from that point through its end (reps 4-20 in the
+  // diagnosed capture). Fix: currentRepNumberEngine now increments
+  // unconditionally whenever a CONCENTRIC phase closes (phaseType>0),
+  // regardless of what phase type closed before it - a rep is complete once
+  // its concentric phase closes, by definition, independent of whatever
+  // else happened. lastPhaseType is removed entirely (was used nowhere
+  // else). A future spurious same-direction split still produces one
+  // "orphan" rep with no matching eccentric side (recognizable by
+  // eccPeakVelocity/eccMeanVelocity staying 0) instead of corrupting every
+  // rep reported afterward - fails safe instead of failing permanently.
+  //
+  // v3.11.19: user-reported, spotted from the same capture used to diagnose
+  // v3.11.17/v3.11.18 - RuntimeConfig::maxPlausibleVelocityMps ("plausible
+  // velocity" ceiling) was clamping velZ, the raw integrator, in place,
+  // right after its trapezoidal integration step - not velZLive, the
+  // corrected estimate. velZ is NEVER supposed to be touched (the entire
+  // v3.11.0 design rests on it staying the true raw integral, drift
+  // measured and corrected retroactively against it - see the version note
+  // at the top of this file) - on a long/heavy or touch-and-go set it is
+  // EXPECTED to run past any "plausible" single-rep bound as drift
+  // accumulates, exactly as diagnosed in the capture (velZ pinned at
+  // exactly 4.0000 for 15 consecutive samples - the clamp firing on
+  // accumulated drift, not a real 4 m/s bar speed). Clamping it in place
+  // silently corrupted every downstream raw-velZ consumer for as long as
+  // the clamp was active that session: the sample stored in bracketBuf
+  // (which scorePhase() reads directly to build the corrected curve),
+  // closeBracketFn()'s drift measurement (drift = velZ - baseline, now
+  // measuring a clipped value instead of the true accumulated drift), and
+  // rawPosCumulative/checkZeroCrossing()'s rep-cycle calibration input -
+  // none of which should ever see a value that isn't the faithful raw
+  // integral. Fix: the clamp now applies to velZLive, computed a few lines
+  // below its old location, immediately after velZLive itself is computed
+  // and before anything reads it - velZLive is already documented (see
+  // MotionDebugState::velZLive in MotionTracker.h) as "the TRUE value the
+  // algorithm uses to decide phases/brackets", which is exactly the
+  // quantity a plausibility ceiling is meant to guard: every phase-engine
+  // decision downstream (flat-guard, phase open/close, reversal,
+  // backfill) already reads velZLive, not velZ, so nothing else changes -
+  // only which variable gets clipped, and velZ is no longer touched at
+  // all. Same recurring failure shape already fixed twice before in this
+  // file (v3.11.8's direction test, v3.11.16's peak-velocity tracking): a
+  // raw, never-reset quantity used somewhere the corrected one belongs.
+  //
+  // v3.11.20: user-reported, traced to a real capture where the rep counter
+  // stalled for over 13s (rep 17-19) despite continuous movement - several
+  // concentric phases in that window closed with durationS just under
+  // minPhaseDurationS, over and over, and got silently discarded. Root
+  // cause, confirmed sample-by-sample against the log: every time
+  // checkZeroCrossing() registered a new valid rep cycle and called
+  // refitRepCalibration() (which happens roughly once per rep, whenever
+  // repCalibCount>=2 is already the active estimate - the common case past
+  // a session's first couple of reps), livePredictedOffset() could jump by
+  // several tenths of a m/s in a SINGLE sample - not because the sensor did
+  // anything, but because repCalibRate*sessionT+repCalibIntercept is
+  // re-evaluated with the NEW fit at the CURRENT (large, accumulated)
+  // sessionT: even a tiny change in repCalibRate from the refit
+  // (thousandths of a unit) gets multiplied by sessionT and can dominate
+  // the result - a well-known effect of evaluating a freshly-refit
+  // regression far from the time window it was actually fit against.
+  // Confirmed on 5 consecutive refits in the diagnosed capture: velZLive
+  // dropped by 0.17-0.25 m/s in one 10-12ms sample EVERY time, always right
+  // as the concentric phase was ramping up (raw velZ rising smoothly by
+  // +0.10 to +0.16 in that same sample) - an artificial dip exactly where
+  // the phase engine is most sensitive to direction/magnitude (reversal
+  // detection, phaseLastSameDirIdx, the flat-guard ceiling). Fix: the same
+  // continuity principle already used in stepPhaseEngine() for the
+  // confirmed-still re-anchor (v3.11.15) - which re-anchors
+  // repCalibIntercept so the live reading doesn't jump when the estimate
+  // itself changes - is now ALSO applied at every refit, in
+  // checkZeroCrossing(): repCalibIntercept is nudged, right after
+  // refitRepCalibration() runs, so livePredictedOffset() evaluates to
+  // EXACTLY what it was an instant before the refit, at the same
+  // sessionT. Neither repCalibRate nor the accumulated regression sums are
+  // touched - the fit itself, and its accuracy for the NEXT refit, are
+  // unaffected; only the artificial step at the instant of THIS refit is
+  // removed from the live reading. Validated by hand against the diagnosed
+  // capture's 5 refits: with the patch, velZLive moves by the same amount
+  // as raw velZ in that sample instead of jumping against it.
+  //
+  // v3.11.24: user-requested - RuntimeConfig::debugLogEnabled (a manually
+  // toggled, BLE-only, RAM-only setting - see the app's Settings screen
+  // before this version) is REMOVED. In practice it was a recurring source
+  // of confusion: it lived only in RAM, so it silently reset to off on
+  // every power cycle/USB reconnect (same as calibration), and there was
+  // no way to drive it from tools/vbt_live_monitor.py at all, since it's a
+  // Config-characteristic field and that tool has no BLE access - the only
+  // way to see the raw 100Hz log was to first open the phone app over BLE
+  // just to flip one switch, defeating the point of a serial-only
+  // workflow. Replaced by a live check of the USB-serial connection
+  // itself (serialLogActive() below, == `(bool)Serial`) - the SAME BLE
+  // stream vs. raw-serial-log mutual exclusion as before (see point 3
+  // below and the "Fast streaming..." comment in VBT_Quaternions.ino),
+  // just automatic: plug in a serial reader and the raw log starts:
+  // unplug it (or don't have one open) and the normal 20Hz BLE stream the
+  // app's live graph uses takes over - matching the same StatusLED fix
+  // from v3.11.23 (deviceConnected() there uses the identical `(bool)
+  // Serial` check). No behavior on the wire changes for either mode
+  // itself, only what selects between them. The RuntimeConfigPacket byte
+  // that carried this flag is removed too (see BleServer.h) - the Config
+  // characteristic shrinks from 40 to 39 bytes; firmware and app must be
+  // updated together.
   // ============================================================================
 
   // --- Sampling / orientation (Madgwick) ---
@@ -713,7 +867,6 @@ namespace {
   uint16_t oppositeDirStreakSamples = 0; // for the reversal - independent of which phase is open
 
   uint8_t currentRepNumberEngine = 1;
-  int8_t lastPhaseType = 0;
   uint16_t nextPhaseId = 0;
 
   struct BracketSample { float t; float dt; float velZ; float accZ; };
@@ -857,6 +1010,21 @@ namespace {
     for (uint16_t i = 0; i < BIAS_QUIET_RING_CAPACITY; i++) { gyroMagQuietRing[i] = 0; accMagQuietRing[i] = 0; }
   }
 
+  // v3.11.24: replaces RuntimeConfig::debugLogEnabled (removed - see the
+  // version note at the top of this file) - whether the 100Hz raw log
+  // prints is now read live from the USB connection itself instead of a
+  // manually-set, BLE-only flag. `Serial` (Adafruit_USBD_CDC's native-USB
+  // connection) is truthy exactly when a host has the port open (DTR
+  // asserted) - the same check `deviceConnected()` in VBT_Quaternions.ino
+  // uses for the status LED, and the same one already used at the top of
+  // setup() to wait for a terminal. Checked fresh at every call site
+  // (cheap - a single flag read), so the raw log starts/stops exactly
+  // when a serial connection appears/disappears, with no separate on/off
+  // step needed from either side.
+  bool serialLogActive() {
+    return (bool)Serial;
+  }
+
   // v3.11.15: factors out the pattern repeated 3 times
   // (accZBiasIdleStillTimeS/gyroBiasIdleStillTimeS in
   // updateOrientationAndAcceleration(), flatGuardOverrideStillTimeS in
@@ -996,7 +1164,7 @@ namespace {
       if (slot.hasEcc && (uint8_t)slot.eccStatus < (uint8_t)worse) worse = slot.eccStatus;
       r.correctionStatus = worse;
 
-      if (activeConfig.debugLogEnabled) {
+      if (serialLogActive()) {
         Serial.print("R,"); Serial.print(r.repNumber); Serial.print(',');
         Serial.print(r.peakVelocity, 4); Serial.print(',');
         Serial.print(r.meanVelocity, 4); Serial.print(',');
@@ -1106,10 +1274,35 @@ namespace {
           float disp = rawPosCumulative - lastCrossingRawPos;
           float localOffset = disp / duration;
           float midT = (lastCrossingT + sessionT) / 2.0f;
+
+          // v3.11.20: capture what THIS refit is about to change, before it
+          // changes it - see the version note at the top of this file.
+          // repCalibRate*sessionT+repCalibIntercept is only the live
+          // estimate livePredictedOffset() actually uses once
+          // repCalibCount>=2 (checked on the OLD count, before the
+          // increment below) - if it wasn't active yet, there is no live
+          // reading to preserve continuity against.
+          bool hadRepCalibBefore = (repCalibCount >= 2);
+          float offsetBeforeRefit = hadRepCalibBefore ? (repCalibRate * sessionT + repCalibIntercept) : 0.0f;
+
           repCalibCount++;
           repCalibSumT += midT; repCalibSumY += localOffset;
           repCalibSumTT += midT * midT; repCalibSumTY += midT * localOffset;
           refitRepCalibration();
+
+          // v3.11.20: patch repCalibIntercept so the formula evaluates to
+          // EXACTLY offsetBeforeRefit at THIS sessionT - the same
+          // continuity principle already applied in stepPhaseEngine() for
+          // the confirmed-still re-anchor (v3.11.15), just triggered here
+          // by a refit instead of by stillness. Does NOT touch
+          // repCalibRate or the accumulated sums, so the regression's own
+          // long-term fit (and the next refit's starting point) is
+          // unaffected - this only removes the artificial step at the
+          // instant of THIS refit from the live reading.
+          if (hadRepCalibBefore) {
+            float offsetAfterRefit = repCalibRate * sessionT + repCalibIntercept;
+            repCalibIntercept += offsetBeforeRefit - offsetAfterRefit;
+          }
         }
       }
       lastCrossingT = sessionT;
@@ -1138,8 +1331,31 @@ namespace {
     float tStart = bracketBuf[startIdx].t;
     float tEnd = (cutoff >= 0) ? bracketBuf[startIdx + cutoff].t : tStart;
     float durationS = fmax(0.0f, tEnd - tStart);
+    bool reported = durationS > activeConfig.minPhaseDurationS;
 
-    if (durationS > activeConfig.minPhaseDurationS) {
+    // v3.11.18: one line per phase close attempt (reported OR silently
+    // discarded for being too short) - added specifically to diagnose
+    // spurious same-direction splits (see the v3.11.18 version note above)
+    // and long flat-guard stalls: closeReason/durationS were never visible
+    // in the log before this, only inferable indirectly from the "S," rows'
+    // state column, which can't distinguish "closed and reopened the same
+    // direction" from "genuinely still open". Two consecutive "P," lines
+    // with the same sign phaseType and no intervening rep-completing close
+    // is exactly the failure signature fixed in v3.11.18 - now directly
+    // visible instead of requiring the kind of reconstruction that took to
+    // diagnose the original report.
+    if (serialLogActive()) {
+      Serial.print("P,"); Serial.print(phaseId); Serial.print(',');
+      Serial.print(phaseRepNumber); Serial.print(',');
+      Serial.print(phaseType); Serial.print(',');
+      Serial.print(reason); Serial.print(',');
+      Serial.print(durationS, 4); Serial.print(',');
+      Serial.print(phaseSampleCount); Serial.print(',');
+      Serial.print(discardedI); Serial.print(',');
+      Serial.println(reported ? 1 : 0);
+    }
+
+    if (reported) {
       if (closedPhaseCount < MAX_CLOSED_PHASES_PER_BRACKET) {
         ClosedPhaseInfo& cp = closedPhases[closedPhaseCount++];
         cp.id = phaseId; cp.repNumber = phaseRepNumber; cp.phaseType = phaseType;
@@ -1152,11 +1368,13 @@ namespace {
       CorrectionStatus status = useRepCalib ? CorrectionStatus::RepCalibrated : CorrectionStatus::Provisional;
       reportPhaseScore(phaseRepNumber, phaseType, status, ps.peak, ps.mean, ps.peakAcc, ps.meanAcc, ps.disp, ps.quality1);
 
-      if (lastPhaseType != 0 && phaseType == -lastPhaseType) {
+      // v3.11.18: unconditional on phaseType>0, not on alternation with the
+      // last closed phase's type - see the version note at the top of this
+      // file. A rep is, by definition, complete once its concentric phase
+      // closes; incrementing only depends on THAT, never on what closed
+      // before it.
+      if (phaseType > 0) {
         currentRepNumberEngine++;
-        lastPhaseType = 0;
-      } else {
-        lastPhaseType = phaseType;
       }
     }
 
@@ -1164,8 +1382,17 @@ namespace {
     phaseType = 0;
     phasePeakVelocity = 0;
     phasePeakAcceleration = 0;
-    phaseVelWindowSamples = activeConfig.maxVelocityFlatWindowSamples;
-    phaseAccWindowSamples = activeConfig.maxAccelerationFlatWindowSamples;
+    // v3.11.17: MIN, not max - see the version note at the top of this
+    // file. While idle (no phase open) there is no "peak velocity" context
+    // to size the window against; the previous max-window reset kept
+    // excursionFlat() looking at up to maxVelocityFlatWindowSamples/
+    // maxAccelerationFlatWindowSamples (300ms default) of history that
+    // still included the deceleration into this very stillness, so
+    // flatCombined stayed false - and the live reading stuck away from
+    // zero - for up to that long after a real stop, forcing recovery onto
+    // flatGuardOverrideStillTimeS (1.0s) instead of the fast primary path.
+    phaseVelWindowSamples = activeConfig.minVelocityFlatWindowSamples;
+    phaseAccWindowSamples = activeConfig.minAccelerationFlatWindowSamples;
   }
 
   void enqueueCorrectedCurveChunks(float t0, float baseline, float drift, float basisTotal) {
@@ -1244,7 +1471,7 @@ namespace {
     // corrected(t) = velZ(t) - baseline - drift*(t-t0)/basisTotal for
     // every "S," sample with t0<=t<=t1 - the same formula as
     // enqueueCorrectedCurveChunks() above.
-    if (activeConfig.debugLogEnabled) {
+    if (serialLogActive()) {
       uint16_t loggedBracketId = nextBracketId;
       Serial.print("B,"); Serial.print(loggedBracketId); Serial.print(',');
       Serial.print(t0, 4); Serial.print(',');
@@ -1304,10 +1531,6 @@ namespace {
 
     float incrZ = trapezoidPrimedZ ? (worldAccZDirected + prevAccZDirected) * 0.5f * dt : worldAccZDirected * dt;
     velZ += incrZ;
-    bool clamped = false;
-    if (velZ > activeConfig.maxPlausibleVelocityMps) { velZ = activeConfig.maxPlausibleVelocityMps; clamped = true; }
-    else if (velZ < -activeConfig.maxPlausibleVelocityMps) { velZ = -activeConfig.maxPlausibleVelocityMps; clamped = true; }
-    debugStateVar.velocityClampedToMax = clamped;
     prevAccZDirected = worldAccZDirected;
     trapezoidPrimedZ = true;
 
@@ -1320,6 +1543,27 @@ namespace {
     // retroactive measurement/correction, which always uses
     // raw+measured drift there.
     float velZLive = velZ - livePredictedOffset();
+    // v3.11.19: the plausibility clamp applies HERE, to velZLive - not to
+    // velZ above - see the version note at the top of this file. velZ is
+    // the raw integral and is, by design (v3.11.0), NEVER reset or
+    // touched - on a long session it is EXPECTED to run past any
+    // "plausible" bound as drift accumulates, exactly like it did in the
+    // diagnosed capture (pinned at exactly 4.0000 for 15 consecutive
+    // samples, confirming the clamp was firing on drift, not on a real
+    // 4 m/s bar speed). Clamping it in place corrupted every raw-velZ
+    // consumer downstream of this line for as long as the clamp was
+    // active: bracketBuf's stored sample (scorePhase's corrected-curve
+    // math reads it directly), closeBracketFn()'s drift measurement
+    // (drift = velZ - baseline), rawPosCumulative/checkZeroCrossing's
+    // rep-cycle calibration input - none of which should ever see a
+    // clipped value. velZLive is the right target: it is, by its own
+    // doc comment in MotionDebugState, "the TRUE value the algorithm
+    // uses to decide phases/brackets" - exactly the quantity a
+    // "plausible velocity" ceiling is meant to guard.
+    bool clamped = false;
+    if (velZLive > activeConfig.maxPlausibleVelocityMps) { velZLive = activeConfig.maxPlausibleVelocityMps; clamped = true; }
+    else if (velZLive < -activeConfig.maxPlausibleVelocityMps) { velZLive = -activeConfig.maxPlausibleVelocityMps; clamped = true; }
+    debugStateVar.velocityClampedToMax = clamped;
     debugStateVar.velZLive = velZLive;
 
     velLiveRing[ringHead] = velZLive;
@@ -1457,11 +1701,13 @@ namespace {
     phaseOpen = false; phaseType = 0; phaseId = 0; phaseRepNumber = 1;
     phaseStartIdxInBracket = 0; phaseLastSameDirIdx = -1;
     phaseSampleCount = 0; phasePeakVelocity = 0; phasePeakAcceleration = 0;
-    phaseVelWindowSamples = activeConfig.maxVelocityFlatWindowSamples;
-    phaseAccWindowSamples = activeConfig.maxAccelerationFlatWindowSamples;
+    // v3.11.17: MIN, not max - same reasoning as closePhaseFn() (see the
+    // version note at the top of this file): idle at session start has no
+    // "peak velocity" context either, so the fast window applies here too.
+    phaseVelWindowSamples = activeConfig.minVelocityFlatWindowSamples;
+    phaseAccWindowSamples = activeConfig.minAccelerationFlatWindowSamples;
     oppositeDirStreakSamples = 0;
     currentRepNumberEngine = 1;
-    lastPhaseType = 0;
     nextPhaseId = 0;
 
     bracketCount = 0; bracketStartT = 0; nextBracketId = 1;
@@ -1580,8 +1826,10 @@ namespace {
     lastGyroMag = sqrt(gx * gx + gy * gy + gz * gz) * RAD_TO_DEG;
   }
 
-  // Raw data log for lab analysis (RuntimeConfig::debugLogEnabled, OFF by
-  // default) - ONE CSV line per sample at 100Hz, type "S". v3.11.0: the
+  // Raw data log for lab analysis (v3.11.24: active whenever a USB-serial
+  // connection is open, see serialLogActive() above - was a manually-set
+  // RuntimeConfig::debugLogEnabled flag before this version) - ONE CSV
+  // line per sample at 100Hz, type "S". v3.11.0: the
   // velZ column (was trueVelZ) is now the new engine's RAW velocity
   // (never zeroed); the shockRejected column removed (anti-shock filter no
   // longer exists, see v3.11.10 near the top of the file); zuptHold ->
@@ -1689,7 +1937,7 @@ namespace {
     }
     prevDirVelForLivePos = dirVel;
 
-    if (activeConfig.debugLogEnabled) {
+    if (serialLogActive()) {
       logSampleCsv(dt);
     }
   }
@@ -1791,7 +2039,7 @@ void MotionTracker::setTrackingActive(bool active) {
   bool wasActive = trackingActive;
   trackingActive = active;
   resetTracking();
-  if (activeConfig.debugLogEnabled) {
+  if (serialLogActive()) {
     if (active) {
       Serial.println("REC_START");
       Serial.println("S,t_ms,dt_ms,state,rep,linAccX,linAccY,linAccZ,worldAccX,worldAccY,worldAccZ,"
@@ -1806,6 +2054,10 @@ void MotionTracker::setTrackingActive(bool active) {
       // closeBracketFn() for the formula to reconstruct the corrected
       // curve from these fields + the "S," lines with t0<=t<=t1.
       Serial.println("B,bracketId,t0,t1,baseline,drift,rate,emaRateAfter,basisTotal");
+      // v3.11.18, NEW: one line per phase close ATTEMPT (reason: 0=flat,
+      // 1=reversal, 2=timeout), including ones discarded for being too
+      // short (reported=0) - see the comment in closePhaseFn().
+      Serial.println("P,phaseId,repNumber,phaseType,closeReason,durationS,sampleCount,discarded,reported");
     } else if (wasActive) {
       Serial.println("REC_STOP");
     }
