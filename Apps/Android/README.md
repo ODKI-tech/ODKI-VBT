@@ -1,15 +1,17 @@
 # Android
 
-**Status: published.** [Download the latest APK](app-release/odki-vbt-v1.0.0.apk) (v1.0.0).
+**Status: published.** [Download the latest APK](app-release/odki-vbt-latest.apk).
 
 ## Download & install
 
 Distributed as a downloadable APK directly from [`app-release/`](app-release/) in this repository (sideload — no Google Play listing planned initially). Unlike the firmware (which self-checks for updates in-app), there's no auto-update mechanism for the app itself yet — check back here for a newer `.apk`.
 
-1. Download the latest `.apk` from [`app-release/`](app-release/) (the filename includes the version, currently `odki-vbt-v1.0.0.apk`).
+1. Download [`app-release/odki-vbt-latest.apk`](app-release/odki-vbt-latest.apk) — always the current release, regardless of version (see the note for maintainers below).
 2. Android will likely warn that installing from outside the Play Store is blocked — go to **Settings → Apps → Special access → Install unknown apps**, select the app you downloaded with (e.g. your browser or file manager), and allow it. The exact wording/path varies a bit by Android version and manufacturer.
 3. Open the downloaded `.apk` and confirm the install.
 4. To update later, just download and install the newer `.apk` the same way — it installs over the existing app as long as it's signed with the same key, no need to uninstall first.
+
+**Note for maintainers, cutting a new release:** build the APK (`flutter build apk --release` in the app repo), overwrite `app-release/odki-vbt-latest.apk` with it, delete any other `.apk` left over in this folder, and bump `version` in the app repo's `pubspec.yaml` — same "keep only the latest, git history is the archive" convention as [`Firmware/firmware-release/`](../../Firmware/firmware-release/README.md). Keeping the filename itself stable (not versioned) is deliberate: it's what lets the link above, and everywhere else in this repo's docs, never need updating.
 
 ## Usage
 
