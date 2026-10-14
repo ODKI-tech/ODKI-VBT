@@ -682,6 +682,51 @@ namespace {
   // enough samples that a real pause (which holds flat for hundreds of
   // ms) can't be confused with a fast rep's momentary peak (tens of ms).
   // See stepPhaseEngine() and RuntimeConfig::velocityOverrideFlatWindowSamples.
+  //
+  // v3.11.28: log-only change, no effect on tracking. Analysis of a real
+  // deadlift capture (bar bouncing on the floor) showed the ground impact
+  // never reaches the velocity integral: its few-millisecond peak is
+  // flattened by the 10ms mean of the 416Hz samples and then removed by the
+  // 5-sample median, leaving only the ring-down. To study shock detection
+  // on the signal BEFORE those filters, the "S," row gains four columns at
+  // its END (existing columns keep their positions): worldAccZRaw (the same
+  // world-Z projection and bias as worldAccZ, on the pre-median
+  // accelerometer, unclamped) and gyroRawX/Y/Z (the 10ms-mean gyroscope in
+  // deg/s, before the median and before the bias subtraction).
+  // tools/vbt_log_viewer.py and tools/vbt_live_monitor.py accept both the
+  // old 37-field rows and the new 41-field ones.
+  //
+  // v3.11.29: the vertical velocity is now integrated from the PRE-median
+  // acceleration (lastWorldAccZUnfiltered, the log's worldAccZRaw). Evidence,
+  // from a real deadlift capture with the bar landing on the floor four
+  // times (vbt_capture_stacchi_simulation_2.log, firmware v3.11.28): the
+  // ground impact is a 20-30ms spike of 31-43 m/s^2 that the 5-sample median
+  // erased completely (median-filtered value at those samples: 6-7 m/s^2),
+  // so the integral never received the impulse that actually stops the bar -
+  // velZ was left at -0.50, -0.70, -1.19, -1.52 m/s (cumulative) with the bar
+  // at rest, while integrating the unfiltered signal brought it back to
+  // +0.02..+0.04 m/s after every landing (replayed through THIS engine with
+  // tools/host_replay/, which matched the firmware log to 0.0001 m/s). The
+  // old behaviour also handed the bracket correction a large step to spread
+  // linearly over the whole bracket, inflating the concentric phase before
+  // the impact. The median is a non-linear filter: on a bipolar burst (a
+  // knock) it keeps one lobe and drops the other, leaving a net velocity step
+  // that the raw integral would have cancelled by itself.
+  // What does NOT change: the Madgwick orientation still gets the
+  // median-filtered accelerometer and gyroscope; the flat-guard's
+  // acceleration test, bracketBuf's per-sample acceleration (reported peak /
+  // mean acceleration) and the live acceleration stream still use the
+  // median-filtered worldAccZ; the phase/bracket logic is untouched - its
+  // velocity-based decisions simply read the new velZ (see stepPhaseEngine()).
+  //
+  // v3.11.30: three RuntimeConfig defaults changed, no logic change:
+  // maxVelocityFlatWindowSamples 30 -> 20, maxAccelerationFlatWindowSamples
+  // 30 -> 20 (the upper bound of the dynamic flat-guard windows - what a
+  // phase starts with, and what the windows shrink from as its peak velocity
+  // grows) and velocityOverrideFlatWindowSamples 45 -> 30 (the fixed window
+  // used above flatGuardMaxVelocityMps; 30 is also the minimum setConfig()
+  // accepts for it). The app's own defaults (runtime_config.dart) change in
+  // step; a phone that already stored a value keeps it until reset.
   // ============================================================================
 
   // --- Sampling / orientation (Madgwick) ---
@@ -889,6 +934,16 @@ namespace {
   // for the debug log, since it can't recompute it (gravBodyX/Y/Z are
   // local to updateOrientationAndAcceleration()).
   float lastAccZBiasApplied = 0;
+  // v3.11.28: log-only taps on the signal path BEFORE the 5-sample median
+  // (accMedianFilter/gyroMedianFilter) - the 10ms mean of the 416Hz IMU
+  // samples (FastSampleAccumulator::harvest) is the only stage left upstream.
+  // lastWorldAccZUnfiltered: the same projection/bias as sample.worldAccZ
+  // (see updateOrientationAndAcceleration()) but on the unfiltered
+  // accelerometer; lastGyroRaw*: the 10ms-mean gyroscope in deg/s, before
+  // the median and before the gyro bias subtraction. Never read by the
+  // tracking engine.
+  float lastWorldAccZUnfiltered = 0;
+  float lastGyroRawX = 0, lastGyroRawY = 0, lastGyroRawZ = 0;
 
   const RuntimeConfig DEFAULT_CONFIG;
   RuntimeConfig activeConfig;
@@ -910,7 +965,7 @@ namespace {
   // applied) - ALWAYS integrated, NEVER zeroed/leaked. Corresponds to
   // self.velZ in sim_v2_drift.py.
   float velZ = 0;
-  float prevAccZDirected = 0; // for velZ's trapezoidal integration
+  float prevAccZDirected = 0; // previous INTEGRATION input (pre-median, v3.11.29) - for velZ's trapezoidal integration
   bool trapezoidPrimedZ = false;
   float prevVelZ = 0; // for checkZeroCrossingFn
   float rawPosCumulative = 0; // position integral, NEVER zeroed - see checkZeroCrossingFn
@@ -1633,14 +1688,23 @@ namespace {
 
   // One update() cycle of the phase/bracket engine on the Z axis - see
   // DriftCorrectedSim.step() in sim_v2_drift.py for the line-by-line
-  // reference. worldAccZDirected is already bias-corrected (see
+  // reference. Both accelerations are already bias-corrected (see
   // updateOrientationAndAcceleration()) and oriented (repDirectionSign).
-  void stepPhaseEngine(float dt, float worldAccZDirected) {
+  // v3.11.29: TWO inputs. integrationAccZDirected (the pre-median world-Z
+  // acceleration) is the ONLY thing integrated into velZ - so velZ, hence
+  // velZLive and every velocity-based decision of the phase/bracket engine
+  // (phase open/close, reversal, flat-guard velocity test, drift
+  // measurement), derive from the unfiltered signal. worldAccZDirected (the
+  // median-filtered one, as before) stays what the acceleration-based parts
+  // read: the flat-guard's acceleration-flat test (accZRing), the
+  // per-sample acceleration kept for the reported peak/mean acceleration
+  // (bracketBuf), so those are NOT made noisier by this change.
+  void stepPhaseEngine(float dt, float worldAccZDirected, float integrationAccZDirected) {
     sessionT += dt;
 
-    float incrZ = trapezoidPrimedZ ? (worldAccZDirected + prevAccZDirected) * 0.5f * dt : worldAccZDirected * dt;
+    float incrZ = trapezoidPrimedZ ? (integrationAccZDirected + prevAccZDirected) * 0.5f * dt : integrationAccZDirected * dt;
     velZ += incrZ;
-    prevAccZDirected = worldAccZDirected;
+    prevAccZDirected = integrationAccZDirected;
     trapezoidPrimedZ = true;
 
     rawPosCumulative += (velZ + prevVelZ) * 0.5f * dt;
@@ -1931,6 +1995,15 @@ namespace {
     float worldAccZ = constrain(worldAccZraw - accZBiasNow, -100.0f, 100.0f);
     lastAccZBiasApplied = accZBiasNow;
 
+    // v3.11.28: log-only - the same world-Z projection and bias as above, on
+    // the accelerometer BEFORE the median (axRaw/ayRaw/azRaw), same attitude
+    // (gravBody*) as the filtered path. Not clamped, to show the true peaks.
+    float linRawX = axRaw - gravBodyX * accelScaleG;
+    float linRawY = ayRaw - gravBodyY * accelScaleG;
+    float linRawZ = azRaw - gravBodyZ * accelScaleG;
+    lastWorldAccZUnfiltered = (linRawX * gravBodyX + linRawY * gravBodyY + linRawZ * gravBodyZ) - accZBiasNow;
+    lastGyroRawX = gxAvg; lastGyroRawY = gyAvg; lastGyroRawZ = gzAvg;
+
     sample.linAccX = linAccX; sample.linAccY = linAccY; sample.linAccZ = linAccZ;
     sample.worldAccX = R00 * linAccX + R01 * linAccY + R02 * linAccZ;
     sample.worldAccY = R10 * linAccX + R11 * linAccY + R12 * linAccZ;
@@ -1988,7 +2061,13 @@ namespace {
     Serial.print(debugStateVar.velocityClampedToMax ? 1 : 0); Serial.print(',');
     Serial.print(debugStateVar.bracketClosed ? 1 : 0); Serial.print(',');
     Serial.print(debugStateVar.confirmedStillNow ? 1 : 0); Serial.print(',');
-    Serial.println(debugStateVar.flatGuardOverrideFired ? 1 : 0);
+    Serial.print(debugStateVar.flatGuardOverrideFired ? 1 : 0); Serial.print(',');
+    // v3.11.28: pre-median taps, appended at the END so every earlier column
+    // keeps its position (see the version note at the top of this file).
+    Serial.print(lastWorldAccZUnfiltered, 4); Serial.print(',');
+    Serial.print(lastGyroRawX, 3); Serial.print(',');
+    Serial.print(lastGyroRawY, 3); Serial.print(',');
+    Serial.println(lastGyroRawZ, 3);
   }
 
   // Integrates worldAccX/Y (cosmetic leak, streaming/debug) and advances
@@ -2014,7 +2093,10 @@ namespace {
     trapezoidPrimed = true;
 
     float worldAccZDirected = sample.worldAccZ * (float)repDirectionSign;
-    stepPhaseEngine(dt, worldAccZDirected);
+    // v3.11.29: same +-100 m/s^2 safety clamp the filtered path has (lastWorldAccZUnfiltered
+    // itself stays unclamped, it's also what the serial log shows).
+    float integrationAccZDirected = constrain(lastWorldAccZUnfiltered, -100.0f, 100.0f) * (float)repDirectionSign;
+    stepPhaseEngine(dt, worldAccZDirected, integrationAccZDirected);
 
     // v3.11.2: dirVel for live streaming/display is velZ RELATIVE to the
     // anchor (baselineRawVel, kept continuously aligned while confirmed
@@ -2161,7 +2243,8 @@ void MotionTracker::setTrackingActive(bool active) {
                       "worldVelX,worldVelY,worldPosZ,worldPosX,worldPosY,"
                       "quatW,quatX,quatY,quatZ,gyroMag,accZBias,gyroBiasX,gyroBiasY,gyroBiasZ,"
                       "gyroFilteredX,gyroFilteredY,gyroFilteredZ,"
-                      "velClamped,bracketClosed,confirmedStillNow,flatGuardOverrideFired");
+                      "velClamped,bracketClosed,confirmedStillNow,flatGuardOverrideFired,"
+                      "worldAccZRaw,gyroRawX,gyroRawY,gyroRawZ");
       Serial.println("R,rep,peakVelocity,meanVelocity,peakAcceleration,meanAcceleration,"
                       "displacementM,eccPeakVelocity,eccMeanVelocity,quality1,correctionStatus");
       // v3.11.7, NEW: one line per closed bracket - see the comment on

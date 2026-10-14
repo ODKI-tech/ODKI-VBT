@@ -4,7 +4,7 @@
 
 ## Download & install
 
-Distributed as a downloadable APK directly from [`app-release/`](app-release/) in this repository (sideload — no Google Play listing planned initially). Unlike the firmware (which self-checks for updates in-app), there's no auto-update mechanism for the app itself yet — check back here for a newer `.apk`.
+Distributed as a downloadable APK directly from [`app-release/`](app-release/) in this repository (sideload; a Google Play listing is being prepared but is not public yet). Unlike the firmware (which self-checks for updates in-app), there's no auto-update mechanism for the app itself yet — check back here for a newer `.apk`.
 
 1. Download [`odki-vbt-latest.apk`](https://github.com/ODKI-tech/ODKI-VBT/raw/main/Apps/Android/app-release/odki-vbt-latest.apk) — always the current release, regardless of version (see the note for maintainers below). Use the `github.com/.../raw/...` link specifically, not a plain `raw.githubusercontent.com` one — the APK is stored with Git LFS (see `.gitattributes`), and only the former correctly redirects to the actual binary; the latter serves the LFS pointer text instead (133 bytes, not the app).
 2. Android will likely warn that installing from outside the Play Store is blocked — go to **Settings → Apps → Special access → Install unknown apps**, select the app you downloaded with (e.g. your browser or file manager), and allow it. The exact wording/path varies a bit by Android version and manufacturer.
@@ -16,7 +16,7 @@ Distributed as a downloadable APK directly from [`app-release/`](app-release/) i
 ## Usage
 
 1. Power on the sensor (see Hardware/Instructions).
-2. Open the app, grant Bluetooth and location permissions when prompted (required by Android for BLE scanning).
+2. Open the app, grant the Bluetooth ("Nearby devices") permission when prompted — the app does not ask for location.
 3. Connect to the sensor from the device list.
 4. Calibrate (hold the sensor/bar still and tap Calibrate).
 5. Start a set to see live velocity and rep data; each completed rep appears automatically.

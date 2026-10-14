@@ -152,6 +152,11 @@ S_COLUMNS = [
     "velClamped", "bracketClosed", "confirmedStillNow", "flatGuardOverrideFired",
 ]
 
+# v3.11.28 appended four pre-median columns at the end of the S row; rows
+# from older firmware have only the 37 fields above, so both layouts are
+# accepted (the live view doesn't plot the extra ones).
+S_COLUMNS_V2 = S_COLUMNS + ["worldAccZRaw", "gyroRawX", "gyroRawY", "gyroRawZ"]
+
 R_COLUMNS = [
     "rep", "peakVelocity", "meanVelocity", "peakAcceleration", "meanAcceleration",
     "displacementM", "eccPeakVelocity", "eccMeanVelocity", "quality1", "correctionStatus",
@@ -898,7 +903,7 @@ class LiveMonitorApp(tk.Tk):
             self._log_console("=== REC_STOP ===")
             return
 
-        row = parse_row(line, "S", S_COLUMNS)
+        row = parse_row(line, "S", S_COLUMNS_V2) or parse_row(line, "S", S_COLUMNS)
         if row is not None:
             self.sample_count += 1
             t_now = self.buf.add_sample(row)

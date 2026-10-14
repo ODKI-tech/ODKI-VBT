@@ -197,7 +197,7 @@ namespace {
   }
 
   void connect_callback(uint16_t conn_handle) {
-    // StreamPacket is 36 bytes: with the default MTU (23 bytes) it
+    // StreamPacket is 37 bytes: with the default MTU (23 bytes) it
     // wouldn't fit in a single notification anyway. The maximum
     // supported is requested from the client; if the client doesn't
     // grant it, notify() will fail until the MTU is sufficient.
@@ -219,7 +219,7 @@ namespace {
 void BleServer::begin() {
   // Must be called before begin(): allocates enough bandwidth/RAM for
   // large MTUs (requested below, in connect_callback) and deeper notify
-  // queues, useful for streaming ~20Hz of 36-byte packets.
+  // queues, useful for streaming ~20Hz of 37-byte packets.
   Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
 
   // begin(prph_count, central_count): only 1 peripheral connection to

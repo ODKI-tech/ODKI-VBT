@@ -243,16 +243,16 @@ struct RuntimeConfig {
   // is exactly why the ceiling above exists for the normal dynamic-window
   // path and can't simply be dropped there. Configurable 30-60 samples
   // (300-600ms) from the app.
-  uint8_t velocityOverrideFlatWindowSamples = 45;
+  uint8_t velocityOverrideFlatWindowSamples = 30;
   // Excursion band (m/s) on the recent velocity window for it to be
   // considered "flat".
   float velocityFlatBandMps = 0.04f;
-  uint8_t maxVelocityFlatWindowSamples = 30;
+  uint8_t maxVelocityFlatWindowSamples = 20;
   uint8_t minVelocityFlatWindowSamples = 2;
   // Absolute band (m/s^2) on the recent acceleration window for it to be
   // considered "flat" (ALL samples in the window below the band).
   float accelerationFlatBandMps2 = 0.3f;
-  uint8_t maxAccelerationFlatWindowSamples = 30;
+  uint8_t maxAccelerationFlatWindowSamples = 20;
   uint8_t minAccelerationFlatWindowSamples = 2;
   // Velocity peak (m/s) beyond which the windows above saturate to the
   // minimum (fast reps require quicker flatness confirmation).

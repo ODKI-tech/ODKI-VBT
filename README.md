@@ -15,7 +15,7 @@ The sensor fuses its onboard accelerometer and gyroscope into a stable orientati
 ## Repository layout
 
 - **[Hardware/](Hardware/)** — bill of materials, CAD/mechanical design files, and assembly instructions for building a unit.
-- **[Firmware/](Firmware/)** — the Arduino C++ firmware source (`VBT_Quaternions/`), [`DOCUMENTATION.md`](Firmware/DOCUMENTATION.md) (a chapter-by-chapter reference covering what every source file does and the rep-detection algorithm in detail), [`BLE_PROTOCOL.md`](Firmware/BLE_PROTOCOL.md) (the byte-exact Bluetooth protocol spec — everything a third-party app needs to talk to the sensor), and two Python tools: `tools/vbt_log_viewer.py`, for replaying and visualizing a raw debug-log capture from the device, and `tools/vbt_live_monitor.py`, a desktop GUI that shows that same data live over a USB-serial connection and can drive calibration/start/stop directly, no phone app needed.
+- **[Firmware/](Firmware/)** — the Arduino C++ firmware source (`VBT_Quaternions/`), [`DOCUMENTATION.md`](Firmware/DOCUMENTATION.md) (a chapter-by-chapter reference covering what every source file does and the rep-detection algorithm in detail), [`BLE_PROTOCOL.md`](Firmware/BLE_PROTOCOL.md) (the byte-exact Bluetooth protocol spec — everything a third-party app needs to talk to the sensor), and three Python tools in `tools/`: `vbt_log_viewer.py`, for replaying and visualizing a raw debug-log capture from the device (with an interactive GUI to pick which columns to plot); `vbt_live_monitor.py`, a desktop GUI that shows that same data live over a USB-serial connection and can drive calibration/start/stop directly, no phone app needed; and `host_replay/`, which runs a captured log through the real tracking engine on a PC to evaluate algorithm changes offline.
 - **[Apps/](Apps/)** — download links and usage instructions for the companion app (Android, iOS, Windows).
 - **[LICENSE-FIRMWARE](LICENSE-FIRMWARE)** (GPL-3.0 + Commons Clause) / **[LICENSE-HARDWARE](LICENSE-HARDWARE)** (CC BY-NC-SA 4.0) — non-commercial use, modification, and redistribution allowed; selling a unit built from these files is reserved to ODKI. The BLE protocol specification itself ([`Firmware/BLE_PROTOCOL.md`](Firmware/BLE_PROTOCOL.md)) is separately released under CC0 (public domain), so third-party apps can be built against it without restriction.
 
@@ -23,7 +23,7 @@ The sensor fuses its onboard accelerometer and gyroscope into a stable orientati
 
 1. **Build the hardware.** The [bill of materials](Hardware/BOM/), [CAD/mechanical design](Hardware/CAD/), and [step-by-step assembly instructions](Hardware/Instructions/) are all published — start there.
 2. **Flash the firmware.** Open `Firmware/VBT_Quaternions/VBT_Quaternions.ino` in the Arduino IDE with the `Seeeduino:nrf52` board package installed (board: `xiaonRF52840Sense`) and the `Seeed Arduino LSM6DS3` library, then upload. See [`Firmware/DOCUMENTATION.md`](Firmware/DOCUMENTATION.md) for what each file does and how the algorithm works.
-3. **Install the app.** See [Apps/](Apps/) for your platform — currently pending first public release.
+3. **Install the app.** See [Apps/](Apps/) for your platform — currently an Android APK is available to download; iOS and Windows are not yet published.
 4. **Calibrate and lift.** Power on, connect over Bluetooth, calibrate the sensor while it's still, then start tracking a set.
 
 ## Contributing
