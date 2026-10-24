@@ -175,9 +175,32 @@ namespace {
   // emit a Notify: unlike Battery/SystemStatus, the client itself writes
   // configuration changes, so it doesn't need to be notified of a change
   // it just caused.
+  RuntimeConfigPacket configReadValue;
+
   void writeConfigCharacteristic(const RuntimeConfig& cfg) {
-    RuntimeConfigPacket pkt = configToPacket(cfg);
-    configChr.write((uint8_t*)&pkt, sizeof(pkt));
+    configReadValue = configToPacket(cfg);
+    configChr.write((uint8_t*)&configReadValue, sizeof(configReadValue));
+  }
+
+  // v3.11.31: the 38-byte packet can also arrive as consecutive chunks of
+  // [offset][data...], each at most CONFIG_CHUNK_MAX_LEN bytes long. Some
+  // Android BLE controllers (observed: Samsung Galaxy Tab A8, Unisoc T618)
+  // drop the link on any client write longer than 20 bytes - the longest
+  // ATT write that fits one default-size link-layer packet - so a single
+  // 38-byte Config write never arrived and the connection died to a
+  // supervision timeout. Chunks must come in order starting at offset 0;
+  // anything else restarts the assembly, and the config is applied only
+  // once all 38 bytes are in.
+  const uint16_t CONFIG_CHUNK_MAX_LEN = 20;
+  uint8_t configAssembly[sizeof(RuntimeConfigPacket)];
+  uint16_t configAssembledLen = 0;
+
+  void applyConfigPacket(const uint8_t* data) {
+    RuntimeConfigPacket pkt;
+    memcpy(&pkt, data, sizeof(pkt));
+    pendingConfig = packetToConfig(pkt);
+    configUpdateAvailable = true;
+    writeConfigCharacteristic(pendingConfig);
   }
 
   // New configuration written by the client to the Config characteristic:
@@ -189,12 +212,30 @@ namespace {
   // just written, even before the main loop has consumed it.
   void config_write_callback(uint16_t conn_hdl, BLECharacteristic* chr, uint8_t* data, uint16_t len) {
     (void) conn_hdl; (void) chr;
-    if (len < sizeof(RuntimeConfigPacket)) return;
-    RuntimeConfigPacket pkt;
-    memcpy(&pkt, data, sizeof(pkt));
-    pendingConfig = packetToConfig(pkt);
-    configUpdateAvailable = true;
-    writeConfigCharacteristic(pendingConfig);
+    if (len == sizeof(RuntimeConfigPacket)) {
+      configAssembledLen = 0;
+      applyConfigPacket(data);
+      return;
+    }
+    if (len < 2 || len > CONFIG_CHUNK_MAX_LEN) return;
+
+    uint16_t offset = data[0];
+    uint16_t chunkLen = len - 1;
+    if (offset == 0) configAssembledLen = 0;
+    if (offset != configAssembledLen || offset + chunkLen > sizeof(RuntimeConfigPacket)) {
+      configAssembledLen = 0;
+    } else {
+      memcpy(configAssembly + offset, data + 1, chunkLen);
+      configAssembledLen += chunkLen;
+      if (configAssembledLen == sizeof(RuntimeConfigPacket)) {
+        configAssembledLen = 0;
+        applyConfigPacket(configAssembly);
+        return;
+      }
+    }
+    // The characteristic is variable-length, so the chunk itself just
+    // became its Read value: put the last full packet back.
+    configChr.write((uint8_t*)&configReadValue, sizeof(configReadValue));
   }
 
   void connect_callback(uint16_t conn_handle) {
@@ -272,7 +313,9 @@ void BleServer::begin() {
   // takeConfigUpdate()/setConfig() for the initial value.
   configChr.setProperties(CHR_PROPS_READ | CHR_PROPS_WRITE);
   configChr.setPermission(SECMODE_OPEN, SECMODE_OPEN);
-  configChr.setFixedLen(sizeof(RuntimeConfigPacket));
+  // Variable length (not fixed): also accepts the chunked form, see
+  // config_write_callback.
+  configChr.setMaxLen(sizeof(RuntimeConfigPacket));
   configChr.begin();
   configChr.setWriteCallback(config_write_callback);
   writeConfigCharacteristic(MotionTracker::defaultConfig());

@@ -24,6 +24,8 @@ For *why* the protocol is shaped this way (why `Stream` is always raw, why `Corr
 
 **MTU is mandatory to negotiate.** The default BLE MTU (23 bytes, 20 usable) is smaller than every custom packet except `Command`, `SystemStatus`, and `Battery`. Request the largest MTU the stack allows (the firmware itself requests up to 247 bytes on connect) before expecting `Stream`, `RepSummary`, `CorrectedCurve`, or `Config` to work — a client that skips this will simply never receive a successful notify for those characteristics.
 
+**Writes longer than 20 bytes may not get through.** Some Android BLE controllers (observed: Samsung Galaxy Tab A8, Unisoc T618) can receive long packets but drop the link on any client write longer than 20 bytes — the longest ATT write that fits a single default-size link-layer packet — whatever MTU was negotiated: the write never arrives and the connection dies to a supervision timeout ~5 s later. `Config` is the only characteristic a client writes with more than 20 bytes; from v3.11.31 it can be sent in chunks instead (see [Config](#config--c2b2-readwrite-38-bytes)), and clients should prefer that form.
+
 ## All UUIDs at a glance
 
 | Name | UUID | Properties | Size |
@@ -34,7 +36,7 @@ For *why* the protocol is shaped this way (why `Stream` is always raw, why `Corr
 | CorrectedCurve | `6c7325bb-1784-4d77-8b99-89ce838ac2ae` | Notify | 53 B |
 | SystemStatus | `6c7325bb-1784-4d77-8b99-89ce838ac2af` | Read, Notify | 2 B |
 | Command | `6c7325bb-1784-4d77-8b99-89ce838ac2b0` | Write | 1 B |
-| Config | `6c7325bb-1784-4d77-8b99-89ce838ac2b2` | Read, Write | 38 B |
+| Config | `6c7325bb-1784-4d77-8b99-89ce838ac2b2` | Read, Write | 38 B (writable in 20 B chunks from v3.11.31) |
 | Battery Service | `0x180F` (standard) | — | — |
 | Battery Level | `0x2A19` (standard) | Read, Notify | 1 B |
 | Device Information Service | `0x180A` (standard) | — | — |
@@ -156,6 +158,8 @@ Any other value, or a write shorter than 1 byte, is silently ignored.
 ## Config — `…c2b2`, Read/Write, 38 bytes
 
 Runtime-adjustable algorithm parameters, mirroring the firmware's `RuntimeConfig` struct field-for-field. **Not persisted to flash** — the firmware always boots from its compiled defaults, so a client that wants non-default settings must re-send this characteristic on every new connection. Reading it returns the defaults until a client writes otherwise, and from then on the last packet written. A write is echoed back into the Read value immediately, exactly as received — before the firmware has necessarily applied it internally, and **without** the defensive clamps the firmware applies when it does (see below), so a Read can show a value the algorithm is not actually using.
+
+**Chunked writes (v3.11.31+).** Besides the single 38-byte write, the firmware accepts the same packet as consecutive writes of `[offset][data…]`, each at most 20 bytes long: byte 0 is the offset of `data` within the 38-byte packet, the rest is that slice of the packet. Chunks must arrive in order starting at offset 0, each continuing exactly where the previous one ended; the packet is applied only once all 38 bytes are in. An out-of-order or out-of-range chunk discards what was assembled so far; a chunk with offset 0 always starts over. The companion app sends two chunks, `[0x00][bytes 0–18]` and `[0x13][bytes 19–37]`. Between chunks a Read still returns the last complete packet. Firmware before v3.11.31 rejects any write that isn't exactly 38 bytes (the characteristic had a fixed length), so a client should check `Firmware Revision` first and fall back to the single write on older firmware.
 
 See [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#runtimeconfig-field-reference) for what each field actually controls in the algorithm — this table is the wire layout only.
 
