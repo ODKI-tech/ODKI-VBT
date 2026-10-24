@@ -56,7 +56,7 @@ flowchart TB
     MT -. "calibrated / tracking state" .-> LED
     BLE -. "connected state" .-> LED
 
-    BLE <==>|"Stream · RepSummary · CorrectedCurve<br/>SystemStatus · Command · Config<br/>Battery · buttonless DFU"| APP["Companion app<br/>Android / iOS / Windows"]
+    BLE <==>|"Stream · RepSummary · CorrectedCurve<br/>SystemStatus · Command · Config<br/>Battery · buttonless DFU"| APP["Companion app<br/>Android (iOS, Windows planned)"]
 ```
 
 ## Required libraries
@@ -260,7 +260,7 @@ Neither queue ever silently drops data because of a busy or momentarily disconne
 
 ### `RuntimeConfig` field reference
 
-All fields are adjustable at runtime over the BLE Config characteristic (see the BleServer chapter) and are **not** persisted to flash — the firmware always boots from the compiled defaults (`RuntimeConfig{}`, i.e. the values below).
+All fields are adjustable at runtime over the BLE Config characteristic (see the BleServer chapter) and are **not** persisted to flash — the firmware always boots from the compiled defaults (`RuntimeConfig{}`, i.e. the values below). `setConfig()` clamps the window fields on the way in, because they index the fixed 64-sample `FLAT_RING_CAPACITY` rings: every `max…WindowSamples` and `velocityOverrideFlatWindowSamples` is capped at 64, `velocityOverrideFlatWindowSamples` is raised to at least 30, and each `min…WindowSamples` is kept between 1 and its `max…` counterpart. No other field is range-checked.
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -271,7 +271,7 @@ All fields are adjustable at runtime over the BLE Config characteristic (see the
 | `accZBiasGyroMaxDegS` | 12.0 | Gyroscope-magnitude ceiling (deg/s) below which a sample is a candidate for bias updates. |
 | `accZBiasAccMagToleranceMps2` | 0.12 | Half-width of the excursion band `\|acceleration\|` must stay within, over a short sliding window, for a sample to be a bias-update candidate (v3.11.11+; was an absolute distance from `G` before). |
 | `flatGuardMaxVelocityMps` | 0.20 | Corrected live velocity above which — while a phase is open — the flat-guard judges stillness over the fixed `velocityOverrideFlatWindowSamples` window instead of the dynamic one (v3.11.27; before that it was an absolute ceiling the flat-guard could never fire above). |
-| `velocityOverrideFlatWindowSamples` | 30 | (45 before v3.11.30) Fixed flatness window (samples) used once `\|velZLive\|` exceeds `flatGuardMaxVelocityMps` — replaces the dynamic window for BOTH flatness tests above in that case (v3.11.27, see [The flat-guard's two-tier design](#the-flat-guards-two-tier-design)). Range 30–60. |
+| `velocityOverrideFlatWindowSamples` | 30 | (45 before v3.11.30) Fixed flatness window (samples) used once `\|velZLive\|` exceeds `flatGuardMaxVelocityMps` — replaces the dynamic window for BOTH flatness tests above in that case (v3.11.27, see [The flat-guard's two-tier design](#the-flat-guards-two-tier-design)). The app offers 30–60; the firmware clamps any written value to 30–64 (see below). |
 | `velocityFlatBandMps` | 0.04 | Half-width of the velocity flat band: the recent velocity window counts as flat if its spread (max − min) is at most twice this. |
 | `maxVelocityFlatWindowSamples` / `minVelocityFlatWindowSamples` | 20 / 2 | Dynamic window bounds (samples, 10ms each) for the velocity flatness test; 30 / 2 before v3.11.30. |
 | `accelerationFlatBandMps2` | 0.3 | Every sample of the recent (median-filtered) acceleration window must be within this of zero to count as flat. |
@@ -308,7 +308,7 @@ Implements the device's Bluetooth Low Energy peripheral role: one custom service
 
 | Characteristic | Properties | Purpose |
 |---|---|---|
-| Stream | Notify | Decimated live telemetry (acceleration, velocity, position, orientation, phase state), sent only while tracking is active. `refVelZ` here is always the raw, live-re-anchored value — never the retroactively-corrected one (see CorrectedCurve below). |
+| Stream | Notify | Decimated live telemetry (acceleration, velocity, position, orientation, phase state), sent only while tracking is active and no USB-serial connection is open (see [Lab data capture](#lab-data-capture-serial-log)). `refVelZ` here is always the raw, live-re-anchored value — never the retroactively-corrected one (see CorrectedCurve below). |
 | RepSummary | Notify | One packet per completed rep — see [Correction status](#correction-status-and-re-reporting) in the MotionTracker chapter for why the same rep can be sent more than once. |
 | CorrectedCurve | Notify | Blocks of drift-corrected velocity for a time range already streamed as raw via Stream, sent when the bracket covering that range closes. The client is expected to redraw that portion of its live graph in place. |
 | SystemStatus | Read/Notify | Calibrated / tracking-active flags. Pushed automatically on every state change and on every new connection, and independently readable at any time. |
@@ -346,7 +346,7 @@ BLE offers two ways to push data without the client explicitly polling: Notify (
 
 Both `command_write_callback()` and `config_write_callback()` run inside the BLE stack's own scheduler context, not the main `loop()`. They do the minimum possible there — set a flag or stash a pending value — and let `loop()` perform the actual state change on its own schedule via the `take*Requested()` / `takeConfigUpdate()` functions, each of which consumes (returns true for) at most one pending event per call.
 
-A config write also immediately echoes the received value back into the characteristic's own Read-accessible value (`writeConfigCharacteristic()`), so a Read performed right after a Write already reflects it, even before `loop()` has consumed `takeConfigUpdate()`.
+A config write also immediately echoes the received value back into the characteristic's own Read-accessible value (`writeConfigCharacteristic()`), so a Read performed right after a Write already reflects it, even before `loop()` has consumed `takeConfigUpdate()`. The echo is the packet as received: the clamps `MotionTracker::setConfig()` applies afterwards (see the [`RuntimeConfig` field reference](#runtimeconfig-field-reference)) are not reflected in the Read value.
 
 ### Connection setup
 

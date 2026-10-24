@@ -20,7 +20,7 @@
 #include <Arduino.h>
 #include "MotionTracker.h"
 
-// BLE server. The CUSTOM service (see UUID_SERVICE in BleServer.cpp) has 7
+// BLE server. The CUSTOM service (see UUID_SERVICE in BleServer.cpp) has 6
 // characteristics:
 //
 //   Stream          (Notify)   - fast, decimated telemetry (see Config.h),
@@ -175,7 +175,7 @@ struct StreamPacket {
   int16_t worldPosX, worldPosY, worldPosZ; // x1000 -> m     (1 mm resolution)
   int16_t quatW, quatX, quatY, quatZ;      // x10000 -> dimensionless, range [-1,1]
   uint8_t phaseState;                      // 0=Idle, 1=Eccentric, 2=Concentric - see PhaseState in MotionTracker.h
-}; // 4 + 12*2 + 3*2 + 4*2 + 1 = 37 bytes
+}; // 4 + 12*2 + 4*2 + 1 = 37 bytes
 
 struct RepSummaryPacket {
   // repNumber: 1-based INTEGER rep number. v3.11.0: can be sent MULTIPLE

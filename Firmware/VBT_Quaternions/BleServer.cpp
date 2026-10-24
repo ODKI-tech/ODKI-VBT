@@ -112,7 +112,8 @@ namespace {
 
   // RuntimeConfig (physical units, MotionTracker.h) <-> RuntimeConfigPacket
   // (fixed-point on the wire, BleServer.h) - same toFixed16/toFixedU16
-  // scheme as above, but unsigned (no Config field is negative).
+  // scheme as above - unsigned toFixedU16 for every field except
+  // minCrossingExcursionMps, the one signed (always <= 0) field.
   RuntimeConfigPacket configToPacket(const RuntimeConfig& cfg) {
     RuntimeConfigPacket pkt;
     pkt.repDirection = (uint8_t)cfg.repDirection;

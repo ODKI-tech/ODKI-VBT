@@ -25,7 +25,7 @@
 // Firmware version, exposed over BLE as a "MAJOR.MINOR.PATCH" string on the
 // standard Device Information Service (see deviceInfoService in
 // BleServer.cpp) so the app can compare it against the latest available and
-// offer the OTA update (BLE DFU, see Adafruit_BLEDFU in BleServer.cpp)
+// offer the OTA update (BLE DFU, see BLEDfu in BleServer.cpp)
 // without the tester having to do anything manually.
 // Increment on EVERY release sent to testers.
 namespace FirmwareVersion {

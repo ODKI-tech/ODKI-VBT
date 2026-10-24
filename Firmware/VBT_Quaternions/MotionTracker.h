@@ -201,15 +201,19 @@ struct RuntimeConfig {
   // Gyroscope magnitude threshold (degrees/s) below which a sample is
   // considered a candidate for the accZBias/gyroBias update.
   float accZBiasGyroMaxDegS = 12.0f;
-  // Tolerance (m/s^2) on the deviation between |total acceleration| and g
-  // for a sample to be considered a candidate for the bias update.
+  // Half-band (m/s^2) of the excursion |total acceleration| must stay
+  // within over a short sliding window for a sample to be considered a
+  // candidate for the bias update (v3.11.11: a flatness test, no longer
+  // an absolute distance from g - see the version note).
   // v3.11.0: tuned from 0.6 to 0.12 (full sweep on SQUAT_5/6, -14%/-43%
   // residual drift velocity) - see the version note.
   float accZBiasAccMagToleranceMps2 = 0.12f;
 
   // --- Flat-guard (phase/bracket close on flatness) ---
-  // Absolute ceiling (m/s) above which the Flat-guard can NEVER trigger
-  // while a phase is open, regardless of the windows below - without
+  // Ceiling (m/s) on |velZLive| while a phase is open: below it the
+  // flatness tests use the dynamic windows below, above it they switch to
+  // the fixed velocityOverrideFlatWindowSamples window (v3.11.27 - before
+  // that, the Flat-guard could NEVER trigger above it). Without
   // this, a long/heavy set can drift the raw velocity beyond any
   // sensible threshold and the mechanism locks up for the rest of the
   // session (diagnosed on SQUAT_6: only 1 flatness close in 24s). v3.11.0:

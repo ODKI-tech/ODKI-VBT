@@ -48,7 +48,7 @@ For *why* the protocol is shaped this way (why `Stream` is always raw, why `Corr
 
 ## Stream — `…c2ac`, Notify, 37 bytes
 
-Live telemetry, sent only while tracking is active, decimated to 20Hz (`Config::STREAM_DECIMATION_FACTOR`). Automatically disabled while a raw serial debug capture is running.
+Live telemetry, sent only while tracking is active, decimated to 20Hz (`Config::STREAM_DECIMATION_FACTOR`). Not sent at all while a USB-serial connection is open on the device (the raw 100Hz serial log takes over in that case, see [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#lab-data-capture-serial-log)) — a client connected over BLE to a sensor that is also plugged into a computer with its serial port open will receive `RepSummary`/`CorrectedCurve` but no `Stream`.
 
 | Offset | Size | Field | Type | Scale | Unit |
 |---|---|---|---|---|---|
@@ -155,7 +155,7 @@ Any other value, or a write shorter than 1 byte, is silently ignored.
 
 ## Config — `…c2b2`, Read/Write, 38 bytes
 
-Runtime-adjustable algorithm parameters, mirroring the firmware's `RuntimeConfig` struct field-for-field. **Not persisted to flash** — the firmware always boots from its compiled defaults, so a client that wants non-default settings must re-send this characteristic on every new connection. Reading it returns whatever configuration is currently active (defaults, until a client writes otherwise). A write is echoed back into the Read value immediately, before the firmware has necessarily applied it internally.
+Runtime-adjustable algorithm parameters, mirroring the firmware's `RuntimeConfig` struct field-for-field. **Not persisted to flash** — the firmware always boots from its compiled defaults, so a client that wants non-default settings must re-send this characteristic on every new connection. Reading it returns the defaults until a client writes otherwise, and from then on the last packet written. A write is echoed back into the Read value immediately, exactly as received — before the firmware has necessarily applied it internally, and **without** the defensive clamps the firmware applies when it does (see below), so a Read can show a value the algorithm is not actually using.
 
 See [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#runtimeconfig-field-reference) for what each field actually controls in the algorithm — this table is the wire layout only.
 
@@ -191,7 +191,9 @@ Python decode: `struct.unpack("<BHHHHHHBHBBHBBHHHHBBHhH", data)` — 23 fields, 
 
 A write shorter than 38 bytes is ignored entirely (the whole packet, not just the missing tail).
 
-**v3.11.27:** `flatGuardOverrideStillTimeMs` (a uint16 duration, was offset 13) was removed and replaced by `velocityOverrideFlatWindowSamples` (a uint8 sample count) at the same offset — the packet shrank from 39 to 38 bytes. The old field gated a raw gyroscope/accelerometer quiet-time safety net that in practice almost never fired (it required a full, unbroken second with zero noise anywhere in it); the new field instead widens the SAME velocity/acceleration flatness tests the sensor already runs (to a fixed 30–60 sample window) once the corrected velocity estimate is outside `flatGuardMaxVelocityMps` — see [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#the-flat-guards-two-tier-design) for the full reasoning. A client built against the pre-v3.11.27 39-byte layout will have its Config writes silently ignored by v3.11.27+ firmware — update the packet size and field before talking to updated firmware.
+**Firmware-side clamps** (applied in `MotionTracker::setConfig()`, because these fields index fixed 64-sample ring buffers): `maxVelocityFlatWindowSamples`, `maxAccelerationFlatWindowSamples` and `velocityOverrideFlatWindowSamples` are capped at 64; `velocityOverrideFlatWindowSamples` is also raised to at least 30; `minVelocityFlatWindowSamples`/`minAccelerationFlatWindowSamples` are raised to at least 1 and lowered to their matching `max…` value if larger. No other field is range-checked.
+
+**v3.11.27:** `flatGuardOverrideStillTimeMs` (a uint16 duration, was offset 13) was removed and replaced by `velocityOverrideFlatWindowSamples` (a uint8 sample count) at the same offset — the packet shrank from 39 to 38 bytes. The old field gated a raw gyroscope/accelerometer quiet-time safety net that in practice almost never fired (it required a full, unbroken second with zero noise anywhere in it); the new field instead widens the SAME velocity/acceleration flatness tests the sensor already runs (to a fixed window of 30–64 samples; the companion app offers 30–60) once the corrected velocity estimate is outside `flatGuardMaxVelocityMps` — see [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#the-flat-guards-two-tier-design) for the full reasoning. A client built against the pre-v3.11.27 39-byte layout will have its Config writes silently ignored by v3.11.27+ firmware — update the packet size and field before talking to updated firmware.
 
 **v3.11.24:** `debugLogEnabled` (offset 39) was removed — the packet shrank from 40 to 39 bytes. Whether the sensor prints its raw serial log or streams over BLE is now decided automatically from whether a USB-serial connection is open (see [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#lab-data-capture-serial-log)), not a field a client sends.
 
@@ -203,7 +205,7 @@ A write shorter than 38 bytes is ignored entirely (the whole packet, not just th
 
 ## Device Information Service (standard, `0x180A`)
 
-**Firmware Revision String** (`0x2A26`, Read, variable-length UTF-8): the firmware version as `"MAJOR.MINOR.PATCH"` (e.g. `"3.11.7"`). Set once at boot, static for the whole connection — read it to check whether an OTA update is available before offering one to the user.
+**Firmware Revision String** (`0x2A26`, Read, variable-length UTF-8): the firmware version as `"MAJOR.MINOR.PATCH"` (e.g. `"3.11.30"`). Set once at boot, static for the whole connection — read it to check whether an OTA update is available before offering one to the user.
 
 ## Firmware update (DFU)
 

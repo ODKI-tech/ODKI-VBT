@@ -16,7 +16,7 @@ Distributed as a downloadable APK directly from [`app-release/`](app-release/) i
 ## Usage
 
 1. Power on the sensor (see Hardware/Instructions).
-2. Open the app, grant the Bluetooth ("Nearby devices") permission when prompted — the app does not ask for location.
+2. Open the app, grant the Bluetooth ("Nearby devices") permission when prompted — on Android 12 and newer the app does not ask for location.
 3. Connect to the sensor from the device list.
 4. Calibrate (hold the sensor/bar still and tap Calibrate).
 5. Start a set to see live velocity and rep data; each completed rep appears automatically.

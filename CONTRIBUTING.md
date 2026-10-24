@@ -51,7 +51,7 @@ Open an issue first for anything non-trivial (a new `RuntimeConfig` field, a cha
 
 **Tools (`Firmware/tools/`, Python):** match the style already in `vbt_log_viewer.py` — plain functions over classes (Tkinter windows are the exception, see `vbt_live_monitor.py` and the GUI in `vbt_log_viewer.py`), `pandas`/`numpy` for data handling, no external dependencies beyond `numpy`/`pandas`/`matplotlib` unless there's a good reason.
 
-**Hardware (`Hardware/`):** CAD source files in an open or widely-supported format (STEP for mechanical parts, KiCad for any PCB work — avoid formats that require a specific paid tool to even open), plus a plain-text BOM with part numbers and a real supplier/link per line, not just a description.
+**Hardware (`Hardware/`):** CAD source files in an open or widely-supported format (STEP for mechanical parts, KiCad for any PCB work — avoid formats that require a specific paid tool to even open), plus a plain-text BOM (`Hardware/BOM/bom.csv`) with quantities, part numbers where there is one, and the key specs to match — deliberately no supplier links, see [`Hardware/BOM/README.md`](Hardware/BOM/README.md).
 
 ## Documentation
 
