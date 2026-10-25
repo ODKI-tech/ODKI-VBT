@@ -9,6 +9,9 @@
 // the velocity (baselineRawVel/bracketStartT, like the confirmed-still block) AFTER it; flag = 1
 // marks a sample that belongs to a shock, so the estimators that last beyond a bracket (emaRate,
 // the rep-cycle regression) are rolled back when they would learn from a bracket/cycle containing it.
+// The orientation path (updateOrientationAndAcceleration) is not run, so the accRawX/Y/Z and
+// gyroRawX/Y/Z columns of the printed S rows read 0; the P rows' t_start_ms/t_end_ms are
+// rebuilt from the replayed t_ms/dt_ms exactly as on the device.
 #include "MotionTracker.cpp"   // same TU on purpose: gives access to the engine's internals
 
 SerialStub Serial;

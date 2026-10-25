@@ -156,6 +156,8 @@ S_COLUMNS = [
 # from older firmware have only the 37 fields above, so both layouts are
 # accepted (the live view doesn't plot the extra ones).
 S_COLUMNS_V2 = S_COLUMNS + ["worldAccZRaw", "gyroRawX", "gyroRawY", "gyroRawZ"]
+# v3.11.32 appended accRawX/Y/Z (pre-median body-frame accelerometer).
+S_COLUMNS_V3 = S_COLUMNS_V2 + ["accRawX", "accRawY", "accRawZ"]
 
 R_COLUMNS = [
     "rep", "peakVelocity", "meanVelocity", "peakAcceleration", "meanAcceleration",
@@ -166,6 +168,9 @@ B_COLUMNS = ["bracketId", "t0", "t1", "baseline", "drift", "rate", "emaRateAfter
 
 P_COLUMNS = ["phaseId", "repNumber", "phaseType", "closeReason", "durationS",
              "sampleCount", "discarded", "reported"]
+# v3.11.32 appended t_start_ms/t_end_ms (device millis of the phase's first
+# and last kept sample).
+P_COLUMNS_V2 = P_COLUMNS + ["t_start_ms", "t_end_ms"]
 
 # RuntimeConfig defaults (MotionTracker.h) - shown as a reference line only:
 # the actual live-configured value isn't readable over serial (config is
@@ -903,7 +908,8 @@ class LiveMonitorApp(tk.Tk):
             self._log_console("=== REC_STOP ===")
             return
 
-        row = parse_row(line, "S", S_COLUMNS_V2) or parse_row(line, "S", S_COLUMNS)
+        row = (parse_row(line, "S", S_COLUMNS_V3) or parse_row(line, "S", S_COLUMNS_V2)
+               or parse_row(line, "S", S_COLUMNS))
         if row is not None:
             self.sample_count += 1
             t_now = self.buf.add_sample(row)
@@ -919,7 +925,7 @@ class LiveMonitorApp(tk.Tk):
             self._dirty = True
             return
 
-        row = parse_row(line, "P", P_COLUMNS)
+        row = parse_row(line, "P", P_COLUMNS_V2) or parse_row(line, "P", P_COLUMNS)
         if row is not None:
             self.buf.add_discarded_phase(row, self.buf.latest_t())
             self._dirty = True

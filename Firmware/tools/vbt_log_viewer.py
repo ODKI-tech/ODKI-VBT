@@ -116,12 +116,24 @@ S_COLUMNS = [
 # fields above: both layouts are accepted, the missing columns become NaN.
 S_COLUMNS_V2 = S_COLUMNS + ["worldAccZRaw", "gyroRawX", "gyroRawY", "gyroRawZ"]
 
+# v3.11.32 appended the pre-median body-frame accelerometer (m/s^2) after
+# those: accRawX/Y/Z. All three layouts (37, 41, 44 fields) are accepted;
+# s_df always has the full v3.11.32 column set, missing columns are NaN.
+S_COLUMNS_V3 = S_COLUMNS_V2 + ["accRawX", "accRawY", "accRawZ"]
+
 R_COLUMNS = [
     "rep", "peakVelocity", "meanVelocity", "peakAcceleration", "meanAcceleration",
     "displacementM", "eccPeakVelocity", "eccMeanVelocity", "quality1", "correctionStatus",
 ]
 
 B_COLUMNS = ["bracketId", "t0", "t1", "baseline", "drift", "rate", "emaRateAfter", "basisTotal"]
+
+# "P," rows (v3.11.18): one per phase close attempt. v3.11.32 appended
+# t_start_ms/t_end_ms (device millis, same clock as the S rows' t_ms, of the
+# phase's first and last kept sample); older rows get NaN there.
+P_COLUMNS = ["phaseId", "repNumber", "phaseType", "closeReason", "durationS",
+             "sampleCount", "discarded", "reported"]
+P_COLUMNS_V2 = P_COLUMNS + ["t_start_ms", "t_end_ms"]
 
 STATE_COLORS = {"idle": "#eef1f6", "eccentric": "#ffe3e3", "concentric": "#dff3e3"}
 
@@ -163,10 +175,8 @@ def parse_lines(lines):
     for line in lines:
         if line.startswith("S,"):
             parts = line.split(",")[1:]
-            if len(parts) == len(S_COLUMNS):
-                s_rows.append(parts + ["nan"] * (len(S_COLUMNS_V2) - len(S_COLUMNS)))
-            elif len(parts) == len(S_COLUMNS_V2):
-                s_rows.append(parts)
+            if len(parts) in (len(S_COLUMNS), len(S_COLUMNS_V2), len(S_COLUMNS_V3)):
+                s_rows.append(parts + ["nan"] * (len(S_COLUMNS_V3) - len(parts)))
         elif line.startswith("R,"):
             parts = line.split(",")[1:]
             if len(parts) == len(R_COLUMNS):
@@ -179,8 +189,8 @@ def parse_lines(lines):
     if not s_rows:
         return None, None, None
 
-    s_df = pd.DataFrame(s_rows, columns=S_COLUMNS_V2)
-    numeric_cols = [c for c in S_COLUMNS_V2 if c != "state"]
+    s_df = pd.DataFrame(s_rows, columns=S_COLUMNS_V3)
+    numeric_cols = [c for c in S_COLUMNS_V3 if c != "state"]
     for c in numeric_cols:
         s_df[c] = pd.to_numeric(s_df[c], errors="coerce")
 
@@ -224,6 +234,24 @@ def parse_lines(lines):
         b_df = b_df.sort_values("t0").reset_index(drop=True)
 
     return s_df, r_df, b_df
+
+
+def parse_p_rows(lines):
+    """The "P," rows (phase close attempts, including the ones discarded as
+    too short: reported == 0) as a DataFrame with P_COLUMNS_V2. Kept separate
+    from parse_lines() so its (s_df, r_df, b_df) return value doesn't change
+    for existing callers. t_start_ms/t_end_ms are NaN on firmware < v3.11.32."""
+    rows = []
+    for line in lines:
+        if line.startswith("P,"):
+            parts = line.split(",")[1:]
+            if len(parts) in (len(P_COLUMNS), len(P_COLUMNS_V2)):
+                rows.append(parts + ["nan"] * (len(P_COLUMNS_V2) - len(parts)))
+    p_df = pd.DataFrame(rows, columns=P_COLUMNS_V2)
+    for c in P_COLUMNS_V2:
+        p_df[c] = pd.to_numeric(p_df[c], errors="coerce")
+    # the header line has the same field count, it drops out here (non-numeric)
+    return p_df.dropna(subset=P_COLUMNS).reset_index(drop=True)
 
 
 def reconstruct_corrected(s_df, b_df):

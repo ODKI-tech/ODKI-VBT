@@ -727,6 +727,26 @@ namespace {
   // used above flatGuardMaxVelocityMps; 30 is also the minimum setConfig()
   // accepts for it). The app's own defaults (runtime_config.dart) change in
   // step; a phone that already stored a value keeps it until reset.
+  //
+  // v3.11.32: log-only change for the encoder validation study, no effect
+  // on tracking or on the BLE protocol. Two groups of columns are appended
+  // at the END of existing serial rows (earlier columns keep their
+  // positions, as in v3.11.28):
+  //   - "P," rows gain t_start_ms,t_end_ms: the device millis() (the same
+  //     clock as the "S," rows' t_ms) of the phase's first sample and of
+  //     its last KEPT sample (startIdx + cutoff, i.e. without the discarded
+  //     tail - the span durationS measures). Reconstructed exactly by
+  //     walking back from the current sample through bracketBuf's per-sample
+  //     dt (each dt is an integer number of ms), so no extra RAM; computed
+  //     only while the serial log is open. Lets a rep be paired with an
+  //     external reference without re-deriving it from the state column.
+  //   - "S," rows gain accRawX,accRawY,accRawZ: the body-frame
+  //     accelerometer in m/s^2 (10ms mean of the 416Hz samples, times
+  //     accelScaleG) BEFORE the 5-sample median - the exact input of
+  //     accMedianFilter. Together with gyroRawX/Y/Z (v3.11.28, the input of
+  //     gyroMedianFilter) this is everything updateOrientationAndAcceleration()
+  //     reads from the IMU, so an offline replay can cover Madgwick too.
+  // The tools accept both the old and the new column counts.
   // ============================================================================
 
   // --- Sampling / orientation (Madgwick) ---
@@ -944,6 +964,9 @@ namespace {
   // tracking engine.
   float lastWorldAccZUnfiltered = 0;
   float lastGyroRawX = 0, lastGyroRawY = 0, lastGyroRawZ = 0;
+  // v3.11.32: log-only - the body-frame accelerometer BEFORE the median
+  // (axRaw/ayRaw/azRaw in updateOrientationAndAcceleration(), m/s^2).
+  float lastAccRawX = 0, lastAccRawY = 0, lastAccRawZ = 0;
 
   const RuntimeConfig DEFAULT_CONFIG;
   RuntimeConfig activeConfig;
@@ -1446,6 +1469,20 @@ namespace {
     }
   }
 
+  // v3.11.32, log-only: the device millis() (the "S," rows' t_ms) of
+  // bracketBuf[idx], given that bracketBuf[currentIdx] is the sample being
+  // processed right now (stamped lastSampleTime). bracketBuf always holds
+  // consecutive samples (closeBracketFn() carries a contiguous suffix), and
+  // each stored dt is (now - lastSampleTime) / 1000 for an integer number of
+  // ms, so walking back and subtracting round(dt * 1000) is exact.
+  unsigned long bracketSampleMillis(uint16_t idx, uint16_t currentIdx) {
+    unsigned long ms = lastSampleTime;
+    for (uint16_t k = currentIdx; k > idx; k--) {
+      ms -= (unsigned long)(bracketBuf[k].dt * 1000.0f + 0.5f);
+    }
+    return ms;
+  }
+
   void closePhaseFn(uint8_t reason, uint16_t idxInBracket) {
     uint16_t n = phaseSampleCount;
     int16_t discardedI, cutoff;
@@ -1487,7 +1524,11 @@ namespace {
       Serial.print(durationS, 4); Serial.print(',');
       Serial.print(phaseSampleCount); Serial.print(',');
       Serial.print(discardedI); Serial.print(',');
-      Serial.println(reported ? 1 : 0);
+      Serial.print(reported ? 1 : 0); Serial.print(',');
+      // v3.11.32: device millis() of the first and last kept sample.
+      uint16_t endKeptIdx = (cutoff >= 0) ? (uint16_t)(startIdx + cutoff) : startIdx;
+      Serial.print(bracketSampleMillis(startIdx, idxInBracket)); Serial.print(',');
+      Serial.println(bracketSampleMillis(endKeptIdx, idxInBracket));
     }
 
     if (reported) {
@@ -2003,6 +2044,7 @@ namespace {
     float linRawZ = azRaw - gravBodyZ * accelScaleG;
     lastWorldAccZUnfiltered = (linRawX * gravBodyX + linRawY * gravBodyY + linRawZ * gravBodyZ) - accZBiasNow;
     lastGyroRawX = gxAvg; lastGyroRawY = gyAvg; lastGyroRawZ = gzAvg;
+    lastAccRawX = axRaw; lastAccRawY = ayRaw; lastAccRawZ = azRaw;
 
     sample.linAccX = linAccX; sample.linAccY = linAccY; sample.linAccZ = linAccZ;
     sample.worldAccX = R00 * linAccX + R01 * linAccY + R02 * linAccZ;
@@ -2067,7 +2109,11 @@ namespace {
     Serial.print(lastWorldAccZUnfiltered, 4); Serial.print(',');
     Serial.print(lastGyroRawX, 3); Serial.print(',');
     Serial.print(lastGyroRawY, 3); Serial.print(',');
-    Serial.println(lastGyroRawZ, 3);
+    Serial.print(lastGyroRawZ, 3); Serial.print(',');
+    // v3.11.32: pre-median body-frame accelerometer, appended at the END.
+    Serial.print(lastAccRawX, 4); Serial.print(',');
+    Serial.print(lastAccRawY, 4); Serial.print(',');
+    Serial.println(lastAccRawZ, 4);
   }
 
   // Integrates worldAccX/Y (cosmetic leak, streaming/debug) and advances
@@ -2244,7 +2290,7 @@ void MotionTracker::setTrackingActive(bool active) {
                       "quatW,quatX,quatY,quatZ,gyroMag,accZBias,gyroBiasX,gyroBiasY,gyroBiasZ,"
                       "gyroFilteredX,gyroFilteredY,gyroFilteredZ,"
                       "velClamped,bracketClosed,confirmedStillNow,flatGuardOverrideFired,"
-                      "worldAccZRaw,gyroRawX,gyroRawY,gyroRawZ");
+                      "worldAccZRaw,gyroRawX,gyroRawY,gyroRawZ,accRawX,accRawY,accRawZ");
       Serial.println("R,rep,peakVelocity,meanVelocity,peakAcceleration,meanAcceleration,"
                       "displacementM,eccPeakVelocity,eccMeanVelocity,quality1,correctionStatus");
       // v3.11.7, NEW: one line per closed bracket - see the comment on
@@ -2254,7 +2300,9 @@ void MotionTracker::setTrackingActive(bool active) {
       // v3.11.18, NEW: one line per phase close ATTEMPT (reason: 0=flat,
       // 1=reversal, 2=timeout), including ones discarded for being too
       // short (reported=0) - see the comment in closePhaseFn().
-      Serial.println("P,phaseId,repNumber,phaseType,closeReason,durationS,sampleCount,discarded,reported");
+      // v3.11.32: t_start_ms,t_end_ms appended (see closePhaseFn()).
+      Serial.println("P,phaseId,repNumber,phaseType,closeReason,durationS,sampleCount,discarded,reported,"
+                      "t_start_ms,t_end_ms");
     } else if (wasActive) {
       Serial.println("REC_STOP");
     }
