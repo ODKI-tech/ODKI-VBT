@@ -26,6 +26,10 @@ The sensor fuses its onboard accelerometer and gyroscope into a stable orientati
 3. **Install the app.** See [Apps/](Apps/) for your platform — currently an Android APK is available to download; iOS and Windows are not yet published.
 4. **Calibrate and lift.** Power on, connect over Bluetooth, calibrate the sensor while it's still, then start tracking a set.
 
+## Validation
+
+**Not yet validated: the protocol is published before the data.** The study compares the sensor with a verified linear encoder. Its protocol, acceptance thresholds and analysis code are fixed in advance in [`Firmware/tools/validation/PROTOCOL.md`](Firmware/tools/validation/PROTOCOL.md), and the raw paired data will be published whatever it shows. Until then, no accuracy figures are claimed.
+
 ## Contributing
 
 Both the hardware and firmware are meant to be read and modified. `Firmware/DOCUMENTATION.md` is written specifically to get a new contributor from "never seen this codebase" to "can confidently modify the rep-detection algorithm" — start there. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for how to report a bug, propose a change, and the code style expected in a pull request.
