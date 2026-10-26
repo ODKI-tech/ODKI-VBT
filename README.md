@@ -8,6 +8,15 @@ Velocity-based training uses how *fast* a lift moves — not just the weight on 
 
 Both the hardware and the firmware are source-available: anyone can read exactly how it works, build one for themselves, modify it, and share their own non-commercial improvements. Selling an assembled unit — under the ODKI name or otherwise, built from these files or a modified version of them — is reserved to ODKI; that's the one thing this isn't open to. See [LICENSE-FIRMWARE](LICENSE-FIRMWARE) and [LICENSE-HARDWARE](LICENSE-HARDWARE) for the exact terms of each, and [CONTRIBUTING.md](CONTRIBUTING.md) for how contributing to the official repository works.
 
+## Status
+
+| | |
+|---|---|
+| Firmware | v3.11.31, updates over the air from the app |
+| Android app | 1.0.3, APK in [Apps/Android/](Apps/Android/); Google Play test coming |
+| iOS app | not published yet |
+| Accuracy | **not yet validated** (see [Validation](#validation)) |
+
 ## How it works, briefly
 
 The sensor fuses its onboard accelerometer and gyroscope into a stable orientation estimate, uses that to isolate real acceleration from gravity, integrates it into velocity along the vertical axis, and detects individual reps from that velocity signal — continuously correcting for drift using brief natural pauses in motion, without requiring the athlete to explicitly mark the start/end of each rep. Every rep's peak/mean velocity, acceleration, displacement, and a data-quality score are reported live. The full algorithm is documented in detail in [`Firmware/DOCUMENTATION.md`](Firmware/DOCUMENTATION.md).
