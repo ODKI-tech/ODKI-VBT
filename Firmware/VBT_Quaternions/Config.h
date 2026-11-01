@@ -34,6 +34,22 @@ namespace FirmwareVersion {
   const uint8_t PATCH = 31;
 }
 
+// Orientation filter, selected at BUILD time (feasibility study, see
+// "Orientation filter selection" in DOCUMENTATION.md):
+//   ODKI_ORIENTATION_FILTER_MADGWICK - MadgwickAHRS.cpp with the adaptive beta
+//                                      (default; the released behaviour)
+//   ODKI_ORIENTATION_FILTER_FUSION   - x-io Fusion AHRS v1.3.3 (src/Fusion/,
+//                                      MIT), wrapped by FusionOrientation.cpp
+// Change the default below, or pass -DODKI_ORIENTATION_FILTER=1 to the
+// compiler (arduino-cli: --build-property "compiler.cpp.extra_flags=..."
+// and "compiler.c.extra_flags=..."). Experimental: no Fusion build has
+// been released or validated on hardware.
+#define ODKI_ORIENTATION_FILTER_MADGWICK 0
+#define ODKI_ORIENTATION_FILTER_FUSION   1
+#ifndef ODKI_ORIENTATION_FILTER
+#define ODKI_ORIENTATION_FILTER ODKI_ORIENTATION_FILTER_MADGWICK
+#endif
+
 namespace Config {
   // How often to print/notify battery status.
   const unsigned long BATTERY_CHECK_INTERVAL_MS = 30000UL;
