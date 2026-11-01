@@ -15,7 +15,12 @@
 // PURPOSE -- see LICENSE-FIRMWARE for details.
 
 #include "MotionTracker.h"
+#include "Config.h" // ODKI_ORIENTATION_FILTER
+#if ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
+#include "FusionOrientation.h"
+#else
 #include "MadgwickAHRS.h"
+#endif
 #include "LSM6DS3.h"
 #include "Wire.h"
 
@@ -837,7 +842,17 @@ namespace {
   const float G = 9.80665f; // standard gravitational acceleration, m/s^2 - not tunable
 
   LSM6DS3 imu(I2C_MODE, 0x6A);
+#if ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
+  // Feasibility study build (see Config.h): x-io Fusion instead of Madgwick.
+  // Same quaternion convention and interface, so everything downstream of
+  // the quaternion (gravity split, world-frame acceleration, biases, phase
+  // engine) is unchanged. BETA_BASE/TRUST_FLOOR/TRUST_FALLOFF are not used:
+  // Fusion's acceleration rejection replaces the adaptive beta (see
+  // "Orientation filter selection" in DOCUMENTATION.md).
+  FusionOrientation ahrs;
+#else
   MadgwickAHRS ahrs;
+#endif
 
   struct MedianFilter3 {
     float bufX[MEDIAN_FILTER_SIZE] = {0};
@@ -1974,14 +1989,25 @@ namespace {
     accMedianFilter.filter(axRaw, ayRaw, azRaw, ax, ay, az);
     float gxFiltered, gyFiltered, gzFiltered;
     gyroMedianFilter.filter(gxAvg, gyAvg, gzAvg, gxFiltered, gyFiltered, gzFiltered);
+#ifdef ODKI_HOST_MEDIAN_OVERRIDE
+    // Offline harness only (tools/fusion_feasibility/), never defined in a
+    // firmware build: lets a replay substitute the post-median values a log
+    // recorded (when the pre-median accelerometer was not logged) while
+    // axRaw/ayRaw/azRaw keep the reconstructed pre-median input.
+    ODKI_HOST_MEDIAN_OVERRIDE(ax, ay, az, gxFiltered, gyFiltered, gzFiltered);
+#endif
     lastGyroFilteredX = gxFiltered; lastGyroFilteredY = gyFiltered; lastGyroFilteredZ = gzFiltered;
     float gx = (gxFiltered - gyroBiasX) * DEG_TO_RAD;
     float gy = (gyFiltered - gyroBiasY) * DEG_TO_RAD;
     float gz = (gzFiltered - gyroBiasZ) * DEG_TO_RAD;
 
     float accMag = sqrt(ax * ax + ay * ay + az * az);
+#if ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
+    ahrs.update(gx, gy, gz, ax, ay, az, dt);
+#else
     float trust = constrain(1.0f - fabs(accMag - G) / G * TRUST_FALLOFF, TRUST_FLOOR, 1.0f);
     ahrs.update(gx, gy, gz, ax, ay, az, dt, BETA_BASE * trust);
+#endif
 
     float q0 = ahrs.q0(), q1 = ahrs.q1(), q2 = ahrs.q2(), q3 = ahrs.q3();
 
