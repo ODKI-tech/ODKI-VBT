@@ -567,6 +567,29 @@ def chart_sweep(sweep_df, path):
     plt.close(fig)
 
 
+def chart_convergence_vs_tilt(table, path):
+    plt = _plt()
+    fig, ax = plt.subplots(figsize=(8, 3.8))
+    styles = {"Madgwick": (COL_M, "-"), "Fusion (startup skipped)": (COL_F, "-"),
+              "Fusion (startup ramp)": (COL_F, "--")}
+    tilts = sorted(table)
+    for name, (c, ls) in styles.items():
+        ys = [table[t][name] if table[t][name] is not None else np.nan for t in tilts]
+        ax.plot(tilts, ys, color=c, ls=ls, marker="o", ms=4, label=name)
+        for t, y in zip(tilts, ys):
+            if not np.isfinite(y):
+                ax.plot([t], [19.5], marker="x", color=c, ms=7, mew=2)
+                ax.text(t, 20.3, f"{name}: none in 90 s", fontsize=7, color=INK2, ha="right")
+    ax.set_xlabel("sensor tilt from vertical at CALIBRATE (deg)")
+    ax.set_ylabel("seconds until attitude error < 1°")
+    ax.legend(loc="upper left")
+    ax.set_title("After CALIBRATE, sensor still: time to recover from the mirrored seed (synthetic, real code)",
+                 fontsize=9)
+    fig.tight_layout()
+    _save(fig, path)
+    plt.close(fig)
+
+
 def chart_convergence(conv, path):
     plt = _plt()
     fig, ax = plt.subplots(figsize=(8, 3.6))
@@ -775,6 +798,12 @@ def main():
         agg["rep_count_diff"] = sw.groupby(["gain", "accRej", "timeout"])["rep_count_diff"].sum().values
         agg.to_csv(os.path.join(args.out, "sweep_mean.csv"), index=False)
         chart_sweep(agg, os.path.join(args.out, "sweep.png"))
+    table = {}
+    for deg in (5, 15, 30, 45, 60, 75, 90):
+        a = np.radians(deg)
+        c = convergence_test(bins, [0.3 * np.sin(a), 0.954 * np.sin(a), np.cos(a)], 90.0)
+        table[deg] = {k: (float(t[np.argmax(e < 1.0)]) if (e < 1.0).any() else None) for k, (t, e) in c.items()}
+    chart_convergence_vs_tilt(table, os.path.join(args.out, "calibrate_convergence_vs_tilt.png"))
     conv = convergence_test(bins, first_grav)
     chart_convergence(conv, os.path.join(args.out, "calibrate_convergence.png"))
     conv_s = {k: float(t[np.argmax(e < 1.0)]) if (e < 1.0).any() else None for k, (t, e) in conv.items()}
@@ -790,7 +819,7 @@ def main():
               f"max |Δ| {dc.abs().max():.3f}, |Δ| > 0.02 m/s in {int((dc.abs() > 0.02).sum())} reps")
     with open(os.path.join(args.out, "results.json"), "w") as f:
         json.dump({"fusion_default": FUSION_DEFAULT, "sweep_grid": SWEEP, "logs": summary,
-                   "calibrate_convergence_s": conv_s}, f, indent=2, default=float)
+                   "calibrate_convergence_s": conv_s, "calibrate_convergence_vs_tilt_s": table}, f, indent=2, default=float)
     print(f"\nresults: {args.out}/results.json, charts: {args.out}/*.png")
 
 
