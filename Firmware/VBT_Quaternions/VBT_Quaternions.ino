@@ -27,6 +27,9 @@
     BatteryMonitor     - reading/percentage of the 3.7V 360mAh LiPo
     PowerManager       - power switch + deep sleep (System OFF)
     MadgwickAHRS       - orientation filter (quaternion)
+    FusionOrientation  - alternative orientation filter (x-io Fusion, src/Fusion/),
+                         compiled in per Config.h (FILTER serial command on
+                         the v3.11.33 dev/session build)
     MotionTracker      - IMU reading, world-frame rotation, velocity/
                          position integration, phase/rep identification (see MotionTracker.h)
     BleServer          - custom BLE service (streaming + commands), PERIPHERAL role
@@ -90,6 +93,8 @@
 unsigned long lastBatteryCheckTime = 0;
 uint8_t streamDecimationCounter = 0;
 
+// v3.11.33 (dev/session build): also FILTER [MADGWICK|FUSION], VERSION and
+// TIMING [RESET] - diagnostics/test switches, see handleSerialCommandLine().
 // v3.11.21: minimal non-blocking line reader for START/STOP/CALIBRATE over
 // serial - requested to drive tracking (and, v3.11.22, calibration) from
 // tools/vbt_live_monitor.py (a desktop GUI with no BLE access), without
@@ -103,7 +108,8 @@ uint8_t streamDecimationCounter = 0;
 // instead of Serial.readStringUntil()/parseInt() (which block up to
 // Serial's timeout, default 1s, when a line is incomplete) so a stray or
 // partial command can never stall the 100Hz sampling loop.
-char serialCmdBuf[16];
+// v3.11.33: 24 (was 16) so "FILTER MADGWICK" and "TIMING RESET" fit with room.
+char serialCmdBuf[24];
 uint8_t serialCmdLen = 0;
 
 bool serialCmdEqualsIgnoreCase(const char* a, const char* b) {
@@ -112,6 +118,15 @@ bool serialCmdEqualsIgnoreCase(const char* a, const char* b) {
     a++; b++;
   }
   return *a == *b;
+}
+
+// v3.11.33: one line identifying the build (also the VERSION command).
+void printBuildIdentity() {
+  Serial.print("ODKI VBT firmware "); Serial.print(FirmwareVersion::MAJOR); Serial.print('.');
+  Serial.print(FirmwareVersion::MINOR); Serial.print('.'); Serial.print(FirmwareVersion::PATCH);
+  Serial.print(" build="); Serial.print(ODKI_BUILD_TAG);
+  Serial.print(" filter="); Serial.print(MotionTracker::orientationFilterName());
+  Serial.print(" runtimeFilterSelect="); Serial.println(ODKI_FILTER_RUNTIME_SELECT);
 }
 
 void handleSerialCommandLine(const char* line) {
@@ -135,6 +150,31 @@ void handleSerialCommandLine(const char* line) {
       BleServer::updateSystemStatus(true, false);
       Serial.println("CALIBRATE (serial): calibration complete.");
     }
+  } else if (serialCmdEqualsIgnoreCase(line, "FILTER MADGWICK") ||
+             serialCmdEqualsIgnoreCase(line, "FILTER FUSION")) {
+    // v3.11.33 (dev/session build, ODKI_FILTER_RUNTIME_SELECT in Config.h):
+    // run-time choice of the orientation filter, so one flash can record
+    // both. Refused while tracking (one filter per recording - the INFO line
+    // at REC_START names it); the new filter takes over the current
+    // attitude, so no re-CALIBRATE is needed. Not persisted: every boot
+    // starts with the compiled default (Madgwick).
+    OrientationFilter want = serialCmdEqualsIgnoreCase(line, "FILTER FUSION") ? OrientationFilter::Fusion
+                                                                              : OrientationFilter::Madgwick;
+    if (MotionTracker::isTrackingActive()) {
+      Serial.println("FILTER (serial) ignored: stop tracking (STOP) before changing the filter.");
+    } else if (!MotionTracker::setOrientationFilter(want)) {
+      Serial.println("FILTER (serial) ignored: this build has only one orientation filter.");
+    }
+    Serial.print("FILTER="); Serial.println(MotionTracker::orientationFilterName());
+  } else if (serialCmdEqualsIgnoreCase(line, "FILTER")) {
+    Serial.print("FILTER="); Serial.println(MotionTracker::orientationFilterName());
+  } else if (serialCmdEqualsIgnoreCase(line, "VERSION")) {
+    printBuildIdentity();
+  } else if (serialCmdEqualsIgnoreCase(line, "TIMING")) {
+    MotionTracker::printTimingLine();
+  } else if (serialCmdEqualsIgnoreCase(line, "TIMING RESET")) {
+    MotionTracker::resetLoopTiming();
+    Serial.println("TIMING reset.");
   } else if (line[0] != '\0') {
     Serial.print("Unknown serial command: ");
     Serial.println(line);
@@ -182,6 +222,7 @@ void setup() {
 
   Serial.begin(115200);
   while (!Serial && millis() < 3000) { }
+  printBuildIdentity();
 
   // TEMPORARY DIAGNOSTICS to isolate the wake-from-sleep issue: remove
   // once resolved. The DOG case would confirm (or, if it never appears

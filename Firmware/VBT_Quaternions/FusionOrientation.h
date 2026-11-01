@@ -24,7 +24,7 @@
 
 #include "Config.h"
 
-#if ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
+#if ODKI_FUSION_COMPILED
 
 #include <Arduino.h>
 #include "src/Fusion/Fusion.h"
@@ -63,18 +63,28 @@ public:
   void reset(); // identity quaternion, Fusion restarted (startup ramp)
 
   // Same initial attitude as MadgwickAHRS::alignToGravity() (it is computed
-  // by it), then Fusion skips its startup ramp if settings.skipStartup.
+  // by it, so it gets the v3.11.33 seed fix too), then Fusion skips its
+  // startup ramp if settings.skipStartup.
   void alignToGravity(float ax, float ay, float az);
+
+  // Restarts Fusion at the given attitude (runtime filter hand-over), with
+  // the same startup / bias handling as alignToGravity().
+  void setQuaternion(float q0, float q1, float q2, float q3);
 
   // gx/gy/gz in rad/s (bias already subtracted by MotionTracker), ax/ay/az in
   // any consistent unit (only the direction is used), dt in seconds.
   void update(float gx, float gy, float gz,
               float ax, float ay, float az, float dt);
 
-  float q0() const { return _ahrs.quaternion.element.w; }
-  float q1() const { return _ahrs.quaternion.element.x; }
-  float q2() const { return _ahrs.quaternion.element.y; }
-  float q3() const { return _ahrs.quaternion.element.z; }
+  // v3.11.33: unit-norm copy of Fusion's quaternion. Fusion normalises with
+  // its fast inverse square root (~1e-4 relative error), and MotionTracker's
+  // gravBody/rotation expressions assume an exact unit quaternion (a norm of
+  // 1 + 1e-4 scales gravBody by 1 + 2e-4, ~0.002 m/s^2 of spurious vertical
+  // acceleration). Fusion's internal state is left untouched.
+  float q0() const { return _q[0]; }
+  float q1() const { return _q[1]; }
+  float q2() const { return _q[2]; }
+  float q3() const { return _q[3]; }
 
   // Diagnostics (offline harness only).
   bool accelerometerIgnored() const { return _ahrs.accelerometerIgnored; }
@@ -88,8 +98,10 @@ private:
   FusionOrientationSettings _settings;
   FusionAhrs _ahrs;
   FusionBias _bias;
+  float _q[4] = {1.0f, 0.0f, 0.0f, 0.0f};
   void applySettings();
+  void refreshOutput();
 };
 
-#endif // ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
+#endif // ODKI_FUSION_COMPILED
 #endif

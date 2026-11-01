@@ -68,7 +68,10 @@ def build(binary):
     cxx = shutil.which("clang++") or shutil.which("g++")
     if not cxx:
         sys.exit("No C++ compiler found (clang++/g++).")
-    cmd = [cxx, "-std=c++17", "-O2", "-w", "-I", os.path.join(HERE, "stubs"), "-I", FW,
+    # single-filter (Madgwick) build: replay.cpp injects the world-Z acceleration, the
+    # orientation filter is not exercised (v3.11.33: Config.h defaults to the run-time
+    # selection, which would also need the Fusion sources)
+    cmd = [cxx, "-std=c++17", "-O2", "-w", "-DODKI_FILTER_RUNTIME_SELECT=0", "-I", os.path.join(HERE, "stubs"), "-I", FW,
            os.path.join(HERE, "replay.cpp"), os.path.join(FW, "MadgwickAHRS.cpp"), "-o", binary]
     subprocess.run(cmd, check=True)
 

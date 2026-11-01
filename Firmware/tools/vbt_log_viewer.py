@@ -240,6 +240,20 @@ def parse_lines(lines):
     return s_df, r_df, b_df
 
 
+def parse_session_info(lines):
+    """v3.11.33 (dev/session build): the "INFO," line printed after the
+    REC_START headers (firmware, build tag, active orientation filter, ...)
+    and the "TIMING," line printed just before REC_STOP (micros() cost of the
+    filter update and of a whole sample, loop period) as two dicts of
+    key -> value strings ({} when the firmware does not print them)."""
+    out = {"info": {}, "timing": {}}
+    for line in lines:
+        for prefix, key in (("INFO,", "info"), ("TIMING,", "timing")):
+            if line.startswith(prefix):
+                out[key] = dict(kv.split("=", 1) for kv in line[len(prefix):].split(",") if "=" in kv)
+    return out
+
+
 def parse_p_rows(lines):
     """The "P," rows (phase close attempts, including the ones discarded as
     too short: reported == 0) as a DataFrame with P_COLUMNS_V2. Kept separate
@@ -1052,7 +1066,8 @@ def main():
             n_s = sum(1 for l in lines if l.startswith("S,"))
             n_r = sum(1 for l in lines if l.startswith("R,"))
             n_b = sum(1 for l in lines if l.startswith("B,"))
-            print(f"  [{i}] {n_s} samples, {n_r} rep rows, {n_b} brackets")
+            filt = parse_session_info(lines)["info"].get("filter")
+            print(f"  [{i}] {n_s} samples, {n_r} rep rows, {n_b} brackets" + (f", filter {filt}" if filt else ""))
         if args.list_sessions:
             return
 
@@ -1070,6 +1085,11 @@ def main():
 
     print(f"Session analyzed: {len(s_df)} samples, {len(r_df)} reps, {len(b_df)} brackets "
           f"({s_df['sessionT'].iloc[-1]:.1f}s total).")
+    sinfo = parse_session_info(chosen)
+    if sinfo["info"]:
+        print("Firmware: " + ", ".join(f"{k}={v}" for k, v in sinfo["info"].items()))
+    if sinfo["timing"]:
+        print("Timing:   " + ", ".join(f"{k}={v}" for k, v in sinfo["timing"].items()))
 
     overrides, closes, stalls = scan_anomalies(s_df, args.gyro_thresh, args.min_still)
     print_anomaly_report(overrides, closes, stalls)

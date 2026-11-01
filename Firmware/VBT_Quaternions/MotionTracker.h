@@ -284,8 +284,28 @@ struct RuntimeConfig {
   float minCrossingDurationS = 0.3f;
 };
 
+// v3.11.33: orientation filter, selectable at run time on builds with
+// ODKI_FILTER_RUNTIME_SELECT (see Config.h).
+enum class OrientationFilter : uint8_t { Madgwick = 0, Fusion = 1 };
+
 namespace MotionTracker {
   bool begin();
+
+  // v3.11.33 (dev/session build): the active orientation filter. Switching
+  // is refused (false) while tracking is active, and on builds compiled
+  // with a single filter unless it is that one. The new filter takes over
+  // the current attitude, so no re-CALIBRATE is needed.
+  OrientationFilter orientationFilter();
+  const char* orientationFilterName(); // "MADGWICK" / "FUSION"
+  bool setOrientationFilter(OrientationFilter filter);
+
+  // v3.11.33: serial log diagnostics. "INFO,..." (build identity, active
+  // filter - printed at every REC_START) and "TIMING,..." (micros() cost of
+  // the filter update and of a whole sample since the last reset - printed
+  // just before REC_STOP).
+  void printInfoLine();
+  void printTimingLine();
+  void resetLoopTiming();
 
   // ~2s while still: aligns orientation to gravity. Blocking.
   void calibrateOrientation();

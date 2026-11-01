@@ -25,20 +25,52 @@ void MadgwickAHRS::reset() {
 }
 
 void MadgwickAHRS::alignToGravity(float ax, float ay, float az) {
+  // v3.11.33 fix. The attitude seeded here must reproduce the measured
+  // gravity direction in the convention update() (and MotionTracker's
+  // gravBody) reads the quaternion with: the estimated "up" in the BODY
+  // frame is the third row of the body->world rotation matrix,
+  //   gb = (2(q1q3 - q0q2), 2(q0q1 + q2q3), q0^2 - q1^2 - q2^2 + q3^2),
+  // i.e. the world Z axis rotated INTO the body frame. Up to v3.11.32 this
+  // function built the opposite rotation (body Z rotated onto a), whose gb is
+  // (-ax, -ay, az): the tilt mirrored, off by twice the tilt, which the
+  // filter then had to recover at Madgwick's bounded rate (~17 s at 72 deg,
+  // never at 90 deg - see "alignToGravity()" in DOCUMENTATION.md).
+  //
+  // Built directly as the minimal rotation with no yaw component (q3 = 0):
+  // gb = (-2 q0 q2, 2 q0 q1, 1 - 2 s^2) with s^2 = q1^2 + q2^2. Requiring
+  // gb = a gives q0 = sqrt((1 + az) / 2), s = sqrt((1 - az) / 2), and the
+  // horizontal direction of (q1, q2) from (ay, -ax). 2 q0 s = h, the
+  // horizontal norm of a, so whichever of q0 / s is well conditioned is
+  // taken from az and the other from h - accurate from level to upside down
+  // (no acos(), no division by a vanishing number).
   float norm = sqrt(ax * ax + ay * ay + az * az);
   if (norm < 1e-6f) { reset(); return; }
   ax /= norm; ay /= norm; az /= norm;
 
-  // Quaternion that rotates the body-frame Z axis toward [ax,ay,az]
-  float vx = -ay, vy = ax, vz = 0; // rotation axis (cross product with [0,0,1])
-  float vNorm = sqrt(vx * vx + vy * vy + vz * vz);
-  if (vNorm < 1e-6f) { reset(); return; } // already aligned
+  float h = sqrt(ax * ax + ay * ay); // horizontal part of a = 2 q0 s
+  float q0, s;
+  if (az >= 0.0f) {
+    q0 = sqrt(0.5f * (1.0f + az));   // >= 0.707
+    s = 0.5f * h / q0;
+  } else {
+    s = sqrt(0.5f * (1.0f - az));    // >= 0.707
+    q0 = 0.5f * h / s;
+  }
+  if (h < 1e-7f) {
+    // Exactly level (identity) or exactly upside down: any horizontal
+    // rotation axis is correct for the latter, X is used.
+    _q0 = q0; _q1 = (az >= 0.0f) ? 0.0f : s; _q2 = 0.0f; _q3 = 0.0f;
+  } else {
+    _q0 = q0; _q1 = s * ay / h; _q2 = -s * ax / h; _q3 = 0.0f;
+  }
+  float recipNorm = 1.0f / sqrt(_q0 * _q0 + _q1 * _q1 + _q2 * _q2);
+  _q0 *= recipNorm; _q1 *= recipNorm; _q2 *= recipNorm;
+}
 
-  vx /= vNorm; vy /= vNorm; vz /= vNorm;
-  float angle = acos(constrain(az, -1.0f, 1.0f));
-  float s = sin(angle / 2.0f);
-  _q0 = cos(angle / 2.0f);
-  _q1 = vx * s; _q2 = vy * s; _q3 = vz * s;
+void MadgwickAHRS::setQuaternion(float q0, float q1, float q2, float q3) {
+  float n = sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+  if (n < 1e-6f) { reset(); return; }
+  _q0 = q0 / n; _q1 = q1 / n; _q2 = q2 / n; _q3 = q3 / n;
 }
 
 void MadgwickAHRS::update(float gx, float gy, float gz,

@@ -92,17 +92,19 @@ def build(bindir):
     out = {}
     for name, flag, extra in (("madgwick", 0, []), ("fusion", 1, [os.path.join(FW, "FusionOrientation.cpp")] + objs)):
         b = os.path.join(bindir, "harness_" + name)
+        # single-filter builds (ODKI_FILTER_RUNTIME_SELECT=0): the harness talks to `ahrs` directly
         subprocess.run([cxx, "-std=c++17", "-O2", "-w", *inc, f"-DODKI_ORIENTATION_FILTER={flag}",
+                        "-DODKI_FILTER_RUNTIME_SELECT=0",
                         os.path.join(HERE, "harness.cpp"), os.path.join(FW, "MadgwickAHRS.cpp"), *extra, "-o", b],
                        check=True)
         out[name] = b
     return out
 
 
-def run(binary, init, lines, settings=None, seed_firmware=False):
+def run(binary, init, lines, settings=None, seed_legacy=False):
     args = [binary] + [f"{k}={v}" for k, v in (settings or {}).items()]
-    if seed_firmware:
-        args.append("seedMode=firmware")
+    if seed_legacy:
+        args.append("seedMode=legacy")
     res = subprocess.run(args, input=init + "\n" + "\n".join(lines) + "\n", capture_output=True, text=True, check=True)
     out = res.stdout.split("\n")
     o = R.parse_session(out)
@@ -567,24 +569,38 @@ def chart_sweep(sweep_df, path):
     plt.close(fig)
 
 
+CONV_STYLES = {"Madgwick": (COL_M, "-"), "Fusion (startup skipped)": (COL_F, "-"),
+               "Fusion (startup ramp)": (COL_F, "--")}
+CONV_TILTS = (5, 15, 30, 45, 60, 75, 90, 120, 150, 175)
+
+
 def chart_convergence_vs_tilt(table, path):
+    """table[seed][tilt][variant] = seconds to < 1 deg (None: not within the run)
+    and table["max_err_fixed"][tilt][variant] = worst error after the fixed seed."""
     plt = _plt()
-    fig, ax = plt.subplots(figsize=(8, 3.8))
-    styles = {"Madgwick": (COL_M, "-"), "Fusion (startup skipped)": (COL_F, "-"),
-              "Fusion (startup ramp)": (COL_F, "--")}
-    tilts = sorted(table)
-    for name, (c, ls) in styles.items():
-        ys = [table[t][name] if table[t][name] is not None else np.nan for t in tilts]
+    fig, (ax, bx) = plt.subplots(1, 2, figsize=(10, 3.9))
+    tilts = sorted(table["legacy"])
+    for name, (c, ls) in CONV_STYLES.items():
+        ys = [table["legacy"][t][name] if table["legacy"][t][name] is not None else np.nan for t in tilts]
         ax.plot(tilts, ys, color=c, ls=ls, marker="o", ms=4, label=name)
         for t, y in zip(tilts, ys):
             if not np.isfinite(y):
                 ax.plot([t], [19.5], marker="x", color=c, ms=7, mew=2)
-                ax.text(t, 20.3, f"{name}: none in 90 s", fontsize=7, color=INK2, ha="right")
+        ym = [table["max_err_fixed"][t][name] for t in tilts]
+        bx.plot(tilts, ym, color=c, ls=ls, marker="o", ms=4, label=name)
+    ax.text(0.98, 0.97, "x = not below 1° within the run", transform=ax.transAxes, fontsize=7, color=INK2,
+            ha="right", va="top")
     ax.set_xlabel("sensor tilt from vertical at CALIBRATE (deg)")
     ax.set_ylabel("seconds until attitude error < 1°")
-    ax.legend(loc="upper left")
-    ax.set_title("After CALIBRATE, sensor still: time to recover from the mirrored seed (synthetic, real code)",
-                 fontsize=9)
+    ax.set_title("Before the fix (mirrored seed, ≤ v3.11.32)", fontsize=9)
+    ax.legend(loc="upper left", fontsize=7)
+    bx.set_xlabel("sensor tilt from vertical at CALIBRATE (deg)")
+    bx.set_ylabel("max attitude error after CALIBRATE (deg)")
+    bx.set_title("After the fix (v3.11.33): worst error over the whole run", fontsize=9)
+    bx.axhline(1, color="#9a9990", lw=0.6)
+    top = max(1.2, np.nanmax([table["max_err_fixed"][t][n] for t in tilts for n in CONV_STYLES]) * 1.2)
+    bx.set_ylim(0, top)
+    fig.suptitle("After CALIBRATE, sensor still (synthetic, real code)", fontsize=10)
     fig.tight_layout()
     _save(fig, path)
     plt.close(fig)
@@ -593,17 +609,16 @@ def chart_convergence_vs_tilt(table, path):
 def chart_convergence(conv, path):
     plt = _plt()
     fig, ax = plt.subplots(figsize=(8, 3.6))
-    styles = {"Madgwick": (COL_M, "-"), "Fusion (startup skipped)": (COL_F, "-"),
-              "Fusion (startup ramp)": (COL_F, "--")}
-    for name, (t, err) in conv.items():
-        c, ls = styles[name]
-        ax.plot(t, err, color=c, ls=ls, label=name)
+    for (name, seed), (t, err) in conv.items():
+        c, ls = CONV_STYLES[name]
+        ax.plot(t, np.maximum(err, 1e-4), color=c, ls=ls, alpha=1.0 if seed == "legacy" else 0.55,
+                lw=1.6 if seed == "legacy" else 1.0, label=f"{name}, {seed} seed")
     ax.axhline(1, color="#9a9990", lw=0.6)
     ax.set_yscale("log")
     ax.set_xlabel("time after CALIBRATE (s), sensor still")
-    ax.set_ylabel("attitude error (deg)")
-    ax.legend(loc="upper right")
-    ax.set_title("Convergence from the attitude CALIBRATE currently seeds (tilt mirrored), sensor at rest", fontsize=9)
+    ax.set_ylabel("attitude error (deg, floor 1e-4)")
+    ax.legend(loc="upper right", fontsize=7)
+    ax.set_title("Convergence after CALIBRATE at the first log's tilt: legacy (mirrored) vs fixed seed", fontsize=9)
     fig.tight_layout()
     _save(fig, path)
     plt.close(fig)
@@ -614,9 +629,10 @@ def chart_convergence(conv, path):
 # ----------------------------------------------------------------------
 
 def convergence_test(bins, grav, duration_s=30.0):
-    """Synthetic: sensor still at the given gravity direction, noise-free;
-    seeded the way CALIBRATE does today (alignToGravity of the mean
-    accelerometer, which mirrors the tilt). Attitude error vs time."""
+    """Synthetic: sensor still at the given gravity direction, noise-free,
+    seeded the way CALIBRATE does (alignToGravity of the mean accelerometer)
+    - with the pre-v3.11.33 mirrored seed ("legacy") and with the fixed one
+    ("fixed"). Attitude error vs time, keyed by (variant, seed)."""
     g = np.asarray(grav, float) / np.linalg.norm(grav)
     init = "I,%.6f,%.7f,%.7f,%.7f,0,0,0,0,0,0" % (R.G, *g)
     n = int(duration_s * 100)
@@ -624,12 +640,31 @@ def convergence_test(bins, grav, duration_s=30.0):
     out = {}
     for name, b, st in (("Madgwick", "madgwick", {}), ("Fusion (startup skipped)", "fusion", FUSION_DEFAULT),
                         ("Fusion (startup ramp)", "fusion", {**FUSION_DEFAULT, "skipStartup": 0})):
-        with quiet_parse():
-            o = run(bins[b], init, lines, st, seed_firmware=True)
-        q = o["f"][["q0", "q1", "q2", "q3"]].values
-        err = R.angle_deg(R.grav_body(q), np.tile(g, (len(q), 1)))
-        out[name] = (np.arange(len(err)) / 100.0, err)
+        for seed in ("legacy", "fixed"):
+            with quiet_parse():
+                o = run(bins[b], init, lines, st, seed_legacy=(seed == "legacy"))
+            q = o["f"][["q0", "q1", "q2", "q3"]].values
+            err = R.angle_deg(R.grav_body(q), np.tile(g, (len(q), 1)))
+            out[(name, seed)] = (np.arange(len(err)) / 100.0, err)
     return out
+
+
+def tilt_gravity(deg):
+    a = np.radians(deg)
+    return [0.3 * np.sin(a), 0.954 * np.sin(a), np.cos(a)]
+
+
+def start_attitude_vs_acc(d, window_s=0.5):
+    """Median angle (deg) between the logged gravBody and the median-filtered
+    accelerometer (linAcc + gravBody * accelScaleG) over the first window_s -
+    near 0 when the filter was settled at REC_START and the bar still."""
+    s = d["s"]
+    m = (s["sessionT"] <= window_s).values
+    q = s.loc[m, ["quatW", "quatX", "quatY", "quatZ"]].values.astype(float)
+    q /= np.linalg.norm(q, axis=1, keepdims=True)
+    g = R.grav_body(q)
+    acc = s.loc[m, ["linAccX", "linAccY", "linAccZ"]].values.astype(float) + g * R.G
+    return float(np.median(R.angle_deg(g, acc)))
 
 
 def write_variant_log(o, path):
@@ -696,6 +731,34 @@ def main():
               f"pre-3.11.30 config max |Δ| {lc.get('mv_absdiff_vs_logged_max', np.nan):.4f} m/s (reps {lc['reps_rerun']})")
         ev = impact_events(d)
         cmp_, rm, rf, pairs, tilt = compare(om, of, d, ev)
+        # CALIBRATE seed (v3.11.33 fix). The re-runs above seed the attitude the
+        # log starts with through the FIXED alignToGravity (it reproduces it). The
+        # same seed through the pre-fix (mirrored) alignToGravity is what the
+        # device would have done had CALIBRATE run right before START; the
+        # difference is what the fix changes. Also: was the recorded attitude at
+        # REC_START already settled (angle between the logged gravBody and the
+        # median-filtered accelerometer over the first 0.5 s)?
+        with quiet_parse():
+            oleg = run(bins["madgwick"], init, lines, seed_legacy=True)
+            olegf = run(bins["fusion"], init, lines, FUSION_DEFAULT, seed_legacy=True)
+        seed_row = {"start_attitude_vs_acc_deg": start_attitude_vs_acc(d)}
+        for fname, base, leg in (("madgwick", om, oleg), ("fusion", of, olegf)):
+            cs, rb, rl, pairs_s, tilt_s = compare(base, leg, d, ev)
+            t_s = base["s"]["sessionT"].values
+            settle = float(t_s[np.argmax(tilt_s < 1.0)]) if (tilt_s < 1.0).any() else None
+            reps_s = [{"rep": int(rb.loc[i, "rep"]), "t0": float(rb.loc[i, "t0"]),
+                       "mv_fixed": float(rb.loc[i, "mv"]), "mv_legacy": float(rl.loc[j, "mv"]),
+                       "dmv": float(rl.loc[j, "mv"] - rb.loc[i, "mv"])} for i, j in pairs_s]
+            seed_row[fname] = {"reps_fixed": cs["reps_madgwick"], "reps_legacy": cs["reps_fusion"],
+                               "matched": cs["matched"], "attitude_diff_deg_t0": float(tilt_s[0]),
+                               "attitude_diff_below_1deg_after_s": settle, "reps": reps_s}
+            big = [r for r in reps_s if abs(r["dmv"]) > 0.005]
+            print(f"  seed fix ({fname}): legacy-seed attitude off by {tilt_s[0]:.1f}° at START, < 1° after "
+                  f"{settle if settle is None else round(settle, 1)} s; reps fixed {cs['reps_madgwick']} / legacy "
+                  f"{cs['reps_fusion']}, matched {cs['matched']}; |ΔMV| > 0.005 m/s in {len(big)} reps"
+                  + (": " + ", ".join(f"rep {r['rep']} (t0 {r['t0']:.1f} s, {r['dmv']:+.3f})" for r in big) if big else ""))
+        print(f"  recorded attitude at REC_START vs accelerometer (first 0.5 s): "
+              f"{seed_row['start_attitude_vs_acc_deg']:.2f}° (≈ settled if small)")
         pm, pf = plausibility(om, rm), plausibility(of, rf)
         print(f"  reps: Madgwick {cmp_['reps_madgwick']}, Fusion {cmp_['reps_fusion']}, matched {cmp_['matched']}, "
               f"only-M {cmp_['only_madgwick']}, only-F {cmp_['only_fusion']}")
@@ -781,6 +844,7 @@ def main():
                                    "bracket_absdrift_median": p2.get("bracket_absdrift_median", np.nan),
                                    "bracket_net_disp_median_m": p2.get("bracket_net_disp_median_m", np.nan),
                                    "acc_ignored_pct": p2["acc_ignored_pct"]})
+        row["seed_effect"] = seed_row
         summary.append(row)
 
     ctrl_df = pd.DataFrame(control_pooled)
@@ -798,17 +862,25 @@ def main():
         agg["rep_count_diff"] = sw.groupby(["gain", "accRej", "timeout"])["rep_count_diff"].sum().values
         agg.to_csv(os.path.join(args.out, "sweep_mean.csv"), index=False)
         chart_sweep(agg, os.path.join(args.out, "sweep.png"))
-    table = {}
-    for deg in (5, 15, 30, 45, 60, 75, 90):
-        a = np.radians(deg)
-        c = convergence_test(bins, [0.3 * np.sin(a), 0.954 * np.sin(a), np.cos(a)], 90.0)
-        table[deg] = {k: (float(t[np.argmax(e < 1.0)]) if (e < 1.0).any() else None) for k, (t, e) in c.items()}
+    table = {"legacy": {}, "fixed": {}, "max_err_fixed": {}, "err_first_sample_fixed": {}}
+    for deg in CONV_TILTS:
+        c = convergence_test(bins, tilt_gravity(deg), 90.0)
+        for seed in ("legacy", "fixed"):
+            table[seed][deg] = {k: (float(t[np.argmax(e < 1.0)]) if (e < 1.0).any() else None)
+                                for (k, sd), (t, e) in c.items() if sd == seed}
+        table["max_err_fixed"][deg] = {k: float(e.max()) for (k, sd), (t, e) in c.items() if sd == "fixed"}
+        table["err_first_sample_fixed"][deg] = {k: float(e[0]) for (k, sd), (t, e) in c.items() if sd == "fixed"}
     chart_convergence_vs_tilt(table, os.path.join(args.out, "calibrate_convergence_vs_tilt.png"))
     conv = convergence_test(bins, first_grav)
     chart_convergence(conv, os.path.join(args.out, "calibrate_convergence.png"))
-    conv_s = {k: float(t[np.argmax(e < 1.0)]) if (e < 1.0).any() else None for k, (t, e) in conv.items()}
-    print("\nconvergence to < 1 deg after CALIBRATE (synthetic, still): " +
+    conv_s = {f"{k} ({sd})": float(t[np.argmax(e < 1.0)]) if (e < 1.0).any() else None
+              for (k, sd), (t, e) in conv.items()}
+    print("\nconvergence to < 1 deg after CALIBRATE (synthetic, still, first log's tilt): " +
           ", ".join(f"{k} {v if v is None else round(v, 2)} s" for k, v in conv_s.items()))
+    print("after CALIBRATE vs tilt - legacy seed, s to < 1 deg / fixed seed, max error deg:")
+    for deg in CONV_TILTS:
+        print(f"  {deg:3d} deg: " + "; ".join(
+            f"{k}: {table['legacy'][deg][k]} s / {table['max_err_fixed'][deg][k]:.4f} deg" for k in CONV_STYLES))
     if len(pooled_df):
         dd = pooled_df["mv_f"] - pooled_df["mv_m"]
         print(f"\nALL LOGS: {len(pooled_df)} matched reps, MV Fusion − Madgwick {dd.mean():+.4f} ± {dd.std(ddof=1):.4f} m/s, "

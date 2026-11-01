@@ -29,8 +29,9 @@
 // (10ms mean, before median and bias). ovAcc/ovGyro = 1 replace the median's
 // output with med* (used when the log did not record the median's input).
 // argv: key=value Fusion settings (gain, gyroRange, accRej, timeout, skipStartup, bias,
-// biasThr, biasPeriod) - ignored by the Madgwick build - and, for both builds, seedMode=firmware
-// and config=pre3.11.30 (the RuntimeConfig defaults of v3.11.28/3.11.29, to check a re-run against
+// biasThr, biasPeriod) - ignored by the Madgwick build - and, for both builds, seedMode=legacy
+// (the pre-v3.11.33 mirrored CALIBRATE seed; seedMode=firmware is accepted and is now the same as
+// the default) and config=pre3.11.30 (the RuntimeConfig defaults of v3.11.28/3.11.29, to check a re-run against
 // the R rows of a log recorded with them).
 // stdout: the firmware's own S/R/B/P log, plus one "F," row per sample:
 //   F,t_ms,q0,q1,q2,q3,accIgnored,accErrDeg,accRecovery,startup,overrange,resBiasX,resBiasY,resBiasZ
@@ -41,12 +42,29 @@ float g_imuAccG[3] = {0, 0, 1};
 float g_imuGyroDegS[3] = {0, 0, 0};
 static bool g_ovAcc = false, g_ovGyro = false;
 static float g_med[6] = {0};
-static bool g_seedFirmware = false;
+static bool g_seedLegacy = false;
 #define ODKI_HOST_MEDIAN_OVERRIDE(ax, ay, az, gx, gy, gz) do { \
     if (g_ovAcc) { ax = g_med[0]; ay = g_med[1]; az = g_med[2]; } \
     if (g_ovGyro) { gx = g_med[3]; gy = g_med[4]; gz = g_med[5]; } } while (0)
 
 #include "MotionTracker.cpp"   // same TU on purpose: access to the engine's internals
+
+// The firmware is built either with one filter (`ahrs`) or, with
+// ODKI_FILTER_RUNTIME_SELECT=1 (the v3.11.33 session build), with both
+// (`madgwickAhrs`/`fusionAhrs`, argv filter=FUSION selects Fusion through
+// MotionTracker::setOrientationFilter(), as the FILTER serial command does).
+#if ODKI_FILTER_RUNTIME_SELECT
+static bool useFusion() { return MotionTracker::orientationFilter() == OrientationFilter::Fusion; }
+#define AHRS_Q(i) (useFusion() ? fusionAhrs.q##i() : madgwickAhrs.q##i())
+#define FUSION_OBJ fusionAhrs
+#define FUSION_ACTIVE useFusion()
+static void seedAll(float x, float y, float z) { madgwickAhrs.alignToGravity(x, y, z); fusionAhrs.alignToGravity(x, y, z); }
+#else
+#define AHRS_Q(i) ahrs.q##i()
+#define FUSION_OBJ ahrs
+#define FUSION_ACTIVE (ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION)
+static void seedAll(float x, float y, float z) { ahrs.alignToGravity(x, y, z); }
+#endif
 
 SerialStub Serial;
 WireStub Wire;
@@ -54,13 +72,13 @@ static unsigned long g_now = 0;
 unsigned long millis() { return g_now; }
 
 int main(int argc, char** argv) {
-#if ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
+#if ODKI_FUSION_COMPILED
   FusionOrientationSettings fs;
   for (int i = 1; i < argc; i++) {
     const char* eq = std::strchr(argv[i], '=');
     if (!eq) continue;
     std::string k(argv[i], eq - argv[i]);
-    if (k == "seedMode" || k == "config") continue;
+    if (k == "seedMode" || k == "config" || k == "filter") continue;
     float v = (float)std::atof(eq + 1);
     if (k == "gain") fs.gain = v;
     else if (k == "gyroRange") fs.gyroscopeRangeDegS = v;
@@ -72,12 +90,15 @@ int main(int argc, char** argv) {
     else if (k == "biasPeriod") fs.biasStationaryPeriodS = v;
     else { std::fprintf(stderr, "unknown setting %s\n", k.c_str()); return 2; }
   }
-  ahrs.configure(fs);
+  FUSION_OBJ.configure(fs);
 #endif
   bool legacyConfig = false;
   for (int i = 1; i < argc; i++) {
-    if (std::strcmp(argv[i], "seedMode=firmware") == 0) g_seedFirmware = true;
+    if (std::strcmp(argv[i], "seedMode=legacy") == 0) g_seedLegacy = true;
     if (std::strcmp(argv[i], "config=pre3.11.30") == 0) legacyConfig = true;
+    if (std::strcmp(argv[i], "filter=FUSION") == 0 && !MotionTracker::setOrientationFilter(OrientationFilter::Fusion)) {
+      std::fprintf(stderr, "filter=FUSION: not available in this build\n"); return 2;
+    }
   }
   char line[512];
   if (!std::fgets(line, sizeof line, stdin)) return 1;
@@ -86,13 +107,12 @@ int main(int argc, char** argv) {
                   &gbx, &gby, &gbz, &abx, &aby, &abz) != 10) return 1;
   // what calibrateOrientation() leaves behind
   accelScaleG = (float)sc;
-  // alignToGravity(a) returns the attitude whose gravBody is (-ax, -ay, az) -
-  // the tilt mirrored, see "Orientation filter selection" in
-  // DOCUMENTATION.md - so the logged gravity
-  // direction is passed mirrored to get exactly it back. seedMode=firmware
-  // passes it unmirrored instead, reproducing what CALIBRATE does.
-  if (g_seedFirmware) ahrs.alignToGravity((float)grx, (float)gry, (float)grz);
-  else ahrs.alignToGravity((float)-grx, (float)-gry, (float)grz);
+  // Since v3.11.33 alignToGravity(a) returns an attitude whose gravBody is a
+  // (what CALIBRATE does, and the logged gravity direction back exactly).
+  // seedMode=legacy reproduces the pre-v3.11.33 seed, whose gravBody was
+  // (-ax, -ay, az) - the tilt mirrored - by passing the mirror of it.
+  if (g_seedLegacy) seedAll((float)-grx, (float)-gry, (float)grz);
+  else seedAll((float)grx, (float)gry, (float)grz);
   gyroBiasX = (float)gbx; gyroBiasY = (float)gby; gyroBiasZ = (float)gbz;
   calibrated = true;
 
@@ -126,12 +146,14 @@ int main(int argc, char** argv) {
     g_now = t;
     if (!MotionTracker::update()) continue;
     int ign = 0, rec = 0, st = 0, ovr = 0; float err = 0, bx = 0, by = 0, bz = 0;
-#if ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
-    ign = ahrs.accelerometerIgnored(); err = ahrs.accelerationErrorDeg(); rec = ahrs.accelerationRecovery();
-    st = ahrs.startupActive(); ovr = ahrs.overrangeRecovery(); ahrs.residualGyroBiasDegS(bx, by, bz);
+#if ODKI_FUSION_COMPILED
+    if (FUSION_ACTIVE) {
+      ign = FUSION_OBJ.accelerometerIgnored(); err = FUSION_OBJ.accelerationErrorDeg(); rec = FUSION_OBJ.accelerationRecovery();
+      st = FUSION_OBJ.startupActive(); ovr = FUSION_OBJ.overrangeRecovery(); FUSION_OBJ.residualGyroBiasDegS(bx, by, bz);
+    }
 #endif
-    std::printf("F,%lu,%.7f,%.7f,%.7f,%.7f,%d,%.3f,%d,%d,%d,%.4f,%.4f,%.4f\n", t, ahrs.q0(), ahrs.q1(),
-                ahrs.q2(), ahrs.q3(), ign, err, rec, st, ovr, bx, by, bz);
+    std::printf("F,%lu,%.7f,%.7f,%.7f,%.7f,%d,%.3f,%d,%d,%d,%.4f,%.4f,%.4f\n", t, AHRS_Q(0), AHRS_Q(1),
+                AHRS_Q(2), AHRS_Q(3), ign, err, rec, st, ovr, bx, by, bz);
     RepResult r;
     while (MotionTracker::peekCompletedRep(r)) MotionTracker::popCompletedRep();
     CorrectedCurveChunk c;

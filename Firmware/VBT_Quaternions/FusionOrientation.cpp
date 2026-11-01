@@ -21,7 +21,7 @@
 
 #include "FusionOrientation.h"
 
-#if ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
+#if ODKI_FUSION_COMPILED
 
 #include "MadgwickAHRS.h"
 
@@ -61,15 +61,33 @@ void FusionOrientation::applySettings() {
 void FusionOrientation::reset() {
   FusionAhrsRestart(&_ahrs);
   FusionBiasSetOffset(&_bias, FUSION_VECTOR_ZERO);
+  refreshOutput();
+}
+
+void FusionOrientation::refreshOutput() {
+  const FusionQuaternion& q = _ahrs.quaternion;
+  float n = sqrtf(q.element.w * q.element.w + q.element.x * q.element.x +
+                  q.element.y * q.element.y + q.element.z * q.element.z);
+  if (n < 1e-6f) { _q[0] = 1.0f; _q[1] = _q[2] = _q[3] = 0.0f; return; }
+  float r = 1.0f / n;
+  _q[0] = q.element.w * r; _q[1] = q.element.x * r; _q[2] = q.element.y * r; _q[3] = q.element.z * r;
 }
 
 void FusionOrientation::alignToGravity(float ax, float ay, float az) {
   MadgwickAHRS seed; // exactly the Madgwick build's initial attitude
   seed.alignToGravity(ax, ay, az);
+  setQuaternion(seed.q0(), seed.q1(), seed.q2(), seed.q3());
+}
+
+void FusionOrientation::setQuaternion(float q0, float q1, float q2, float q3) {
   FusionAhrsRestart(&_ahrs);
   FusionQuaternion q;
-  q.element.w = seed.q0(); q.element.x = seed.q1(); q.element.y = seed.q2(); q.element.z = seed.q3();
+  q.element.w = q0; q.element.x = q1; q.element.y = q2; q.element.z = q3;
   FusionAhrsSetQuaternion(&_ahrs, q);
+  refreshOutput();
+  // The attitude is known (seeded from gravity since the v3.11.33 fix, or
+  // handed over from Madgwick): the 3 s startup ramp - a high gain meant to
+  // pull an UNKNOWN initial attitude in - is skipped unless configured.
   if (_settings.skipStartup) FusionAhrsSkipStartup(&_ahrs);
   // the firmware re-seeds its own gyroscope bias at CALIBRATE: the residual
   // estimate starts again from zero too
@@ -88,6 +106,7 @@ void FusionOrientation::update(float gx, float gy, float gz,
   // the loop's real period (10 or 11 ms), as Fusion recommends for clock errors
   FusionAhrsSetSamplePeriod(&_ahrs, dt);
   FusionAhrsUpdateNoMagnetometer(&_ahrs, gyro, acc);
+  refreshOutput();
 }
 
 float FusionOrientation::accelerationErrorDeg() const {
@@ -103,4 +122,4 @@ void FusionOrientation::residualGyroBiasDegS(float& x, float& y, float& z) const
   x = o.axis.x; y = o.axis.y; z = o.axis.z;
 }
 
-#endif // ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
+#endif // ODKI_FUSION_COMPILED

@@ -53,7 +53,14 @@ itself knows nothing about it and receives a plain immediate `START`
 once the count reaches zero, same as with no delay at all. The runtime
 Config (rep direction, phase thresholds, …) remains BLE-only - it
 already has a typed BLE packet, see BleServer.h, a text command would
-just duplicate. Every other line the firmware prints
+just duplicate. The Filter dropdown (v3.11.33 dev/session build, firmware
+compiled with ODKI_FILTER_RUNTIME_SELECT) sends `FILTER MADGWICK` /
+`FILTER FUSION` - refused by the firmware while tracking, so pick it
+before START; on connect the tool asks `VERSION` and `FILTER` and shows
+the firmware identity and active filter next to it (a firmware without
+the command answers "Unknown serial command", which is harmless). The
+`INFO,` line at REC_START and the `TIMING,` line before REC_STOP land in
+the recorded file like every other line. Every other line the firmware prints
 on serial (battery status, BLE messages, calibration warnings,
 RESETREAS...) shows as-is in the console panel, and the tool
 resynchronizes automatically on "REC_START"/"REC_STOP".
@@ -173,6 +180,13 @@ P_COLUMNS = ["phaseId", "repNumber", "phaseType", "closeReason", "durationS",
 # v3.11.32 appended t_start_ms/t_end_ms (device millis of the phase's first
 # and last kept sample).
 P_COLUMNS_V2 = P_COLUMNS + ["t_start_ms", "t_end_ms"]
+
+# v3.11.33 (dev/session build): run-time orientation filter selection and
+# build identity. FILTER=<name> answers the FILTER command; the INFO line
+# (REC_START) and the boot/VERSION banner carry it too.
+FILTER_CHOICES = ["MADGWICK", "FUSION"]
+FILTER_RE = re.compile(r"^(?:FILTER=|INFO,.*filter=)(MADGWICK|FUSION)\b")
+VERSION_RE = re.compile(r"^ODKI VBT firmware (\S+) build=(\S+) filter=(MADGWICK|FUSION)")
 
 # RuntimeConfig defaults (MotionTracker.h) - shown as a reference line only:
 # the actual live-configured value isn't readable over serial (config is
@@ -295,9 +309,10 @@ class SerialReaderThread(threading.Thread):
         self.out_queue.put(("disconnected", None))
 
     def send_command(self, text: str) -> None:
-        """START/STOP/CALIBRATE - see pollSerialCommands() in
-        VBT_Quaternions.ino (v3.11.21/v3.11.22). Newline-terminated plain
-        text, case-insensitive on the firmware side."""
+        """START/STOP/CALIBRATE (v3.11.21/v3.11.22), and FILTER/VERSION on
+        the v3.11.33 dev/session build - see pollSerialCommands() in
+        VBT_Quaternions.ino. Newline-terminated plain text, case-insensitive
+        on the firmware side."""
         if self.ser is None or not self.ser.is_open:
             return
         try:
@@ -526,6 +541,16 @@ class LiveMonitorApp(tk.Tk):
                                     command=self._send_stop, state="disabled")
         self.stop_btn.pack(side=tk.LEFT, padx=3)
 
+        # --- orientation filter (v3.11.33 dev/session build: FILTER serial command) ---
+        ttk.Label(top, text="Filter:", style="Muted.TLabel").pack(side=tk.LEFT, padx=(12, 2))
+        self.filter_var = tk.StringVar(value="MADGWICK")
+        self.filter_combo = ttk.Combobox(top, textvariable=self.filter_var, state="disabled", width=10,
+                                         values=FILTER_CHOICES)
+        self.filter_combo.pack(side=tk.LEFT, padx=(3, 3))
+        self.filter_combo.bind("<<ComboboxSelected>>", self._send_filter)
+        self.fw_label = ttk.Label(top, text="", style="Muted.TLabel")
+        self.fw_label.pack(side=tk.LEFT, padx=(6, 3))
+
         self.battery_label = ttk.Label(top, text="", style="Muted.TLabel")
         self.battery_label.pack(side=tk.RIGHT, padx=4)
 
@@ -700,7 +725,11 @@ class LiveMonitorApp(tk.Tk):
         self.start_btn.config(state="normal")
         self.start_delay_combo.config(state="readonly")
         self.stop_btn.config(state="normal")
+        self.filter_combo.config(state="readonly")
         self._set_status("connecting...", "#e0a020")
+        # v3.11.33: ask the firmware who it is and which filter is active
+        # (answered by "ODKI VBT firmware ..." and "FILTER=..." lines)
+        self.after(1500, self._query_identity)
 
     def _disconnect(self):
         if self._countdown_job is not None:
@@ -714,6 +743,8 @@ class LiveMonitorApp(tk.Tk):
         self.start_btn.config(state="disabled")
         self.start_delay_combo.config(state="disabled")
         self.stop_btn.config(state="disabled")
+        self.filter_combo.config(state="disabled")
+        self.fw_label.config(text="")
         self._set_status("disconnected", TEXT_SECONDARY)
         self._stop_recording()
 
@@ -780,6 +811,21 @@ class LiveMonitorApp(tk.Tk):
         self.start_delay_combo.config(state="readonly")
         self.phase_label.config(text="WAITING FOR DATA")
         self._log_console(f">>> START countdown {reason}")
+
+    def _query_identity(self):
+        if self.reader is not None:
+            self.reader.send_command("VERSION")
+            self.reader.send_command("FILTER")
+
+    def _send_filter(self, _event=None):
+        """FILTER MADGWICK / FILTER FUSION (v3.11.33 dev/session build). The
+        firmware refuses it while tracking and answers FILTER=<active> either
+        way, which resets the dropdown to what is really active."""
+        if self.reader is None:
+            return
+        choice = self.filter_var.get()
+        self.reader.send_command(f"FILTER {choice}")
+        self._log_console(f">>> FILTER {choice} sent")
 
     def _send_stop(self):
         if self._countdown_job is not None:
@@ -937,6 +983,19 @@ class LiveMonitorApp(tk.Tk):
         row = parse_row(line, "B", B_COLUMNS)
         if row is not None:
             return  # bracket closes aren't drawn live (retroactive correction, see vbt_log_viewer.py) - logged only
+
+        # v3.11.33: firmware identity / active orientation filter
+        m = FILTER_RE.search(line)
+        if m:
+            self.filter_var.set(m.group(1))
+            self._log_console(line)
+            return
+        m = VERSION_RE.search(line)
+        if m:
+            self.fw_label.config(text=f"fw {m.group(1)} ({m.group(2)})")
+            self.filter_var.set(m.group(3))
+            self._log_console(line)
+            return
 
         m = BATTERY_RE.search(line)
         if m:
