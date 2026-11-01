@@ -158,6 +158,8 @@ S_COLUMNS = [
 S_COLUMNS_V2 = S_COLUMNS + ["worldAccZRaw", "gyroRawX", "gyroRawY", "gyroRawZ"]
 # v3.11.32 appended accRawX/Y/Z (pre-median body-frame accelerometer).
 S_COLUMNS_V3 = S_COLUMNS_V2 + ["accRawX", "accRawY", "accRawZ"]
+# fw-rawacc-log (proposal) appended accelScaleG and accBiasX/Y/Z.
+S_COLUMNS_V4 = S_COLUMNS_V3 + ["accelScaleG", "accBiasX", "accBiasY", "accBiasZ"]
 
 R_COLUMNS = [
     "rep", "peakVelocity", "meanVelocity", "peakAcceleration", "meanAcceleration",
@@ -908,7 +910,8 @@ class LiveMonitorApp(tk.Tk):
             self._log_console("=== REC_STOP ===")
             return
 
-        row = (parse_row(line, "S", S_COLUMNS_V3) or parse_row(line, "S", S_COLUMNS_V2)
+        row = (parse_row(line, "S", S_COLUMNS_V4) or parse_row(line, "S", S_COLUMNS_V3)
+               or parse_row(line, "S", S_COLUMNS_V2)
                or parse_row(line, "S", S_COLUMNS))
         if row is not None:
             self.sample_count += 1

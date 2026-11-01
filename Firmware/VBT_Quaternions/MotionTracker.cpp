@@ -747,6 +747,17 @@ namespace {
   //     gyroMedianFilter) this is everything updateOrientationAndAcceleration()
   //     reads from the IMU, so an offline replay can cover Madgwick too.
   // The tools accept both the old and the new column counts.
+  //
+  // fw-rawacc-log (PROPOSAL, unreleased, no version bump - log-only, no
+  // effect on tracking or BLE): four more columns at the END of the "S,"
+  // row, accelScaleG,accBiasX,accBiasY,accBiasZ - the accelerometer scale
+  // CALIBRATE fitted and the body-frame accBiasVec. They are the state of
+  // updateOrientationAndAcceleration() an offline replay cannot rebuild from
+  // the other columns (accZBias is only accBiasVec projected on gravity, and
+  // accelScaleG is printed only by CALIBRATE), so with them a log replays
+  // the orientation filter from the first sample (tools/fusion_feasibility/
+  // on the fusion-feasibility branch reads them when present). Logged on
+  // every row, not once at REC_START, so a log cut anywhere still has them.
   // ============================================================================
 
   // --- Sampling / orientation (Madgwick) ---
@@ -2113,7 +2124,12 @@ namespace {
     // v3.11.32: pre-median body-frame accelerometer, appended at the END.
     Serial.print(lastAccRawX, 4); Serial.print(',');
     Serial.print(lastAccRawY, 4); Serial.print(',');
-    Serial.println(lastAccRawZ, 4);
+    Serial.print(lastAccRawZ, 4); Serial.print(',');
+    // fw-rawacc-log: replay state, appended at the END (see the note at the top).
+    Serial.print(accelScaleG, 5); Serial.print(',');
+    Serial.print(accBiasVec[0], 5); Serial.print(',');
+    Serial.print(accBiasVec[1], 5); Serial.print(',');
+    Serial.println(accBiasVec[2], 5);
   }
 
   // Integrates worldAccX/Y (cosmetic leak, streaming/debug) and advances
@@ -2290,7 +2306,8 @@ void MotionTracker::setTrackingActive(bool active) {
                       "quatW,quatX,quatY,quatZ,gyroMag,accZBias,gyroBiasX,gyroBiasY,gyroBiasZ,"
                       "gyroFilteredX,gyroFilteredY,gyroFilteredZ,"
                       "velClamped,bracketClosed,confirmedStillNow,flatGuardOverrideFired,"
-                      "worldAccZRaw,gyroRawX,gyroRawY,gyroRawZ,accRawX,accRawY,accRawZ");
+                      "worldAccZRaw,gyroRawX,gyroRawY,gyroRawZ,accRawX,accRawY,accRawZ,"
+                      "accelScaleG,accBiasX,accBiasY,accBiasZ");
       Serial.println("R,rep,peakVelocity,meanVelocity,peakAcceleration,meanAcceleration,"
                       "displacementM,eccPeakVelocity,eccMeanVelocity,quality1,correctionStatus");
       // v3.11.7, NEW: one line per closed bracket - see the comment on
