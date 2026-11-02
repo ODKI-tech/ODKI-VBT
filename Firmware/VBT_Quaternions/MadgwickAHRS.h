@@ -30,9 +30,18 @@ class MadgwickAHRS {
 public:
   void reset(); // identity quaternion
 
-  // Aligns the body frame's Z axis to the gravity measured at rest.
-  // Call once during calibration (device stationary).
+  // Seeds the attitude from the accelerometer measured at rest (device
+  // stationary, any unit): afterwards the gravity direction implied by the
+  // quaternion (gravBody, the convention update() uses) equals the
+  // normalised (ax, ay, az); yaw is set to zero. Call once during
+  // calibration. v3.11.33: fixed - up to v3.11.32 it seeded the tilt
+  // mirrored (see the comment in MadgwickAHRS.cpp).
   void alignToGravity(float ax, float ay, float az);
+
+  // Sets the attitude directly (normalised; identity if ~zero). Used when
+  // the runtime filter selection hands the current attitude over from the
+  // other filter (see MotionTracker::setOrientationFilter()).
+  void setQuaternion(float q0, float q1, float q2, float q3);
 
   void update(float gx, float gy, float gz,
               float ax, float ay, float az,

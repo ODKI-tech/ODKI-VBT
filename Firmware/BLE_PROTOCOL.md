@@ -41,6 +41,7 @@ For *why* the protocol is shaped this way (why `Stream` is always raw, why `Corr
 | Battery Level | `0x2A19` (standard) | Read, Notify | 1 B |
 | Device Information Service | `0x180A` (standard) | — | — |
 | Firmware Revision String | `0x2A26` (standard) | Read | variable (UTF-8) |
+| Software Revision String | `0x2A28` (standard) | Read | variable (UTF-8) |
 | Buttonless DFU Service | `00001530-1212-efde-1523-785feabcd123` | — | — |
 | DFU Control | `00001531-1212-efde-1523-785feabcd123` | Write, Notify | 1 B (command) |
 
@@ -210,6 +211,8 @@ A write shorter than 38 bytes is ignored entirely (the whole packet, not just th
 ## Device Information Service (standard, `0x180A`)
 
 **Firmware Revision String** (`0x2A26`, Read, variable-length UTF-8): the firmware version as `"MAJOR.MINOR.PATCH"` (e.g. `"3.11.30"`). Set once at boot, static for the whole connection — read it to check whether an OTA update is available before offering one to the user.
+
+**Software Revision String** (`0x2A28`, Read, variable-length UTF-8, since 3.11.33): the build tag — `"release"` for a published build, anything else (e.g. `"dev-session"`) for a development build flashed over USB. Informative only: a client must keep using the Firmware Revision String above for version comparisons (it always stays exactly `"MAJOR.MINOR.PATCH"`), and may ignore this characteristic; older firmware does not set it, so the characteristic holds the Arduino board-package version there (e.g. `"1.1.13"`).
 
 ## Firmware update (DFU)
 

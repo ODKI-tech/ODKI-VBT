@@ -1,0 +1,24 @@
+x-io Technologies Fusion - vendored copy (third-party code, MIT license)
+
+Upstream:  https://github.com/xioTechnologies/Fusion
+Release:   v1.3.3
+Commit:    9325424011892abacc0ce42b8bb1a8ae20264b9b (tag v1.3.3, 2026-08-30)
+Files:     the contents of the upstream Fusion/ directory (*.c, *.h), copied
+           unmodified, minus its CMakeLists.txt; LICENSE.md is the upstream
+           LICENSE.md.
+License:   MIT, Copyright (c) 2021 x-io Technologies - see LICENSE.md in this
+           folder. These files are NOT covered by LICENSE-FIRMWARE.
+
+Why it is here: feasibility study of Fusion's AHRS as an alternative to the
+Madgwick filter (MadgwickAHRS.cpp). It is only used when the firmware is built
+with ODKI_ORIENTATION_FILTER = ODKI_ORIENTATION_FILTER_FUSION (see Config.h and
+FusionOrientation.h); with the default (Madgwick) build the linker drops it and
+the firmware image is byte-identical to a build without this folder.
+
+Arduino compiles everything under the sketch's src/ folder recursively, so no
+build setting is needed. To update: replace the files with those of a newer
+release, update this note, and re-run tools/fusion_feasibility/.
+
+Note on names: Fusion v1.2.x called the gyroscope bias module FusionOffset and
+the rejection timeout recoveryTriggerPeriod (in samples); v1.3.x renamed them FusionBias and
+rejectionTimeout (same roles).

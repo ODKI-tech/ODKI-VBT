@@ -22,6 +22,9 @@ inline void pinMode(int, int) {}
 inline void digitalWrite(int, int) {}
 inline void delay(unsigned long) {}
 unsigned long millis();
+// v3.11.33: MotionTracker's TIMING diagnostics read micros(); on the host it
+// only has to compile (the values are meaningless off-device).
+inline unsigned long micros() { return millis() * 1000UL; }
 
 struct SerialStub {
   bool operator!() const { return false; }

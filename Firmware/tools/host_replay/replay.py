@@ -33,6 +33,11 @@ replay.cpp) with each variant of the input and compares the results:
 The shock detector of the hybrid variant is deliberately simple (raw jerk or
 raw |acc| over a threshold) - it is what is being evaluated, not a final design.
 
+Accepts the 41-field S row of v3.11.28-v3.11.31 and the 44-field one of
+v3.11.32 (which adds the pre-median body-frame accelerometer accRawX/Y/Z).
+Replaying from those raw IMU columns through the orientation path (Madgwick
+included) is not implemented yet - see host_replay in DOCUMENTATION.md.
+
 Usage:
     python replay.py capture.log [--outdir DIR] [--jerk 1500] [--acc 25]
 Requires numpy, pandas, matplotlib and a C++ compiler (clang++ / g++).
@@ -63,7 +68,10 @@ def build(binary):
     cxx = shutil.which("clang++") or shutil.which("g++")
     if not cxx:
         sys.exit("No C++ compiler found (clang++/g++).")
-    cmd = [cxx, "-std=c++17", "-O2", "-w", "-I", os.path.join(HERE, "stubs"), "-I", FW,
+    # single-filter (Madgwick) build: replay.cpp injects the world-Z acceleration, the
+    # orientation filter is not exercised (v3.11.33: Config.h defaults to the run-time
+    # selection, which would also need the Fusion sources)
+    cmd = [cxx, "-std=c++17", "-O2", "-w", "-DODKI_FILTER_RUNTIME_SELECT=0", "-I", os.path.join(HERE, "stubs"), "-I", FW,
            os.path.join(HERE, "replay.cpp"), os.path.join(FW, "MadgwickAHRS.cpp"), "-o", binary]
     subprocess.run(cmd, check=True)
 

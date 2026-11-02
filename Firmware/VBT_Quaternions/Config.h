@@ -31,8 +31,55 @@
 namespace FirmwareVersion {
   const uint8_t MAJOR = 3;
   const uint8_t MINOR = 11;
-  const uint8_t PATCH = 31;
+  const uint8_t PATCH = 33;
 }
+
+// Build identity printed at boot, by the VERSION serial command, in the
+// "INFO," line at every REC_START and as the BLE Device Information
+// Software Revision String (0x2A28). The Firmware Revision String (0x2A26)
+// stays a plain "MAJOR.MINOR.PATCH": the companion app parses it as exactly
+// three integers (anything else reads as "unknown version" and also turns
+// off its chunked Config write) and offers an OTA update only when the
+// manifest's version is strictly newer.
+// "release" for a build published through firmware-release/; anything else
+// marks a development build that must never be put in the OTA manifest.
+// v3.11.33 "dev-session": the recording-session build (branch session-build)
+// - NOT a release.
+#define ODKI_BUILD_TAG "dev-session"
+
+// Orientation filter, selected at BUILD time (feasibility study, see
+// "Orientation filter selection" in DOCUMENTATION.md):
+//   ODKI_ORIENTATION_FILTER_MADGWICK - MadgwickAHRS.cpp with the adaptive beta
+//                                      (default; the released behaviour)
+//   ODKI_ORIENTATION_FILTER_FUSION   - x-io Fusion AHRS v1.3.3 (src/Fusion/,
+//                                      MIT), wrapped by FusionOrientation.cpp
+// Change the default below, or pass -DODKI_ORIENTATION_FILTER=1 to the
+// compiler (arduino-cli: --build-property "compiler.cpp.extra_flags=..."
+// and "compiler.c.extra_flags=..."). Experimental: no Fusion build has
+// been released or validated on hardware.
+#define ODKI_ORIENTATION_FILTER_MADGWICK 0
+#define ODKI_ORIENTATION_FILTER_FUSION   1
+#ifndef ODKI_ORIENTATION_FILTER
+#define ODKI_ORIENTATION_FILTER ODKI_ORIENTATION_FILTER_MADGWICK
+#endif
+
+// Runtime filter selection (dev/session builds). 1: BOTH filters are
+// compiled in, ODKI_ORIENTATION_FILTER above only picks the one active at
+// boot, and the plain-text serial command "FILTER MADGWICK" / "FILTER
+// FUSION" switches between them while tracking is stopped (the attitude is
+// handed over, so no re-CALIBRATE is needed - see
+// MotionTracker::setOrientationFilter()). 0: only the filter selected above
+// is compiled (the released configuration). Set to 1 on session-build so
+// one flash can record both filters.
+#ifndef ODKI_FILTER_RUNTIME_SELECT
+#define ODKI_FILTER_RUNTIME_SELECT 1
+#endif
+// Whether the Fusion code is compiled at all.
+#if ODKI_FILTER_RUNTIME_SELECT || ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
+#define ODKI_FUSION_COMPILED 1
+#else
+#define ODKI_FUSION_COMPILED 0
+#endif
 
 namespace Config {
   // How often to print/notify battery status.

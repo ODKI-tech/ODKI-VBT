@@ -116,12 +116,28 @@ S_COLUMNS = [
 # fields above: both layouts are accepted, the missing columns become NaN.
 S_COLUMNS_V2 = S_COLUMNS + ["worldAccZRaw", "gyroRawX", "gyroRawY", "gyroRawZ"]
 
+# v3.11.32 appended the pre-median body-frame accelerometer (m/s^2) after
+# those: accRawX/Y/Z. All three layouts (37, 41, 44 fields) are accepted;
+# s_df always has the full v3.11.32 column set, missing columns are NaN.
+S_COLUMNS_V3 = S_COLUMNS_V2 + ["accRawX", "accRawY", "accRawZ"]
+
+# fw-rawacc-log (proposal) appends the replay state: accelScaleG and the
+# body-frame accBiasVec. 48 fields; s_df always has these columns too.
+S_COLUMNS_V4 = S_COLUMNS_V3 + ["accelScaleG", "accBiasX", "accBiasY", "accBiasZ"]
+
 R_COLUMNS = [
     "rep", "peakVelocity", "meanVelocity", "peakAcceleration", "meanAcceleration",
     "displacementM", "eccPeakVelocity", "eccMeanVelocity", "quality1", "correctionStatus",
 ]
 
 B_COLUMNS = ["bracketId", "t0", "t1", "baseline", "drift", "rate", "emaRateAfter", "basisTotal"]
+
+# "P," rows (v3.11.18): one per phase close attempt. v3.11.32 appended
+# t_start_ms/t_end_ms (device millis, same clock as the S rows' t_ms, of the
+# phase's first and last kept sample); older rows get NaN there.
+P_COLUMNS = ["phaseId", "repNumber", "phaseType", "closeReason", "durationS",
+             "sampleCount", "discarded", "reported"]
+P_COLUMNS_V2 = P_COLUMNS + ["t_start_ms", "t_end_ms"]
 
 STATE_COLORS = {"idle": "#eef1f6", "eccentric": "#ffe3e3", "concentric": "#dff3e3"}
 
@@ -163,10 +179,8 @@ def parse_lines(lines):
     for line in lines:
         if line.startswith("S,"):
             parts = line.split(",")[1:]
-            if len(parts) == len(S_COLUMNS):
-                s_rows.append(parts + ["nan"] * (len(S_COLUMNS_V2) - len(S_COLUMNS)))
-            elif len(parts) == len(S_COLUMNS_V2):
-                s_rows.append(parts)
+            if len(parts) in (len(S_COLUMNS), len(S_COLUMNS_V2), len(S_COLUMNS_V3), len(S_COLUMNS_V4)):
+                s_rows.append(parts + ["nan"] * (len(S_COLUMNS_V4) - len(parts)))
         elif line.startswith("R,"):
             parts = line.split(",")[1:]
             if len(parts) == len(R_COLUMNS):
@@ -179,8 +193,8 @@ def parse_lines(lines):
     if not s_rows:
         return None, None, None
 
-    s_df = pd.DataFrame(s_rows, columns=S_COLUMNS_V2)
-    numeric_cols = [c for c in S_COLUMNS_V2 if c != "state"]
+    s_df = pd.DataFrame(s_rows, columns=S_COLUMNS_V4)
+    numeric_cols = [c for c in S_COLUMNS_V4 if c != "state"]
     for c in numeric_cols:
         s_df[c] = pd.to_numeric(s_df[c], errors="coerce")
 
@@ -224,6 +238,38 @@ def parse_lines(lines):
         b_df = b_df.sort_values("t0").reset_index(drop=True)
 
     return s_df, r_df, b_df
+
+
+def parse_session_info(lines):
+    """v3.11.33 (dev/session build): the "INFO," line printed after the
+    REC_START headers (firmware, build tag, active orientation filter, ...)
+    and the "TIMING," line printed just before REC_STOP (micros() cost of the
+    filter update and of a whole sample, loop period) as two dicts of
+    key -> value strings ({} when the firmware does not print them)."""
+    out = {"info": {}, "timing": {}}
+    for line in lines:
+        for prefix, key in (("INFO,", "info"), ("TIMING,", "timing")):
+            if line.startswith(prefix):
+                out[key] = dict(kv.split("=", 1) for kv in line[len(prefix):].split(",") if "=" in kv)
+    return out
+
+
+def parse_p_rows(lines):
+    """The "P," rows (phase close attempts, including the ones discarded as
+    too short: reported == 0) as a DataFrame with P_COLUMNS_V2. Kept separate
+    from parse_lines() so its (s_df, r_df, b_df) return value doesn't change
+    for existing callers. t_start_ms/t_end_ms are NaN on firmware < v3.11.32."""
+    rows = []
+    for line in lines:
+        if line.startswith("P,"):
+            parts = line.split(",")[1:]
+            if len(parts) in (len(P_COLUMNS), len(P_COLUMNS_V2)):
+                rows.append(parts + ["nan"] * (len(P_COLUMNS_V2) - len(parts)))
+    p_df = pd.DataFrame(rows, columns=P_COLUMNS_V2)
+    for c in P_COLUMNS_V2:
+        p_df[c] = pd.to_numeric(p_df[c], errors="coerce")
+    # the header line has the same field count, it drops out here (non-numeric)
+    return p_df.dropna(subset=P_COLUMNS).reset_index(drop=True)
 
 
 def reconstruct_corrected(s_df, b_df):
@@ -1020,7 +1066,8 @@ def main():
             n_s = sum(1 for l in lines if l.startswith("S,"))
             n_r = sum(1 for l in lines if l.startswith("R,"))
             n_b = sum(1 for l in lines if l.startswith("B,"))
-            print(f"  [{i}] {n_s} samples, {n_r} rep rows, {n_b} brackets")
+            filt = parse_session_info(lines)["info"].get("filter")
+            print(f"  [{i}] {n_s} samples, {n_r} rep rows, {n_b} brackets" + (f", filter {filt}" if filt else ""))
         if args.list_sessions:
             return
 
@@ -1038,6 +1085,11 @@ def main():
 
     print(f"Session analyzed: {len(s_df)} samples, {len(r_df)} reps, {len(b_df)} brackets "
           f"({s_df['sessionT'].iloc[-1]:.1f}s total).")
+    sinfo = parse_session_info(chosen)
+    if sinfo["info"]:
+        print("Firmware: " + ", ".join(f"{k}={v}" for k, v in sinfo["info"].items()))
+    if sinfo["timing"]:
+        print("Timing:   " + ", ".join(f"{k}={v}" for k, v in sinfo["timing"].items()))
 
     overrides, closes, stalls = scan_anomalies(s_df, args.gyro_thresh, args.min_still)
     print_anomaly_report(overrides, closes, stalls)

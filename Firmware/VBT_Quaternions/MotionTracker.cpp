@@ -15,6 +15,10 @@
 // PURPOSE -- see LICENSE-FIRMWARE for details.
 
 #include "MotionTracker.h"
+#include "Config.h" // ODKI_ORIENTATION_FILTER, ODKI_FILTER_RUNTIME_SELECT
+#if ODKI_FUSION_COMPILED
+#include "FusionOrientation.h"
+#endif
 #include "MadgwickAHRS.h"
 #include "LSM6DS3.h"
 #include "Wire.h"
@@ -727,6 +731,54 @@ namespace {
   // used above flatGuardMaxVelocityMps; 30 is also the minimum setConfig()
   // accepts for it). The app's own defaults (runtime_config.dart) change in
   // step; a phone that already stored a value keeps it until reset.
+  //
+  // v3.11.32: log-only change for the encoder validation study, no effect
+  // on tracking or on the BLE protocol. Two groups of columns are appended
+  // at the END of existing serial rows (earlier columns keep their
+  // positions, as in v3.11.28):
+  //   - "P," rows gain t_start_ms,t_end_ms: the device millis() (the same
+  //     clock as the "S," rows' t_ms) of the phase's first sample and of
+  //     its last KEPT sample (startIdx + cutoff, i.e. without the discarded
+  //     tail - the span durationS measures). Reconstructed exactly by
+  //     walking back from the current sample through bracketBuf's per-sample
+  //     dt (each dt is an integer number of ms), so no extra RAM; computed
+  //     only while the serial log is open. Lets a rep be paired with an
+  //     external reference without re-deriving it from the state column.
+  //   - "S," rows gain accRawX,accRawY,accRawZ: the body-frame
+  //     accelerometer in m/s^2 (10ms mean of the 416Hz samples, times
+  //     accelScaleG) BEFORE the 5-sample median - the exact input of
+  //     accMedianFilter. Together with gyroRawX/Y/Z (v3.11.28, the input of
+  //     gyroMedianFilter) this is everything updateOrientationAndAcceleration()
+  //     reads from the IMU, so an offline replay can cover Madgwick too.
+  // The tools accept both the old and the new column counts.
+  //
+  // fw-rawacc-log (PROPOSAL, unreleased, no version bump - log-only, no
+  // effect on tracking or BLE): four more columns at the END of the "S,"
+  // row, accelScaleG,accBiasX,accBiasY,accBiasZ - the accelerometer scale
+  // CALIBRATE fitted and the body-frame accBiasVec. They are the state of
+  // updateOrientationAndAcceleration() an offline replay cannot rebuild from
+  // the other columns (accZBias is only accBiasVec projected on gravity, and
+  // accelScaleG is printed only by CALIBRATE), so with them a log replays
+  // the orientation filter from the first sample (tools/fusion_feasibility/
+  // on the fusion-feasibility branch reads them when present). Logged on
+  // every row, not once at REC_START, so a log cut anywhere still has them.
+  //
+  // v3.11.33 "dev-session" (branch session-build, NOT a release - flashed over
+  // USB for the encoder recording session; ODKI_BUILD_TAG in Config.h):
+  //   - CALIBRATE seed fixed: MadgwickAHRS::alignToGravity() used to seed the
+  //     tilt mirrored (off by 2x the tilt, ~17 s to recover at 72 deg, never at
+  //     90 deg). update() is bit-identical; only the seed changes (see
+  //     MadgwickAHRS.cpp and tools/calibration_seed/).
+  //   - the fw-rawacc-log columns above are part of this build;
+  //   - run-time orientation filter selection (ODKI_FILTER_RUNTIME_SELECT):
+  //     Madgwick at boot, "FILTER FUSION"/"FILTER MADGWICK" over serial while
+  //     stopped - see setOrientationFilter();
+  //   - log-only lines: "INFO," after the REC_START headers (build, active
+  //     filter) and "TIMING," before REC_STOP (micros() cost of the filter
+  //     update and of a whole sample, loop period) - see printInfoLine() /
+  //     printTimingLine(). No change to the S/R/B/P rows or to BLE packets
+  //     (the Device Information Software Revision String now carries the
+  //     build tag).
   // ============================================================================
 
   // --- Sampling / orientation (Madgwick) ---
@@ -806,7 +858,52 @@ namespace {
   const float G = 9.80665f; // standard gravitational acceleration, m/s^2 - not tunable
 
   LSM6DS3 imu(I2C_MODE, 0x6A);
+#if ODKI_FILTER_RUNTIME_SELECT
+  // v3.11.33 dev/session build (see Config.h): both filters compiled in,
+  // one active at a time (activeFilter), switched with the FILTER serial
+  // command while tracking is stopped - see setOrientationFilter(). Only the
+  // active one is updated; the inactive one is re-seeded with the current
+  // attitude when it takes over.
+  MadgwickAHRS madgwickAhrs;
+  FusionOrientation fusionAhrs;
+  OrientationFilter activeFilter =
+      (ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION) ? OrientationFilter::Fusion
+                                                                   : OrientationFilter::Madgwick;
+#elif ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
+  // Feasibility study build (see Config.h): x-io Fusion instead of Madgwick.
+  // Same quaternion convention and interface, so everything downstream of
+  // the quaternion (gravity split, world-frame acceleration, biases, phase
+  // engine) is unchanged. BETA_BASE/TRUST_FLOOR/TRUST_FALLOFF are not used:
+  // Fusion's acceleration rejection replaces the adaptive beta (see
+  // "Orientation filter selection" in DOCUMENTATION.md).
+  FusionOrientation ahrs;
+#else
   MadgwickAHRS ahrs;
+#endif
+
+  // v3.11.33 (dev/session build): on-device cost of the orientation filter
+  // and of a whole 100Hz sample, measured with micros(). Accumulated since
+  // the last REC_START (or FILTER switch / TIMING RESET) and printed as a
+  // "TIMING," line just before REC_STOP and by the TIMING serial command.
+  // A few integer adds per sample; no effect on tracking.
+  struct LoopTiming {
+    uint32_t n = 0;
+    uint32_t filterSumUs = 0, filterMaxUs = 0;
+    uint32_t sampleSumUs = 0, sampleMaxUs = 0;
+    uint32_t dtMaxMs = 0, dtOver11 = 0;
+  };
+  LoopTiming loopTiming;
+
+  // Closes one sample's timing: whole-sample cost (orientation, engine and
+  // the S-row print while logging) and the loop's real period.
+  void noteSampleTiming(uint32_t sampleT0, uint32_t dtMs) {
+    uint32_t us = micros() - sampleT0;
+    loopTiming.n++;
+    loopTiming.sampleSumUs += us;
+    if (us > loopTiming.sampleMaxUs) loopTiming.sampleMaxUs = us;
+    if (dtMs > loopTiming.dtMaxMs) loopTiming.dtMaxMs = dtMs;
+    if (dtMs > 11) loopTiming.dtOver11++;
+  }
 
   struct MedianFilter3 {
     float bufX[MEDIAN_FILTER_SIZE] = {0};
@@ -944,6 +1041,9 @@ namespace {
   // tracking engine.
   float lastWorldAccZUnfiltered = 0;
   float lastGyroRawX = 0, lastGyroRawY = 0, lastGyroRawZ = 0;
+  // v3.11.32: log-only - the body-frame accelerometer BEFORE the median
+  // (axRaw/ayRaw/azRaw in updateOrientationAndAcceleration(), m/s^2).
+  float lastAccRawX = 0, lastAccRawY = 0, lastAccRawZ = 0;
 
   const RuntimeConfig DEFAULT_CONFIG;
   RuntimeConfig activeConfig;
@@ -1446,6 +1546,20 @@ namespace {
     }
   }
 
+  // v3.11.32, log-only: the device millis() (the "S," rows' t_ms) of
+  // bracketBuf[idx], given that bracketBuf[currentIdx] is the sample being
+  // processed right now (stamped lastSampleTime). bracketBuf always holds
+  // consecutive samples (closeBracketFn() carries a contiguous suffix), and
+  // each stored dt is (now - lastSampleTime) / 1000 for an integer number of
+  // ms, so walking back and subtracting round(dt * 1000) is exact.
+  unsigned long bracketSampleMillis(uint16_t idx, uint16_t currentIdx) {
+    unsigned long ms = lastSampleTime;
+    for (uint16_t k = currentIdx; k > idx; k--) {
+      ms -= (unsigned long)(bracketBuf[k].dt * 1000.0f + 0.5f);
+    }
+    return ms;
+  }
+
   void closePhaseFn(uint8_t reason, uint16_t idxInBracket) {
     uint16_t n = phaseSampleCount;
     int16_t discardedI, cutoff;
@@ -1487,7 +1601,11 @@ namespace {
       Serial.print(durationS, 4); Serial.print(',');
       Serial.print(phaseSampleCount); Serial.print(',');
       Serial.print(discardedI); Serial.print(',');
-      Serial.println(reported ? 1 : 0);
+      Serial.print(reported ? 1 : 0); Serial.print(',');
+      // v3.11.32: device millis() of the first and last kept sample.
+      uint16_t endKeptIdx = (cutoff >= 0) ? (uint16_t)(startIdx + cutoff) : startIdx;
+      Serial.print(bracketSampleMillis(startIdx, idxInBracket)); Serial.print(',');
+      Serial.println(bracketSampleMillis(endKeptIdx, idxInBracket));
     }
 
     if (reported) {
@@ -1922,16 +2040,42 @@ namespace {
     accMedianFilter.filter(axRaw, ayRaw, azRaw, ax, ay, az);
     float gxFiltered, gyFiltered, gzFiltered;
     gyroMedianFilter.filter(gxAvg, gyAvg, gzAvg, gxFiltered, gyFiltered, gzFiltered);
+#ifdef ODKI_HOST_MEDIAN_OVERRIDE
+    // Offline harness only (tools/fusion_feasibility/), never defined in a
+    // firmware build: lets a replay substitute the post-median values a log
+    // recorded (when the pre-median accelerometer was not logged) while
+    // axRaw/ayRaw/azRaw keep the reconstructed pre-median input.
+    ODKI_HOST_MEDIAN_OVERRIDE(ax, ay, az, gxFiltered, gyFiltered, gzFiltered);
+#endif
     lastGyroFilteredX = gxFiltered; lastGyroFilteredY = gyFiltered; lastGyroFilteredZ = gzFiltered;
     float gx = (gxFiltered - gyroBiasX) * DEG_TO_RAD;
     float gy = (gyFiltered - gyroBiasY) * DEG_TO_RAD;
     float gz = (gzFiltered - gyroBiasZ) * DEG_TO_RAD;
 
     float accMag = sqrt(ax * ax + ay * ay + az * az);
+    uint32_t filterT0 = micros();
+#if ODKI_FILTER_RUNTIME_SELECT
+    float q0, q1, q2, q3;
+    if (activeFilter == OrientationFilter::Fusion) {
+      fusionAhrs.update(gx, gy, gz, ax, ay, az, dt);
+      q0 = fusionAhrs.q0(); q1 = fusionAhrs.q1(); q2 = fusionAhrs.q2(); q3 = fusionAhrs.q3();
+    } else {
+      float trust = constrain(1.0f - fabs(accMag - G) / G * TRUST_FALLOFF, TRUST_FLOOR, 1.0f);
+      madgwickAhrs.update(gx, gy, gz, ax, ay, az, dt, BETA_BASE * trust);
+      q0 = madgwickAhrs.q0(); q1 = madgwickAhrs.q1(); q2 = madgwickAhrs.q2(); q3 = madgwickAhrs.q3();
+    }
+#else
+#if ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
+    ahrs.update(gx, gy, gz, ax, ay, az, dt);
+#else
     float trust = constrain(1.0f - fabs(accMag - G) / G * TRUST_FALLOFF, TRUST_FLOOR, 1.0f);
     ahrs.update(gx, gy, gz, ax, ay, az, dt, BETA_BASE * trust);
-
+#endif
     float q0 = ahrs.q0(), q1 = ahrs.q1(), q2 = ahrs.q2(), q3 = ahrs.q3();
+#endif
+    uint32_t filterUs = micros() - filterT0;
+    loopTiming.filterSumUs += filterUs;
+    if (filterUs > loopTiming.filterMaxUs) loopTiming.filterMaxUs = filterUs;
 
     float gravBodyX = 2.0f * (q1 * q3 - q0 * q2);
     float gravBodyY = 2.0f * (q0 * q1 + q2 * q3);
@@ -2003,6 +2147,7 @@ namespace {
     float linRawZ = azRaw - gravBodyZ * accelScaleG;
     lastWorldAccZUnfiltered = (linRawX * gravBodyX + linRawY * gravBodyY + linRawZ * gravBodyZ) - accZBiasNow;
     lastGyroRawX = gxAvg; lastGyroRawY = gyAvg; lastGyroRawZ = gzAvg;
+    lastAccRawX = axRaw; lastAccRawY = ayRaw; lastAccRawZ = azRaw;
 
     sample.linAccX = linAccX; sample.linAccY = linAccY; sample.linAccZ = linAccZ;
     sample.worldAccX = R00 * linAccX + R01 * linAccY + R02 * linAccZ;
@@ -2067,7 +2212,16 @@ namespace {
     Serial.print(lastWorldAccZUnfiltered, 4); Serial.print(',');
     Serial.print(lastGyroRawX, 3); Serial.print(',');
     Serial.print(lastGyroRawY, 3); Serial.print(',');
-    Serial.println(lastGyroRawZ, 3);
+    Serial.print(lastGyroRawZ, 3); Serial.print(',');
+    // v3.11.32: pre-median body-frame accelerometer, appended at the END.
+    Serial.print(lastAccRawX, 4); Serial.print(',');
+    Serial.print(lastAccRawY, 4); Serial.print(',');
+    Serial.print(lastAccRawZ, 4); Serial.print(',');
+    // fw-rawacc-log: replay state, appended at the END (see the note at the top).
+    Serial.print(accelScaleG, 5); Serial.print(',');
+    Serial.print(accBiasVec[0], 5); Serial.print(',');
+    Serial.print(accBiasVec[1], 5); Serial.print(',');
+    Serial.println(accBiasVec[2], 5);
   }
 
   // Integrates worldAccX/Y (cosmetic leak, streaming/debug) and advances
@@ -2196,7 +2350,14 @@ void MotionTracker::calibrateOrientation() {
   float meanAx = sumAx / CALIBRATION_SAMPLES;
   float meanAy = sumAy / CALIBRATION_SAMPLES;
   float meanAz = sumAz / CALIBRATION_SAMPLES;
+#if ODKI_FILTER_RUNTIME_SELECT
+  // Both seeded, so whichever is active (or becomes active) starts from the
+  // measured gravity.
+  madgwickAhrs.alignToGravity(meanAx, meanAy, meanAz);
+  fusionAhrs.alignToGravity(meanAx, meanAy, meanAz);
+#else
   ahrs.alignToGravity(meanAx, meanAy, meanAz);
+#endif
   gyroBiasX = sumGx / CALIBRATION_SAMPLES;
   gyroBiasY = sumGy / CALIBRATION_SAMPLES;
   gyroBiasZ = sumGz / CALIBRATION_SAMPLES;
@@ -2244,7 +2405,8 @@ void MotionTracker::setTrackingActive(bool active) {
                       "quatW,quatX,quatY,quatZ,gyroMag,accZBias,gyroBiasX,gyroBiasY,gyroBiasZ,"
                       "gyroFilteredX,gyroFilteredY,gyroFilteredZ,"
                       "velClamped,bracketClosed,confirmedStillNow,flatGuardOverrideFired,"
-                      "worldAccZRaw,gyroRawX,gyroRawY,gyroRawZ");
+                      "worldAccZRaw,gyroRawX,gyroRawY,gyroRawZ,accRawX,accRawY,accRawZ,"
+                      "accelScaleG,accBiasX,accBiasY,accBiasZ");
       Serial.println("R,rep,peakVelocity,meanVelocity,peakAcceleration,meanAcceleration,"
                       "displacementM,eccPeakVelocity,eccMeanVelocity,quality1,correctionStatus");
       // v3.11.7, NEW: one line per closed bracket - see the comment on
@@ -2254,11 +2416,78 @@ void MotionTracker::setTrackingActive(bool active) {
       // v3.11.18, NEW: one line per phase close ATTEMPT (reason: 0=flat,
       // 1=reversal, 2=timeout), including ones discarded for being too
       // short (reported=0) - see the comment in closePhaseFn().
-      Serial.println("P,phaseId,repNumber,phaseType,closeReason,durationS,sampleCount,discarded,reported");
+      // v3.11.32: t_start_ms,t_end_ms appended (see closePhaseFn()).
+      Serial.println("P,phaseId,repNumber,phaseType,closeReason,durationS,sampleCount,discarded,reported,"
+                      "t_start_ms,t_end_ms");
+      // v3.11.33: build identity and active orientation filter, once per
+      // recording (the filter cannot change while tracking is active).
+      printInfoLine();
     } else if (wasActive) {
+      printTimingLine();
       Serial.println("REC_STOP");
     }
   }
+  if (active) resetLoopTiming();
+}
+
+void MotionTracker::printInfoLine() {
+  Serial.print("INFO,firmware="); Serial.print(FirmwareVersion::MAJOR); Serial.print('.');
+  Serial.print(FirmwareVersion::MINOR); Serial.print('.'); Serial.print(FirmwareVersion::PATCH);
+  Serial.print(",build="); Serial.print(ODKI_BUILD_TAG);
+  Serial.print(",filter="); Serial.print(orientationFilterName());
+  Serial.print(",runtimeSelect="); Serial.print(ODKI_FILTER_RUNTIME_SELECT);
+  Serial.print(",calibrated="); Serial.print(calibrated ? 1 : 0);
+  Serial.print(",accelScaleG="); Serial.println(accelScaleG, 5);
+}
+
+void MotionTracker::printTimingLine() {
+  const LoopTiming& t = loopTiming;
+  Serial.print("TIMING,filter="); Serial.print(orientationFilterName());
+  Serial.print(",samples="); Serial.print(t.n);
+  Serial.print(",filterMeanUs="); Serial.print(t.n ? (float)t.filterSumUs / t.n : 0.0f, 1);
+  Serial.print(",filterMaxUs="); Serial.print(t.filterMaxUs);
+  Serial.print(",sampleMeanUs="); Serial.print(t.n ? (float)t.sampleSumUs / t.n : 0.0f, 1);
+  Serial.print(",sampleMaxUs="); Serial.print(t.sampleMaxUs);
+  Serial.print(",dtMaxMs="); Serial.print(t.dtMaxMs);
+  Serial.print(",dtOver11ms="); Serial.println(t.dtOver11);
+}
+
+void MotionTracker::resetLoopTiming() { loopTiming = LoopTiming(); }
+
+OrientationFilter MotionTracker::orientationFilter() {
+#if ODKI_FILTER_RUNTIME_SELECT
+  return activeFilter;
+#elif ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
+  return OrientationFilter::Fusion;
+#else
+  return OrientationFilter::Madgwick;
+#endif
+}
+
+const char* MotionTracker::orientationFilterName() {
+  return orientationFilter() == OrientationFilter::Fusion ? "FUSION" : "MADGWICK";
+}
+
+bool MotionTracker::setOrientationFilter(OrientationFilter filter) {
+#if ODKI_FILTER_RUNTIME_SELECT
+  // Refused while tracking: a recording must be made with one filter only
+  // (the INFO line at REC_START names it), and a hand-over in the middle of
+  // a set would be an untested discontinuity.
+  if (trackingActive) return false;
+  if (filter == activeFilter) return true;
+  if (filter == OrientationFilter::Fusion) {
+    // Fusion restarts at Madgwick's current attitude (startup ramp skipped
+    // per its settings, residual bias zeroed): no jump in gravBody.
+    fusionAhrs.setQuaternion(madgwickAhrs.q0(), madgwickAhrs.q1(), madgwickAhrs.q2(), madgwickAhrs.q3());
+  } else {
+    madgwickAhrs.setQuaternion(fusionAhrs.q0(), fusionAhrs.q1(), fusionAhrs.q2(), fusionAhrs.q3());
+  }
+  activeFilter = filter;
+  resetLoopTiming();
+  return true;
+#else
+  return filter == orientationFilter();
+#endif
 }
 
 bool MotionTracker::isTrackingActive() { return trackingActive; }
@@ -2297,7 +2526,9 @@ bool MotionTracker::update() {
   unsigned long now = millis();
   if (now - lastSampleTime < SAMPLE_INTERVAL_MS) return false;
   float dt = (now - lastSampleTime) / 1000.0f;
+  uint32_t dtMs = now - lastSampleTime;
   lastSampleTime = now;
+  uint32_t sampleT0 = micros();
 
   updateOrientationAndAcceleration(dt);
 
@@ -2306,10 +2537,12 @@ bool MotionTracker::update() {
     sample.refVelZ = 0;
     sample.worldPosX = sample.worldPosY = sample.worldPosZ = 0;
     sample.phaseState = PhaseState::Idle;
+    noteSampleTiming(sampleT0, dtMs);
     return true;
   }
 
   integrateMotion(dt);
+  noteSampleTiming(sampleT0, dtMs);
 
   sample.worldVelX = worldVelX; sample.worldVelY = worldVelY;
   sample.refVelZ = refVelZ;
