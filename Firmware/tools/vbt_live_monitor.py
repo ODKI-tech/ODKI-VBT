@@ -422,8 +422,10 @@ class LiveMonitorApp(tk.Tk):
     def __init__(self, initial_port: str | None = None) -> None:
         super().__init__()
         self.title("ODKI VBT - Live Monitor")
-        self.geometry("1320x820")
-        self.minsize(1000, 660)
+        # fit the screen (a 13" laptop is narrower than the old fixed 1320 px)
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        self.geometry(f"{min(1320, sw - 40)}x{min(820, sh - 80)}+20+20")
+        self.minsize(min(900, sw - 40), min(600, sh - 80))
         self.configure(bg=BG_VOID)
 
         self.reader: SerialReaderThread | None = None
@@ -523,41 +525,47 @@ class LiveMonitorApp(tk.Tk):
         self.status_label = ttk.Label(top, text="disconnected", style="Muted.TLabel")
         self.status_label.pack(side=tk.LEFT)
 
-        # --- device control: START/STOP over serial (firmware v3.11.21) ---
-        self.calibrate_btn = ttk.Button(top, text="CALIBRATE", style="Calibrate.TButton",
+        # firmware identity and battery stay on the connection row
+        self.fw_label = ttk.Label(top, text="", style="Muted.TLabel")
+        self.fw_label.pack(side=tk.LEFT, padx=(12, 3))
+        self.battery_label = ttk.Label(top, text="", style="Muted.TLabel")
+        self.battery_label.pack(side=tk.RIGHT, padx=4)
+
+        # --- device control row: START/STOP over serial (firmware v3.11.21) ---
+        # A row of its own: on one row with the connection controls the
+        # window ran wider than a laptop screen and the right end (Filter)
+        # was out of reach.
+        dev = tk.Frame(self, bg=BG_VOID, padx=10, pady=3)
+        dev.pack(side=tk.TOP, fill=tk.X)
+        self.calibrate_btn = ttk.Button(dev, text="CALIBRATE", style="Calibrate.TButton",
                                          command=self._send_calibrate, state="disabled")
-        self.calibrate_btn.pack(side=tk.LEFT, padx=(20, 3))
-        self.start_btn = ttk.Button(top, text="▶ START", style="Start.TButton",
+        self.calibrate_btn.pack(side=tk.LEFT, padx=(0, 3))
+        self.start_btn = ttk.Button(dev, text="▶ START", style="Start.TButton",
                                      command=self._send_start, state="disabled")
         self.start_btn.pack(side=tk.LEFT, padx=3)
 
-        ttk.Label(top, text="Delay:", style="Muted.TLabel").pack(side=tk.LEFT, padx=(8, 2))
+        ttk.Label(dev, text="Delay:", style="Muted.TLabel").pack(side=tk.LEFT, padx=(8, 2))
         self.start_delay_var = tk.StringVar(value=START_DELAY_CHOICES[0][0])
-        self.start_delay_combo = ttk.Combobox(top, textvariable=self.start_delay_var, state="disabled",
+        self.start_delay_combo = ttk.Combobox(dev, textvariable=self.start_delay_var, state="disabled",
                                                width=8, values=[label for label, _s in START_DELAY_CHOICES])
         self.start_delay_combo.pack(side=tk.LEFT, padx=(3, 3))
 
-        self.stop_btn = ttk.Button(top, text="■ STOP", style="Stop.TButton",
+        self.stop_btn = ttk.Button(dev, text="■ STOP", style="Stop.TButton",
                                     command=self._send_stop, state="disabled")
         self.stop_btn.pack(side=tk.LEFT, padx=3)
 
         # --- orientation filter (v3.11.33 dev/session build: FILTER serial command) ---
-        ttk.Label(top, text="Filter:", style="Muted.TLabel").pack(side=tk.LEFT, padx=(12, 2))
+        ttk.Label(dev, text="Filter:", style="Muted.TLabel").pack(side=tk.LEFT, padx=(24, 2))
         self.filter_var = tk.StringVar(value="MADGWICK")
         # Two radio buttons rather than a Combobox: the ttk Combobox popdown is
         # unreliable with Tk 9 on macOS (a click on an item may not fire
         # <<ComboboxSelected>>), so the command never reached the sensor.
         self.filter_radios = []
         for name in FILTER_CHOICES:
-            rb = ttk.Radiobutton(top, text=name.title(), value=name, variable=self.filter_var,
+            rb = ttk.Radiobutton(dev, text=name.title(), value=name, variable=self.filter_var,
                                  command=self._send_filter, state="disabled")
             rb.pack(side=tk.LEFT, padx=(3, 0))
             self.filter_radios.append(rb)
-        self.fw_label = ttk.Label(top, text="", style="Muted.TLabel")
-        self.fw_label.pack(side=tk.LEFT, padx=(6, 3))
-
-        self.battery_label = ttk.Label(top, text="", style="Muted.TLabel")
-        self.battery_label.pack(side=tk.RIGHT, padx=4)
 
         # --- second toolbar row: chart controls ---
         toolbar2 = tk.Frame(self, bg=BG_VOID, padx=10, pady=3)
