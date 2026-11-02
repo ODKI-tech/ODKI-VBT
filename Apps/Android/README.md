@@ -20,4 +20,4 @@ Distributed as a downloadable APK directly from [`app-release/`](app-release/) i
 3. Connect to the sensor from the device list.
 4. Calibrate (hold the sensor/bar still and tap Calibrate).
 5. Start a set to see live velocity and rep data; each completed rep appears automatically.
-6. Firmware updates, when available, are offered in-app.
+6. Firmware updates, when available, are offered in-app. On a self-built sensor they need the OTAFIX bootloader — see [`Hardware/Instructions/BOOTLOADER.md`](../../Hardware/Instructions/BOOTLOADER.md).

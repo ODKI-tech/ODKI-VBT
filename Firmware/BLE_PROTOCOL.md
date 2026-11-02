@@ -218,10 +218,10 @@ A write shorter than 38 bytes is ignored entirely (the whole packet, not just th
 
 Updating the firmware is a two-stage handoff, and only the first stage is custom to this project:
 
-1. **Enter bootloader mode.** Write `0x01` to the DFU Control characteristic (`00001531-1212-efde-1523-785feabcd123`, under the Buttonless DFU service `00001530-1212-efde-1523-785feabcd123`). The device disconnects and reboots into the factory Adafruit bootloader.
-2. **Transfer the firmware.** The bootloader now exposes Nordic's standard **Secure DFU** service — a public, well-documented Nordic protocol, unrelated to anything custom in this repository. Use an existing DFU-capable client library rather than implementing this stage from scratch (the companion app uses `nordic_dfu` on Flutter; equivalents exist for most platforms — e.g. Nordic's own `nRF Connect Device Manager` / `iOS-DFU-Library` / `Android-DFU-Library`).
+1. **Enter bootloader mode.** Write `0x01` to the DFU Control characteristic (`00001531-1212-efde-1523-785feabcd123`, under the Buttonless DFU service `00001530-1212-efde-1523-785feabcd123`). The device disconnects and reboots into its bootloader (the Adafruit nRF52 bootloader; ODKI sensors use its community OTAFIX variant, which advertises as `XIAO_DFU` — the stock one advertises as `AdaDFU` — see [`Hardware/Instructions/BOOTLOADER.md`](../Hardware/Instructions/BOOTLOADER.md)). The name and, usually, the BLE address change: a client has to scan for the bootloader again.
+2. **Transfer the firmware.** The bootloader now exposes Nordic's **Legacy DFU** service (nRF5 SDK 11 protocol, service `00001530-1212-efde-1523-785feabcd123`) — a public, well-documented Nordic protocol, unrelated to anything custom in this repository. Use an existing DFU-capable client library rather than implementing this stage from scratch (the companion app uses `nordic_dfu` on Flutter; equivalents exist for most platforms — e.g. Nordic's own `nRF Connect Device Manager` / `iOS-DFU-Library` / `Android-DFU-Library`).
 
-There is no `.h`/`.cpp` in this firmware implementing the second stage — it's entirely the stock bootloader's responsibility, which is also why a device stuck mid-update can generally be recovered by simply reflashing over USB rather than needing another BLE transfer.
+There is no `.h`/`.cpp` in this firmware implementing the second stage — it's entirely the bootloader's responsibility, which is also why a device stuck mid-update can generally be recovered by simply reflashing over USB rather than needing another BLE transfer.
 
 ## License
 

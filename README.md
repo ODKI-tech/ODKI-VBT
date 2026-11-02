@@ -32,8 +32,9 @@ The sensor fuses its onboard accelerometer and gyroscope into a stable orientati
 
 1. **Build the hardware.** The [bill of materials](Hardware/BOM/), [CAD/mechanical design](Hardware/CAD/), and [step-by-step assembly instructions](Hardware/Instructions/) are all published — start there.
 2. **Flash the firmware.** Open `Firmware/VBT_Quaternions/VBT_Quaternions.ino` in the Arduino IDE with the `Seeeduino:nrf52` board package installed (board: `xiaonRF52840Sense`) and the `Seeed Arduino LSM6DS3` library, then upload. See [`Firmware/DOCUMENTATION.md`](Firmware/DOCUMENTATION.md) for what each file does and how the algorithm works.
-3. **Install the app.** See [Apps/](Apps/) for your platform — currently an Android APK is available to download; iOS and Windows are not yet published.
-4. **Calibrate and lift.** Power on, connect over Bluetooth, calibrate the sensor while it's still, then start tracking a set.
+3. **Install the OTAFIX bootloader.** Over-the-air updates from the app need the community OTAFIX variant of the XIAO's bootloader — see [`Hardware/Instructions/BOOTLOADER.md`](Hardware/Instructions/BOOTLOADER.md) for why, how to check which one a board has, and how to install it, also on a closed unit without a reachable reset button.
+4. **Install the app.** See [Apps/](Apps/) for your platform — currently an Android APK is available to download; iOS and Windows are not yet published.
+5. **Calibrate and lift.** Power on, connect over Bluetooth, calibrate the sensor while it's still, then start tracking a set.
 
 ## Validation
 

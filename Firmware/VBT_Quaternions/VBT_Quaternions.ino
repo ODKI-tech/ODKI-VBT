@@ -92,7 +92,9 @@ unsigned long lastBatteryCheckTime = 0;
 uint8_t streamDecimationCounter = 0;
 
 // v3.11.33: also FILTER, VERSION and TIMING [RESET] - diagnostics, see
-// handleSerialCommandLine() (v3.12.0: FILTER is read-only).
+// handleSerialCommandLine() (v3.12.0: FILTER is read-only). v3.12.0: UF2
+// (restart into the bootloader's UF2 mode, for units with no reachable
+// reset button).
 // v3.11.21: minimal non-blocking line reader for START/STOP/CALIBRATE over
 // serial - requested to drive tracking (and, v3.11.22, calibration) from
 // tools/vbt_live_monitor.py (a desktop GUI with no BLE access), without
@@ -160,6 +162,27 @@ void handleSerialCommandLine(const char* line) {
   } else if (serialCmdEqualsIgnoreCase(line, "TIMING RESET")) {
     MotionTracker::resetLoopTiming();
     Serial.println("TIMING reset.");
+  } else if (serialCmdEqualsIgnoreCase(line, "UF2")) {
+    // v3.12.0: restart into the bootloader's UF2 mode (USB drive XIAO-SENSE
+    // + CDC serial), so a closed unit whose reset button cannot be reached
+    // can still be given a .uf2 file (application or bootloader update) and
+    // its INFO_UF2.TXT read - see Hardware/Instructions/BOOTLOADER.md.
+    // enterUf2Dfu() is the Adafruit nRF52 core's own helper (wiring.c): it
+    // writes the bootloader's UF2 magic (0x57) to GPREGRET and resets, the
+    // same mechanism as the core's 1200-baud touch (serial-only magic 0x4e)
+    // that every USB upload already relies on. The bootloader returns to
+    // the application by itself if USB does not enumerate within 3 s (e.g.
+    // on battery); otherwise it waits for a file, a serial DFU or a reset.
+    // Refused while tracking, so a stray line can't end a set.
+    if (MotionTracker::isTrackingActive()) {
+      Serial.println("UF2 (serial) ignored: stop tracking (STOP) first.");
+    } else {
+      Serial.println("UF2 (serial): restarting into the UF2 bootloader. A drive named XIAO-SENSE "
+                     "appears; copy a .uf2 file onto it to install it.");
+      Serial.flush();
+      delay(200);
+      enterUf2Dfu();
+    }
   } else if (line[0] != '\0') {
     Serial.print("Unknown serial command: ");
     Serial.println(line);

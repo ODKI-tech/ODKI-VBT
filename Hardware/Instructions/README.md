@@ -41,6 +41,8 @@ As soon as this connection is made, **the board powers on** — at this point no
 
 Flash the ODKI VBT firmware now, following the Arduino IDE setup in the [main README](../../README.md#getting-started) (`Seeeduino:nrf52` board package, board `xiaonRF52840Sense`, `Seeed Arduino LSM6DS3` library) and `Firmware/DOCUMENTATION.md` for what each file does.
 
+**Bootloader.** For over-the-air updates from the app to work, the board also needs the OTAFIX bootloader: install it now, while the reset button is still reachable — see [BOOTLOADER.md](BOOTLOADER.md) (method A, a couple of minutes). A finished unit can still be converted later through its USB port (method B there).
+
 Once flashed, the switch actually does something: closed = powered on, open = deep sleep (see the PowerManager chapter in `Firmware/DOCUMENTATION.md`). Slide it open, confirm the board goes quiet, then close it again before continuing.
 
 ## 4. Prepare `case-bottom`: magnets + battery

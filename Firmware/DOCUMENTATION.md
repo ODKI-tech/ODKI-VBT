@@ -324,6 +324,7 @@ Plain newline-terminated text on the USB-serial port, case-insensitive (`pollSer
 | `VERSION` | v3.11.33 | Prints `ODKI VBT firmware 3.12.0 filter=FUSION` (also printed at boot). |
 | `FILTER` | v3.11.33 | Prints `FILTER=FUSION`. Read-only since v3.12.0 (on the 3.11.33 development build `FILTER MADGWICK`/`FILTER FUSION` switched the filter). |
 | `TIMING` / `TIMING RESET` | v3.11.33 | Prints the current `TIMING,` line / zeroes its counters. |
+| `UF2` | v3.12.0 | Restarts into the bootloader's UF2 mode (USB drive `XIAO-SENSE` + serial), for units whose reset button is inside the case: install a `.uf2` file or read `INFO_UF2.TXT` (see [`Hardware/Instructions/BOOTLOADER.md`](../Hardware/Instructions/BOOTLOADER.md)). Calls the Adafruit core's `enterUf2Dfu()` (UF2 magic `0x57` in `GPREGRET`, then reset — the mechanism of the core's 1200-baud touch, with another magic). Refused while tracking. On battery with no USB host, the OTAFIX bootloader returns to the firmware after ~3 s. Not yet tested on hardware. |
 
 Anything else is answered with `Unknown serial command: <line>`. Runtime Config is deliberately BLE-only.
 
@@ -344,7 +345,7 @@ Implements the device's Bluetooth Low Energy peripheral role: one custom service
 
 Battery and firmware version use the *standard* Bluetooth SIG services instead of custom ones (`BLEBas` / Battery Service 0x180F, `BLEDis` / Device Information Service 0x180A), so any generic BLE tool — not just this project's own app — can read them without knowing this project's custom UUIDs.
 
-Buttonless DFU (`BLEDfu`) is a thin bridge: writing to it reboots the device into the bootloader, which exposes the Nordic **Legacy** DFU service (the nRF5 SDK 11 protocol the Adafruit nRF52 bootloader implements) for the actual firmware transfer. That transfer is handled entirely by the bootloader and a DFU-aware app library (e.g. `nordic_dfu` on Flutter) — this file never implements any part of the transfer protocol itself.
+Buttonless DFU (`BLEDfu`) is a thin bridge: writing to it reboots the device into the bootloader, which exposes the Nordic **Legacy** DFU service (the nRF5 SDK 11 protocol the Adafruit nRF52 bootloader implements) for the actual firmware transfer. That transfer is handled entirely by the bootloader and a DFU-aware app library (e.g. `nordic_dfu` on Flutter) — this file never implements any part of the transfer protocol itself. Which bootloader is installed matters: with the one the XIAO ships with, the app's OTA transfer stalls, so ODKI sensors use the community **OTAFIX** variant of the Adafruit bootloader — see [`Hardware/Instructions/BOOTLOADER.md`](../Hardware/Instructions/BOOTLOADER.md).
 
 ### Wire format
 
