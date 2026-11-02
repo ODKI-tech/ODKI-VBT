@@ -334,10 +334,11 @@ void BleServer::begin() {
   snprintf(fwVerStr, sizeof(fwVerStr), "%u.%u.%u",
            FirmwareVersion::MAJOR, FirmwareVersion::MINOR, FirmwareVersion::PATCH);
   deviceInfoService.setFirmwareRev(fwVerStr);
-  // v3.11.33: the build tag (Config.h, e.g. "dev-session") as the Software
-  // Revision String (0x2A28), so a development build is identifiable over BLE
-  // without touching the Firmware Revision String the app parses.
-  deviceInfoService.setSoftwareRev(ODKI_BUILD_TAG);
+  // v3.12.0: the Software Revision String (0x2A28) carries the same
+  // "MAJOR.MINOR.PATCH" (the 3.11.33 development build put its build tag
+  // there; before that it held the board package's version, the
+  // Bluefruit default). The app reads only the Firmware Revision String.
+  deviceInfoService.setSoftwareRev(fwVerStr);
   deviceInfoService.begin();
 
   Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);

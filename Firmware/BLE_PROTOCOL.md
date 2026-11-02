@@ -212,7 +212,7 @@ A write shorter than 38 bytes is ignored entirely (the whole packet, not just th
 
 **Firmware Revision String** (`0x2A26`, Read, variable-length UTF-8): the firmware version as `"MAJOR.MINOR.PATCH"` (e.g. `"3.11.30"`). Set once at boot, static for the whole connection — read it to check whether an OTA update is available before offering one to the user.
 
-**Software Revision String** (`0x2A28`, Read, variable-length UTF-8, since 3.11.33): the build tag — `"release"` for a published build, anything else (e.g. `"dev-session"`) for a development build flashed over USB. Informative only: a client must keep using the Firmware Revision String above for version comparisons (it always stays exactly `"MAJOR.MINOR.PATCH"`), and may ignore this characteristic; older firmware does not set it, so the characteristic holds the Arduino board-package version there (e.g. `"1.1.13"`).
+**Software Revision String** (`0x2A28`, Read, variable-length UTF-8): informative only — a client must use the Firmware Revision String above for version comparisons, and may ignore this one. Since 3.12.0 it carries the same `"MAJOR.MINOR.PATCH"`. Earlier firmware did not set it, so it holds the Arduino board-package version there (e.g. `"1.1.13"`); the unreleased 3.11.33 development build put a build tag there (`"dev-session"`).
 
 ## Firmware update (DFU)
 

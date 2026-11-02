@@ -53,12 +53,9 @@ itself knows nothing about it and receives a plain immediate `START`
 once the count reaches zero, same as with no delay at all. The runtime
 Config (rep direction, phase thresholds, …) remains BLE-only - it
 already has a typed BLE packet, see BleServer.h, a text command would
-just duplicate. The Filter buttons (v3.11.33 dev/session build, firmware
-compiled with ODKI_FILTER_RUNTIME_SELECT) sends `FILTER MADGWICK` /
-`FILTER FUSION` - refused by the firmware while tracking, so pick it
-before START; on connect the tool asks `VERSION` and `FILTER` and shows
-the firmware identity and active filter next to it (a firmware without
-the command answers "Unknown serial command", which is harmless). The
+just duplicate. On connect the tool asks `VERSION` (firmware >= 3.11.33)
+and shows the firmware version and orientation filter next to the port
+(older firmware answers "Unknown serial command", which is harmless). The
 `INFO,` line at REC_START and the `TIMING,` line before REC_STOP land in
 the recorded file like every other line. Every other line the firmware prints
 on serial (battery status, BLE messages, calibration warnings,
@@ -165,7 +162,7 @@ S_COLUMNS = [
 S_COLUMNS_V2 = S_COLUMNS + ["worldAccZRaw", "gyroRawX", "gyroRawY", "gyroRawZ"]
 # v3.11.32 appended accRawX/Y/Z (pre-median body-frame accelerometer).
 S_COLUMNS_V3 = S_COLUMNS_V2 + ["accRawX", "accRawY", "accRawZ"]
-# fw-rawacc-log (proposal) appended accelScaleG and accBiasX/Y/Z.
+# v3.11.33 appended accelScaleG and accBiasX/Y/Z.
 S_COLUMNS_V4 = S_COLUMNS_V3 + ["accelScaleG", "accBiasX", "accBiasY", "accBiasZ"]
 
 R_COLUMNS = [
@@ -181,12 +178,10 @@ P_COLUMNS = ["phaseId", "repNumber", "phaseType", "closeReason", "durationS",
 # and last kept sample).
 P_COLUMNS_V2 = P_COLUMNS + ["t_start_ms", "t_end_ms"]
 
-# v3.11.33 (dev/session build): run-time orientation filter selection and
-# build identity. FILTER=<name> answers the FILTER command; the INFO line
-# (REC_START) and the boot/VERSION banner carry it too.
-FILTER_CHOICES = ["MADGWICK", "FUSION"]
-FILTER_RE = re.compile(r"^(?:FILTER=|INFO,.*filter=)(MADGWICK|FUSION)\b")
-VERSION_RE = re.compile(r"^ODKI VBT firmware (\S+) build=(\S+) filter=(MADGWICK|FUSION)")
+# v3.11.33: firmware identity, printed at boot and on the VERSION command:
+# "ODKI VBT firmware 3.12.0 filter=FUSION" (the 3.11.33 development build
+# also printed build=<tag> and runtimeFilterSelect=<0|1>).
+VERSION_RE = re.compile(r"^ODKI VBT firmware (\S+)(?: build=(\S+))? filter=([A-Z]+)")
 
 # RuntimeConfig defaults (MotionTracker.h) - shown as a reference line only:
 # the actual live-configured value isn't readable over serial (config is
@@ -309,10 +304,9 @@ class SerialReaderThread(threading.Thread):
         self.out_queue.put(("disconnected", None))
 
     def send_command(self, text: str) -> None:
-        """START/STOP/CALIBRATE (v3.11.21/v3.11.22), and FILTER/VERSION on
-        the v3.11.33 dev/session build - see pollSerialCommands() in
-        VBT_Quaternions.ino. Newline-terminated plain text, case-insensitive
-        on the firmware side."""
+        """START/STOP/CALIBRATE (v3.11.21/v3.11.22) and VERSION (v3.11.33) -
+        see pollSerialCommands() in VBT_Quaternions.ino. Newline-terminated
+        plain text, case-insensitive on the firmware side."""
         if self.ser is None or not self.ser.is_open:
             return
         try:
@@ -533,8 +527,8 @@ class LiveMonitorApp(tk.Tk):
 
         # --- device control row: START/STOP over serial (firmware v3.11.21) ---
         # A row of its own: on one row with the connection controls the
-        # window ran wider than a laptop screen and the right end (Filter)
-        # was out of reach.
+        # window ran wider than a laptop screen and its right end was out of
+        # reach.
         dev = tk.Frame(self, bg=BG_VOID, padx=10, pady=3)
         dev.pack(side=tk.TOP, fill=tk.X)
         self.calibrate_btn = ttk.Button(dev, text="CALIBRATE", style="Calibrate.TButton",
@@ -554,18 +548,6 @@ class LiveMonitorApp(tk.Tk):
                                     command=self._send_stop, state="disabled")
         self.stop_btn.pack(side=tk.LEFT, padx=3)
 
-        # --- orientation filter (v3.11.33 dev/session build: FILTER serial command) ---
-        ttk.Label(dev, text="Filter:", style="Muted.TLabel").pack(side=tk.LEFT, padx=(24, 2))
-        self.filter_var = tk.StringVar(value="MADGWICK")
-        # Two radio buttons rather than a Combobox: the ttk Combobox popdown is
-        # unreliable with Tk 9 on macOS (a click on an item may not fire
-        # <<ComboboxSelected>>), so the command never reached the sensor.
-        self.filter_radios = []
-        for name in FILTER_CHOICES:
-            rb = ttk.Radiobutton(dev, text=name.title(), value=name, variable=self.filter_var,
-                                 command=self._send_filter, state="disabled")
-            rb.pack(side=tk.LEFT, padx=(3, 0))
-            self.filter_radios.append(rb)
 
         # --- second toolbar row: chart controls ---
         toolbar2 = tk.Frame(self, bg=BG_VOID, padx=10, pady=3)
@@ -738,10 +720,9 @@ class LiveMonitorApp(tk.Tk):
         self.start_btn.config(state="normal")
         self.start_delay_combo.config(state="readonly")
         self.stop_btn.config(state="normal")
-        self._set_filter_radios("normal")
         self._set_status("connecting...", "#e0a020")
-        # v3.11.33: ask the firmware who it is and which filter is active
-        # (answered by "ODKI VBT firmware ..." and "FILTER=..." lines)
+        # v3.11.33: ask the firmware who it is (answered by the
+        # "ODKI VBT firmware ..." line)
         self.after(1500, self._query_identity)
 
     def _disconnect(self):
@@ -756,7 +737,6 @@ class LiveMonitorApp(tk.Tk):
         self.start_btn.config(state="disabled")
         self.start_delay_combo.config(state="disabled")
         self.stop_btn.config(state="disabled")
-        self._set_filter_radios("disabled")
         self.fw_label.config(text="")
         self._set_status("disconnected", TEXT_SECONDARY)
         self._stop_recording()
@@ -828,21 +808,6 @@ class LiveMonitorApp(tk.Tk):
     def _query_identity(self):
         if self.reader is not None:
             self.reader.send_command("VERSION")
-            self.reader.send_command("FILTER")
-
-    def _set_filter_radios(self, state):
-        for rb in self.filter_radios:
-            rb.config(state=state)
-
-    def _send_filter(self, _event=None):
-        """FILTER MADGWICK / FILTER FUSION (v3.11.33 dev/session build). The
-        firmware refuses it while tracking and answers FILTER=<active> either
-        way, which resets the buttons to what is really active."""
-        if self.reader is None:
-            return
-        choice = self.filter_var.get()
-        self.reader.send_command(f"FILTER {choice}")
-        self._log_console(f">>> FILTER {choice} sent")
 
     def _send_stop(self):
         if self._countdown_job is not None:
@@ -966,13 +931,10 @@ class LiveMonitorApp(tk.Tk):
         if line == "REC_START":
             self._clear_all()
             self._set_status(f"connected ({self.connected_port}) - recording active", VOLT_LIME)
-            self._set_filter_radios("disabled")  # the firmware refuses FILTER while tracking
             self._log_console("=== REC_START ===")
             return
         if line == "REC_STOP":
             self._set_status(f"connected ({self.connected_port}) - session ended", "#e0a020")
-            if self.reader is not None:
-                self._set_filter_radios("normal")
             self._log_console("=== REC_STOP ===")
             return
 
@@ -1004,16 +966,11 @@ class LiveMonitorApp(tk.Tk):
         if row is not None:
             return  # bracket closes aren't drawn live (retroactive correction, see vbt_log_viewer.py) - logged only
 
-        # v3.11.33: firmware identity / active orientation filter
-        m = FILTER_RE.search(line)
-        if m:
-            self.filter_var.set(m.group(1))
-            self._log_console(line)
-            return
+        # v3.11.33: firmware identity (version, orientation filter)
         m = VERSION_RE.search(line)
         if m:
-            self.fw_label.config(text=f"fw {m.group(1)} ({m.group(2)})")
-            self.filter_var.set(m.group(3))
+            build = f" {m.group(2)}" if m.group(2) else ""
+            self.fw_label.config(text=f"fw {m.group(1)}{build} · {m.group(3).title()}")
             self._log_console(line)
             return
 

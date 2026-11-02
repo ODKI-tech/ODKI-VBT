@@ -1,5 +1,5 @@
 // Host-side stand-in for <Arduino.h>: just enough for MotionTracker.cpp /
-// MadgwickAHRS.cpp to compile and run on a PC (see replay.cpp). Serial writes to stdout.
+// FusionOrientation.cpp to compile and run on a PC (see replay.cpp). Serial writes to stdout.
 #pragma once
 #include <cstdint>
 #include <cstdio>

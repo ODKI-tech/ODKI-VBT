@@ -121,8 +121,8 @@ S_COLUMNS_V2 = S_COLUMNS + ["worldAccZRaw", "gyroRawX", "gyroRawY", "gyroRawZ"]
 # s_df always has the full v3.11.32 column set, missing columns are NaN.
 S_COLUMNS_V3 = S_COLUMNS_V2 + ["accRawX", "accRawY", "accRawZ"]
 
-# fw-rawacc-log (proposal) appends the replay state: accelScaleG and the
-# body-frame accBiasVec. 48 fields; s_df always has these columns too.
+# v3.11.33 appends the replay state: accelScaleG and the body-frame
+# accBiasVec. 48 fields; s_df always has these columns too.
 S_COLUMNS_V4 = S_COLUMNS_V3 + ["accelScaleG", "accBiasX", "accBiasY", "accBiasZ"]
 
 R_COLUMNS = [
@@ -241,8 +241,9 @@ def parse_lines(lines):
 
 
 def parse_session_info(lines):
-    """v3.11.33 (dev/session build): the "INFO," line printed after the
-    REC_START headers (firmware, build tag, active orientation filter, ...)
+    """v3.11.33+: the "INFO," line printed after the REC_START headers
+    (firmware version, orientation filter, ...; the 3.11.33 development
+    build also printed its build tag)
     and the "TIMING," line printed just before REC_STOP (micros() cost of the
     filter update and of a whole sample, loop period) as two dicts of
     key -> value strings ({} when the firmware does not print them)."""

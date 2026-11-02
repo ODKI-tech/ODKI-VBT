@@ -15,11 +15,8 @@
 // PURPOSE -- see LICENSE-FIRMWARE for details.
 
 #include "MotionTracker.h"
-#include "Config.h" // ODKI_ORIENTATION_FILTER, ODKI_FILTER_RUNTIME_SELECT
-#if ODKI_FUSION_COMPILED
+#include "Config.h"
 #include "FusionOrientation.h"
-#endif
-#include "MadgwickAHRS.h"
 #include "LSM6DS3.h"
 #include "Wire.h"
 
@@ -759,8 +756,8 @@ namespace {
   // updateOrientationAndAcceleration() an offline replay cannot rebuild from
   // the other columns (accZBias is only accBiasVec projected on gravity, and
   // accelScaleG is printed only by CALIBRATE), so with them a log replays
-  // the orientation filter from the first sample (tools/fusion_feasibility/
-  // on the fusion-feasibility branch reads them when present). Logged on
+  // the orientation filter from the first sample (tools/full_replay/ reads
+  // them when present). Logged on
   // every row, not once at REC_START, so a log cut anywhere still has them.
   //
   // v3.11.33 "dev-session" (branch session-build, NOT a release - flashed over
@@ -779,13 +776,37 @@ namespace {
   //     printTimingLine(). No change to the S/R/B/P rows or to BLE packets
   //     (the Device Information Software Revision String now carries the
   //     build tag).
+  //
+  // v3.12.0 (release): the first released firmware since v3.11.31. It
+  // contains everything in the v3.11.32 and v3.11.33 notes above (neither of
+  // those was released): the log columns (48-field "S," row, P-row
+  // timestamps), the CALIBRATE seed fix, the INFO/TIMING lines. And the
+  // x-io Fusion AHRS (FusionOrientation.cpp,
+  // src/Fusion/, MIT) is the ONLY orientation filter. The Madgwick filter
+  // (MadgwickAHRS.h/.cpp), the build-time ODKI_ORIENTATION_FILTER switch,
+  // the run-time FILTER switch (ODKI_FILTER_RUNTIME_SELECT) and the build
+  // tag are removed. Why Fusion: it is maintained by x-io Technologies and
+  // published under the permissive MIT license, and on the recorded squat
+  // sets of the feasibility study (6 sets, 55 reps, full-chain replay)
+  // Fusion minus Madgwick per-rep mean velocity was +0.004 +- 0.014 m/s - no
+  // more than a
+  // 0.1% change of accelScaleG moves it (see "FusionOrientation" in
+  // DOCUMENTATION.md). Accuracy against a linear encoder is still to be
+  // validated. Fusion settings: x-io's recommended values (gain 0.5,
+  // acceleration rejection 10 deg, recovery timeout 5 s, 500 deg/s range),
+  // startup ramp skipped after CALIBRATE, FusionBias off. The CALIBRATE seed
+  // (v3.11.33 fix) now lives in FusionOrientation::gravitySeed(), unchanged.
+  // Behaviour identical to the 3.11.33 development build with FILTER FUSION:
+  // tools/full_replay/ replays 5 recorded squat sets through both and the
+  // S/R/B/P output is byte-identical. "INFO," and "TIMING," lines kept
+  // (INFO without the build/runtimeSelect fields); the FILTER serial command
+  // is read-only (always FUSION). No change to the BLE packets; the Device
+  // Information Software Revision String now carries the same
+  // "MAJOR.MINOR.PATCH" as the Firmware Revision String.
   // ============================================================================
 
-  // --- Sampling / orientation (Madgwick) ---
+  // --- Sampling ---
   const unsigned long SAMPLE_INTERVAL_MS = 1000UL / 100; // 100Hz
-  const float BETA_BASE = 0.1f;
-  const float TRUST_FLOOR = 0.15f;
-  const float TRUST_FALLOFF = 5.0f;
 
   // --- Anti-shock median filter on the raw accelerometer/gyroscope ---
   const uint8_t MEDIAN_FILTER_SIZE = 5;
@@ -858,32 +879,13 @@ namespace {
   const float G = 9.80665f; // standard gravitational acceleration, m/s^2 - not tunable
 
   LSM6DS3 imu(I2C_MODE, 0x6A);
-#if ODKI_FILTER_RUNTIME_SELECT
-  // v3.11.33 dev/session build (see Config.h): both filters compiled in,
-  // one active at a time (activeFilter), switched with the FILTER serial
-  // command while tracking is stopped - see setOrientationFilter(). Only the
-  // active one is updated; the inactive one is re-seeded with the current
-  // attitude when it takes over.
-  MadgwickAHRS madgwickAhrs;
-  FusionOrientation fusionAhrs;
-  OrientationFilter activeFilter =
-      (ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION) ? OrientationFilter::Fusion
-                                                                   : OrientationFilter::Madgwick;
-#elif ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
-  // Feasibility study build (see Config.h): x-io Fusion instead of Madgwick.
-  // Same quaternion convention and interface, so everything downstream of
-  // the quaternion (gravity split, world-frame acceleration, biases, phase
-  // engine) is unchanged. BETA_BASE/TRUST_FLOOR/TRUST_FALLOFF are not used:
-  // Fusion's acceleration rejection replaces the adaptive beta (see
-  // "Orientation filter selection" in DOCUMENTATION.md).
+  // The orientation filter (v3.12.0: Fusion, the only one - see
+  // FusionOrientation.h and the v3.12.0 version note above).
   FusionOrientation ahrs;
-#else
-  MadgwickAHRS ahrs;
-#endif
 
-  // v3.11.33 (dev/session build): on-device cost of the orientation filter
-  // and of a whole 100Hz sample, measured with micros(). Accumulated since
-  // the last REC_START (or FILTER switch / TIMING RESET) and printed as a
+  // v3.11.33: on-device cost of the orientation filter and of a whole
+  // 100Hz sample, measured with micros(). Accumulated since the last
+  // REC_START (or TIMING RESET) and printed as a
   // "TIMING," line just before REC_STOP and by the TIMING serial command.
   // A few integer adds per sample; no effect on tracking.
   struct LoopTiming {
@@ -993,7 +995,7 @@ namespace {
   // generalization of the previous scalar EMA: that's the special case
   // where the gravity direction never changes). Fixes the SYMPTOM in the
   // velocity domain using only the existing single-position calibration -
-  // it does NOT correct the Madgwick orientation estimate itself (which
+  // it does NOT correct the orientation estimate itself (which
   // would use the same anisotropic raw accelerometer as its reference) -
   // that would need a multi-position, per-axis calibration.
   float accBiasVec[3] = {0, 0, 0};
@@ -2041,7 +2043,7 @@ namespace {
     float gxFiltered, gyFiltered, gzFiltered;
     gyroMedianFilter.filter(gxAvg, gyAvg, gzAvg, gxFiltered, gyFiltered, gzFiltered);
 #ifdef ODKI_HOST_MEDIAN_OVERRIDE
-    // Offline harness only (tools/fusion_feasibility/), never defined in a
+    // Offline harness only (tools/full_replay/), never defined in a
     // firmware build: lets a replay substitute the post-median values a log
     // recorded (when the pre-median accelerometer was not logged) while
     // axRaw/ayRaw/azRaw keep the reconstructed pre-median input.
@@ -2054,25 +2056,8 @@ namespace {
 
     float accMag = sqrt(ax * ax + ay * ay + az * az);
     uint32_t filterT0 = micros();
-#if ODKI_FILTER_RUNTIME_SELECT
-    float q0, q1, q2, q3;
-    if (activeFilter == OrientationFilter::Fusion) {
-      fusionAhrs.update(gx, gy, gz, ax, ay, az, dt);
-      q0 = fusionAhrs.q0(); q1 = fusionAhrs.q1(); q2 = fusionAhrs.q2(); q3 = fusionAhrs.q3();
-    } else {
-      float trust = constrain(1.0f - fabs(accMag - G) / G * TRUST_FALLOFF, TRUST_FLOOR, 1.0f);
-      madgwickAhrs.update(gx, gy, gz, ax, ay, az, dt, BETA_BASE * trust);
-      q0 = madgwickAhrs.q0(); q1 = madgwickAhrs.q1(); q2 = madgwickAhrs.q2(); q3 = madgwickAhrs.q3();
-    }
-#else
-#if ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
     ahrs.update(gx, gy, gz, ax, ay, az, dt);
-#else
-    float trust = constrain(1.0f - fabs(accMag - G) / G * TRUST_FALLOFF, TRUST_FLOOR, 1.0f);
-    ahrs.update(gx, gy, gz, ax, ay, az, dt, BETA_BASE * trust);
-#endif
     float q0 = ahrs.q0(), q1 = ahrs.q1(), q2 = ahrs.q2(), q3 = ahrs.q3();
-#endif
     uint32_t filterUs = micros() - filterT0;
     loopTiming.filterSumUs += filterUs;
     if (filterUs > loopTiming.filterMaxUs) loopTiming.filterMaxUs = filterUs;
@@ -2350,14 +2335,7 @@ void MotionTracker::calibrateOrientation() {
   float meanAx = sumAx / CALIBRATION_SAMPLES;
   float meanAy = sumAy / CALIBRATION_SAMPLES;
   float meanAz = sumAz / CALIBRATION_SAMPLES;
-#if ODKI_FILTER_RUNTIME_SELECT
-  // Both seeded, so whichever is active (or becomes active) starts from the
-  // measured gravity.
-  madgwickAhrs.alignToGravity(meanAx, meanAy, meanAz);
-  fusionAhrs.alignToGravity(meanAx, meanAy, meanAz);
-#else
   ahrs.alignToGravity(meanAx, meanAy, meanAz);
-#endif
   gyroBiasX = sumGx / CALIBRATION_SAMPLES;
   gyroBiasY = sumGy / CALIBRATION_SAMPLES;
   gyroBiasZ = sumGz / CALIBRATION_SAMPLES;
@@ -2419,8 +2397,8 @@ void MotionTracker::setTrackingActive(bool active) {
       // v3.11.32: t_start_ms,t_end_ms appended (see closePhaseFn()).
       Serial.println("P,phaseId,repNumber,phaseType,closeReason,durationS,sampleCount,discarded,reported,"
                       "t_start_ms,t_end_ms");
-      // v3.11.33: build identity and active orientation filter, once per
-      // recording (the filter cannot change while tracking is active).
+      // v3.11.33: firmware identity and orientation filter, once per
+      // recording.
       printInfoLine();
     } else if (wasActive) {
       printTimingLine();
@@ -2433,9 +2411,7 @@ void MotionTracker::setTrackingActive(bool active) {
 void MotionTracker::printInfoLine() {
   Serial.print("INFO,firmware="); Serial.print(FirmwareVersion::MAJOR); Serial.print('.');
   Serial.print(FirmwareVersion::MINOR); Serial.print('.'); Serial.print(FirmwareVersion::PATCH);
-  Serial.print(",build="); Serial.print(ODKI_BUILD_TAG);
   Serial.print(",filter="); Serial.print(orientationFilterName());
-  Serial.print(",runtimeSelect="); Serial.print(ODKI_FILTER_RUNTIME_SELECT);
   Serial.print(",calibrated="); Serial.print(calibrated ? 1 : 0);
   Serial.print(",accelScaleG="); Serial.println(accelScaleG, 5);
 }
@@ -2454,41 +2430,9 @@ void MotionTracker::printTimingLine() {
 
 void MotionTracker::resetLoopTiming() { loopTiming = LoopTiming(); }
 
-OrientationFilter MotionTracker::orientationFilter() {
-#if ODKI_FILTER_RUNTIME_SELECT
-  return activeFilter;
-#elif ODKI_ORIENTATION_FILTER == ODKI_ORIENTATION_FILTER_FUSION
-  return OrientationFilter::Fusion;
-#else
-  return OrientationFilter::Madgwick;
-#endif
-}
-
-const char* MotionTracker::orientationFilterName() {
-  return orientationFilter() == OrientationFilter::Fusion ? "FUSION" : "MADGWICK";
-}
-
-bool MotionTracker::setOrientationFilter(OrientationFilter filter) {
-#if ODKI_FILTER_RUNTIME_SELECT
-  // Refused while tracking: a recording must be made with one filter only
-  // (the INFO line at REC_START names it), and a hand-over in the middle of
-  // a set would be an untested discontinuity.
-  if (trackingActive) return false;
-  if (filter == activeFilter) return true;
-  if (filter == OrientationFilter::Fusion) {
-    // Fusion restarts at Madgwick's current attitude (startup ramp skipped
-    // per its settings, residual bias zeroed): no jump in gravBody.
-    fusionAhrs.setQuaternion(madgwickAhrs.q0(), madgwickAhrs.q1(), madgwickAhrs.q2(), madgwickAhrs.q3());
-  } else {
-    madgwickAhrs.setQuaternion(fusionAhrs.q0(), fusionAhrs.q1(), fusionAhrs.q2(), fusionAhrs.q3());
-  }
-  activeFilter = filter;
-  resetLoopTiming();
-  return true;
-#else
-  return filter == orientationFilter();
-#endif
-}
+// v3.12.0: Fusion is the only orientation filter (kept as a name for the
+// INFO/TIMING lines and the read-only FILTER serial command).
+const char* MotionTracker::orientationFilterName() { return "FUSION"; }
 
 bool MotionTracker::isTrackingActive() { return trackingActive; }
 

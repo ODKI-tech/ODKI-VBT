@@ -7,17 +7,17 @@ Files:     the contents of the upstream Fusion/ directory (*.c, *.h), copied
            unmodified, minus its CMakeLists.txt; LICENSE.md is the upstream
            LICENSE.md.
 License:   MIT, Copyright (c) 2021 x-io Technologies - see LICENSE.md in this
-           folder. These files are NOT covered by LICENSE-FIRMWARE.
+           folder. These files are NOT covered by any other license in
+           this repository.
 
-Why it is here: feasibility study of Fusion's AHRS as an alternative to the
-Madgwick filter (MadgwickAHRS.cpp). It is only used when the firmware is built
-with ODKI_ORIENTATION_FILTER = ODKI_ORIENTATION_FILTER_FUSION (see Config.h and
-FusionOrientation.h); with the default (Madgwick) build the linker drops it and
-the firmware image is byte-identical to a build without this folder.
+Why it is here: since firmware v3.12.0 it is the orientation filter of the
+firmware (wrapped by FusionOrientation.h/.cpp, which are ODKI's own files).
 
 Arduino compiles everything under the sketch's src/ folder recursively, so no
 build setting is needed. To update: replace the files with those of a newer
-release, update this note, and re-run tools/fusion_feasibility/.
+release, update this note, and re-run tools/full_replay/regression.py (and the
+private real-log regression) - a changed output must be explained in a
+MotionTracker.cpp version note and the golden file updated deliberately.
 
 Note on names: Fusion v1.2.x called the gyroscope bias module FusionOffset and
 the rejection timeout recoveryTriggerPeriod (in samples); v1.3.x renamed them FusionBias and

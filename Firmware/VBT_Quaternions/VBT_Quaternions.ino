@@ -26,10 +26,8 @@
                          current state (see StatusLED.h for the color table)
     BatteryMonitor     - reading/percentage of the 3.7V 360mAh LiPo
     PowerManager       - power switch + deep sleep (System OFF)
-    MadgwickAHRS       - orientation filter (quaternion)
-    FusionOrientation  - alternative orientation filter (x-io Fusion, src/Fusion/),
-                         compiled in per Config.h (FILTER serial command on
-                         the v3.11.33 dev/session build)
+    FusionOrientation  - orientation filter (quaternion): wraps the x-io
+                         Fusion AHRS, vendored unmodified in src/Fusion/ (MIT)
     MotionTracker      - IMU reading, world-frame rotation, velocity/
                          position integration, phase/rep identification (see MotionTracker.h)
     BleServer          - custom BLE service (streaming + commands), PERIPHERAL role
@@ -93,8 +91,8 @@
 unsigned long lastBatteryCheckTime = 0;
 uint8_t streamDecimationCounter = 0;
 
-// v3.11.33 (dev/session build): also FILTER [MADGWICK|FUSION], VERSION and
-// TIMING [RESET] - diagnostics/test switches, see handleSerialCommandLine().
+// v3.11.33: also FILTER, VERSION and TIMING [RESET] - diagnostics, see
+// handleSerialCommandLine() (v3.12.0: FILTER is read-only).
 // v3.11.21: minimal non-blocking line reader for START/STOP/CALIBRATE over
 // serial - requested to drive tracking (and, v3.11.22, calibration) from
 // tools/vbt_live_monitor.py (a desktop GUI with no BLE access), without
@@ -108,7 +106,7 @@ uint8_t streamDecimationCounter = 0;
 // instead of Serial.readStringUntil()/parseInt() (which block up to
 // Serial's timeout, default 1s, when a line is incomplete) so a stray or
 // partial command can never stall the 100Hz sampling loop.
-// v3.11.33: 24 (was 16) so "FILTER MADGWICK" and "TIMING RESET" fit with room.
+// v3.11.33: 24 (was 16) so "TIMING RESET" and longer lines fit with room.
 char serialCmdBuf[24];
 uint8_t serialCmdLen = 0;
 
@@ -120,13 +118,12 @@ bool serialCmdEqualsIgnoreCase(const char* a, const char* b) {
   return *a == *b;
 }
 
-// v3.11.33: one line identifying the build (also the VERSION command).
+// v3.11.33: one line identifying the firmware (at boot and on the VERSION
+// command). v3.12.0: without the build tag / runtime-select fields.
 void printBuildIdentity() {
   Serial.print("ODKI VBT firmware "); Serial.print(FirmwareVersion::MAJOR); Serial.print('.');
   Serial.print(FirmwareVersion::MINOR); Serial.print('.'); Serial.print(FirmwareVersion::PATCH);
-  Serial.print(" build="); Serial.print(ODKI_BUILD_TAG);
-  Serial.print(" filter="); Serial.print(MotionTracker::orientationFilterName());
-  Serial.print(" runtimeFilterSelect="); Serial.println(ODKI_FILTER_RUNTIME_SELECT);
+  Serial.print(" filter="); Serial.println(MotionTracker::orientationFilterName());
 }
 
 void handleSerialCommandLine(const char* line) {
@@ -150,23 +147,11 @@ void handleSerialCommandLine(const char* line) {
       BleServer::updateSystemStatus(true, false);
       Serial.println("CALIBRATE (serial): calibration complete.");
     }
-  } else if (serialCmdEqualsIgnoreCase(line, "FILTER MADGWICK") ||
-             serialCmdEqualsIgnoreCase(line, "FILTER FUSION")) {
-    // v3.11.33 (dev/session build, ODKI_FILTER_RUNTIME_SELECT in Config.h):
-    // run-time choice of the orientation filter, so one flash can record
-    // both. Refused while tracking (one filter per recording - the INFO line
-    // at REC_START names it); the new filter takes over the current
-    // attitude, so no re-CALIBRATE is needed. Not persisted: every boot
-    // starts with the compiled default (Madgwick).
-    OrientationFilter want = serialCmdEqualsIgnoreCase(line, "FILTER FUSION") ? OrientationFilter::Fusion
-                                                                              : OrientationFilter::Madgwick;
-    if (MotionTracker::isTrackingActive()) {
-      Serial.println("FILTER (serial) ignored: stop tracking (STOP) before changing the filter.");
-    } else if (!MotionTracker::setOrientationFilter(want)) {
-      Serial.println("FILTER (serial) ignored: this build has only one orientation filter.");
-    }
-    Serial.print("FILTER="); Serial.println(MotionTracker::orientationFilterName());
   } else if (serialCmdEqualsIgnoreCase(line, "FILTER")) {
+    // v3.11.33 switched the orientation filter at run time on the
+    // development build; v3.12.0 has only Fusion, so FILTER just reports it
+    // (kept so tools that send it still get an answer). "FILTER <name>" is
+    // answered below as an unknown command.
     Serial.print("FILTER="); Serial.println(MotionTracker::orientationFilterName());
   } else if (serialCmdEqualsIgnoreCase(line, "VERSION")) {
     printBuildIdentity();

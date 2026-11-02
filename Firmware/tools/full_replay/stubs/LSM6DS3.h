@@ -1,4 +1,4 @@
-// Host-side stand-in for the Seeed LSM6DS3 driver used by the fusion_feasibility
+// Host-side stand-in for the Seeed LSM6DS3 driver used by the full_replay
 // harness (harness.cpp): the status register always reads "no new sample", so
 // FastSampleAccumulator::harvest() falls back to readFloat*(), which return the
 // values the harness injects for the current 10ms tick (accelerometer in g,

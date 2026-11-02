@@ -17,14 +17,15 @@
 
 """
 Reading a debug log and reconstructing, sample by sample, the IMU input of
-the orientation filter (see "Orientation filter selection" in
-Firmware/DOCUMENTATION.md for the derivation).
+the orientation filter, for the full-chain replay (harness.cpp, see
+full_replay.py and "tools/full_replay/" in Firmware/DOCUMENTATION.md for the
+derivation).
 
 Log layouts accepted (fields after "S,"):
   37  firmware <= 3.11.27       no pre-median taps
   41  firmware 3.11.28-3.11.31  + worldAccZRaw, gyroRawX/Y/Z
   44  firmware 3.11.32          + accRawX/Y/Z (pre-median body-frame accelerometer)
-  48  branch fw-rawacc-log      + accelScaleG, accBiasX/Y/Z (state the replay needs)
+  48  firmware >= 3.11.33       + accelScaleG, accBiasX/Y/Z (state the replay needs)
 
 The first 41 fields are parsed by vbt_log_viewer.py (imported, never copied);
 the trailing ones here.
@@ -162,7 +163,7 @@ def load_log(path, session=None):
     d["n_sessions"] = len(sessions)
     s = d["s"]
     if s["accelScaleG"].notna().all():
-        d["layout"] = "v4 (fw-rawacc-log: accRaw + accelScaleG/accBias)"
+        d["layout"] = "v4 (>= 3.11.33: accRaw + accelScaleG/accBias)"
     elif s["accRawX"].notna().all():
         d["layout"] = "v3 (3.11.32: accRaw)"
     elif s["worldAccZRaw"].notna().all():
@@ -188,7 +189,9 @@ def build_inputs(d, scale, gyro_mode="auto"):
       v2:    median output acc_med = linAcc + gravBody(q_log) * accelScaleG (exact up to
              log rounding); pre-median input approximated as acc_med + (worldAccZRaw -
              worldAccZ) * gravBody(q_log): the raw-minus-median difference is known only
-             along the logged vertical. The median output is forced to acc_med.
+             along the logged vertical (exact for the filter that recorded the log, an
+             approximation of second order in the attitude difference for another one).
+             The median output is forced to acc_med.
       v1:    acc_med as above, used as both input and (forced) median output.
     gyroscope: gyroRaw (pre-median, pre-bias) through the firmware's median when the log
     has it ("raw"), else the logged gyroFiltered forced as the median output ("filtered")."""

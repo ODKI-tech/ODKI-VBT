@@ -1,5 +1,5 @@
 {
-  "version": "3.11.32",
-  "url": "https://raw.githubusercontent.com/ODKI-tech/ODKI-VBT/refs/heads/main/Firmware/firmware-release/vbt_firmware_3.11.32_OTA.zip",
-  "notes": "Logging-only release for the validation study against a linear encoder. The USB serial log gains a start and end timestamp on each phase row, so reps can be paired exactly with a reference device, and the raw accelerometer readings on each sample row. No change to the tracking algorithm or to the Bluetooth protocol: reps and values are the same as 3.11.31, and every app version keeps working."
+  "version": "3.11.31",
+  "url": "https://raw.githubusercontent.com/ODKI-tech/ODKI-VBT/refs/heads/main/Firmware/firmware-release/vbt_firmware_3.11.31_OTA.zip",
+  "notes": "Fixes the sensor disconnecting a few seconds after connecting on some Android tablets (observed on a Samsung Galaxy Tab A8). Those devices cannot send a Bluetooth write longer than 20 bytes, so the 38-byte Config write the app sends on connect never arrived and the link timed out. The Config characteristic now also accepts the same packet in two chunks of up to 20 bytes; the single 38-byte write keeps working, so older app versions and third-party apps are unaffected. No change to the tracking algorithm. Companion app 1.0.3 is recommended: it sends the config in chunks to this firmware and skips the write entirely when the sensor already has the same settings."
 }
