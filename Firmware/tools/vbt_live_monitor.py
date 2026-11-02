@@ -53,7 +53,7 @@ itself knows nothing about it and receives a plain immediate `START`
 once the count reaches zero, same as with no delay at all. The runtime
 Config (rep direction, phase thresholds, …) remains BLE-only - it
 already has a typed BLE packet, see BleServer.h, a text command would
-just duplicate. The Filter dropdown (v3.11.33 dev/session build, firmware
+just duplicate. The Filter buttons (v3.11.33 dev/session build, firmware
 compiled with ODKI_FILTER_RUNTIME_SELECT) sends `FILTER MADGWICK` /
 `FILTER FUSION` - refused by the firmware while tracking, so pick it
 before START; on connect the tool asks `VERSION` and `FILTER` and shows
@@ -544,10 +544,15 @@ class LiveMonitorApp(tk.Tk):
         # --- orientation filter (v3.11.33 dev/session build: FILTER serial command) ---
         ttk.Label(top, text="Filter:", style="Muted.TLabel").pack(side=tk.LEFT, padx=(12, 2))
         self.filter_var = tk.StringVar(value="MADGWICK")
-        self.filter_combo = ttk.Combobox(top, textvariable=self.filter_var, state="disabled", width=10,
-                                         values=FILTER_CHOICES)
-        self.filter_combo.pack(side=tk.LEFT, padx=(3, 3))
-        self.filter_combo.bind("<<ComboboxSelected>>", self._send_filter)
+        # Two radio buttons rather than a Combobox: the ttk Combobox popdown is
+        # unreliable with Tk 9 on macOS (a click on an item may not fire
+        # <<ComboboxSelected>>), so the command never reached the sensor.
+        self.filter_radios = []
+        for name in FILTER_CHOICES:
+            rb = ttk.Radiobutton(top, text=name.title(), value=name, variable=self.filter_var,
+                                 command=self._send_filter, state="disabled")
+            rb.pack(side=tk.LEFT, padx=(3, 0))
+            self.filter_radios.append(rb)
         self.fw_label = ttk.Label(top, text="", style="Muted.TLabel")
         self.fw_label.pack(side=tk.LEFT, padx=(6, 3))
 
@@ -725,7 +730,7 @@ class LiveMonitorApp(tk.Tk):
         self.start_btn.config(state="normal")
         self.start_delay_combo.config(state="readonly")
         self.stop_btn.config(state="normal")
-        self.filter_combo.config(state="readonly")
+        self._set_filter_radios("normal")
         self._set_status("connecting...", "#e0a020")
         # v3.11.33: ask the firmware who it is and which filter is active
         # (answered by "ODKI VBT firmware ..." and "FILTER=..." lines)
@@ -743,7 +748,7 @@ class LiveMonitorApp(tk.Tk):
         self.start_btn.config(state="disabled")
         self.start_delay_combo.config(state="disabled")
         self.stop_btn.config(state="disabled")
-        self.filter_combo.config(state="disabled")
+        self._set_filter_radios("disabled")
         self.fw_label.config(text="")
         self._set_status("disconnected", TEXT_SECONDARY)
         self._stop_recording()
@@ -817,10 +822,14 @@ class LiveMonitorApp(tk.Tk):
             self.reader.send_command("VERSION")
             self.reader.send_command("FILTER")
 
+    def _set_filter_radios(self, state):
+        for rb in self.filter_radios:
+            rb.config(state=state)
+
     def _send_filter(self, _event=None):
         """FILTER MADGWICK / FILTER FUSION (v3.11.33 dev/session build). The
         firmware refuses it while tracking and answers FILTER=<active> either
-        way, which resets the dropdown to what is really active."""
+        way, which resets the buttons to what is really active."""
         if self.reader is None:
             return
         choice = self.filter_var.get()
@@ -949,10 +958,13 @@ class LiveMonitorApp(tk.Tk):
         if line == "REC_START":
             self._clear_all()
             self._set_status(f"connected ({self.connected_port}) - recording active", VOLT_LIME)
+            self._set_filter_radios("disabled")  # the firmware refuses FILTER while tracking
             self._log_console("=== REC_START ===")
             return
         if line == "REC_STOP":
             self._set_status(f"connected ({self.connected_port}) - session ended", "#e0a020")
+            if self.reader is not None:
+                self._set_filter_radios("normal")
             self._log_console("=== REC_STOP ===")
             return
 
