@@ -21,7 +21,7 @@ Firmware and tools up to and including v3.11.31 were released under the GNU GPL 
 
 | | |
 |---|---|
-| Firmware | v3.11.31, updates over the air from the app |
+| Firmware | v3.12.0 — the version this branch prepares, not yet released (latest published: v3.11.31); updates over the air from the app |
 | Android app | 1.0.3, APK in [Apps/Android/](Apps/Android/); Google Play test coming |
 | iOS app | not published yet |
 | Accuracy | **not yet validated** (see [Validation](#validation)) |
@@ -41,9 +41,13 @@ The sensor fuses its onboard accelerometer and gyroscope into a stable orientati
 
 1. **Build the hardware.** The [bill of materials](Hardware/BOM/), [CAD/mechanical design](Hardware/CAD/), and [step-by-step assembly instructions](Hardware/Instructions/) are all published — start there.
 2. **Flash the firmware.** Open `Firmware/VBT_Quaternions/VBT_Quaternions.ino` in the Arduino IDE with the `Seeeduino:nrf52` board package installed (board: `xiaonRF52840Sense`) and the `Seeed Arduino LSM6DS3` library, then upload. See [`Firmware/DOCUMENTATION.md`](Firmware/DOCUMENTATION.md) for what each file does and how the algorithm works.
-3. **Install the OTAFIX bootloader.** Over-the-air updates from the app need the community OTAFIX variant of the XIAO's bootloader — see [`Hardware/Instructions/BOOTLOADER.md`](Hardware/Instructions/BOOTLOADER.md) for why, how to check which one a board has, and how to install it, also on a closed unit without a reachable reset button.
+3. **Install the OTAFIX bootloader, before the first OTA update.** Over-the-air updates from the app need the community OTAFIX variant of the XIAO's bootloader — see [`Hardware/Instructions/BOOTLOADER.md`](Hardware/Instructions/BOOTLOADER.md) for why, how to check which one a board has, and how to install it, also on a closed unit without a reachable reset button.
 4. **Install the app.** See [Apps/](Apps/) for your platform — currently an Android APK is available to download; iOS and Windows are not yet published.
 5. **Calibrate and lift.** Power on, connect over Bluetooth, calibrate the sensor while it's still, then start tracking a set.
+
+## Known limitations
+
+- **Sample rate about 95 Hz instead of 100 Hz.** The sampler restarts its 10 ms interval from the current time at each sample, so real periods are 10–12 ms. Each sample integrates its true `dt`, so velocities are not biased by it, but windows counted in samples last about 5 % longer than nominal. A fix is planned for a later release — details in [`Firmware/DOCUMENTATION.md`](Firmware/DOCUMENTATION.md#known-limitations).
 
 ## Validation
 

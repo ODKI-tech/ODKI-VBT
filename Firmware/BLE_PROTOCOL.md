@@ -118,10 +118,12 @@ Retroactively drift-corrected velocity for a time range that was already streame
 | 4 | 2 | `totalChunks` | uint16 | direct | how many chunks this bracket was split into |
 | 6 | 1 | `sampleCount` | uint8 | direct | how many of the 20 slots below are valid |
 | 7 | 4 | `startTimestampMs` | uint32 | direct | ms — timestamp of `correctedVelZ[0]`, same clock/scale as `Stream::timestampMs` |
-| 11 | 2 | `sampleIntervalMs` | uint16 | direct | ms between consecutive samples (nominally 10ms at 100Hz) |
+| 11 | 2 | `sampleIntervalMs` | uint16 | direct | ms between consecutive samples: always 10 (nominal 100Hz); the real spacing is 10–12 ms, see the note below |
 | 13 | 40 | `correctedVelZ[0..19]` | int16 × 20 | ÷1000 | m/s each |
 
 Only the first `sampleCount` entries of `correctedVelZ` are meaningful — a bracket's final chunk is usually partial, and the remaining slots are zero-padding to be ignored.
+
+**Known limitation (up to and including 3.12.0):** the firmware actually samples at about 95Hz (periods of 10–12 ms, see [Known limitations](DOCUMENTATION.md#known-limitations)), while `sampleIntervalMs` is the nominal 10. A chunk's samples therefore span about 5 % more time than `sampleCount × sampleIntervalMs`, so a curve redrawn with the nominal spacing comes out slightly compressed in time. A fix is planned for a later release.
 
 Python decode: `struct.unpack("<HHHBIH20h", data)`.
 
@@ -210,9 +212,9 @@ A write shorter than 38 bytes is ignored entirely (the whole packet, not just th
 
 ## Device Information Service (standard, `0x180A`)
 
-**Firmware Revision String** (`0x2A26`, Read, variable-length UTF-8): the firmware version as `"MAJOR.MINOR.PATCH"` (e.g. `"3.11.30"`). Set once at boot, static for the whole connection — read it to check whether an OTA update is available before offering one to the user.
+**Firmware Revision String** (`0x2A26`, Read, variable-length UTF-8): the firmware version as `"MAJOR.MINOR.PATCH"` (e.g. `"3.12.0"`). Set once at boot, static for the whole connection — read it to check whether an OTA update is available before offering one to the user.
 
-**Software Revision String** (`0x2A28`, Read, variable-length UTF-8): informative only — a client must use the Firmware Revision String above for version comparisons, and may ignore this one. Since 3.12.0 it carries the same `"MAJOR.MINOR.PATCH"`. Earlier firmware did not set it, so it holds the Arduino board-package version there (e.g. `"1.1.13"`); the unreleased 3.11.33 development build put a build tag there (`"dev-session"`).
+**Software Revision String** (`0x2A28`, Read, variable-length UTF-8): informative only — a client must use the Firmware Revision String above for version comparisons, and may ignore this one. Since 3.12.0 it carries the same `"MAJOR.MINOR.PATCH"`. Earlier firmware did not set it, so it holds the Arduino board-package version there (e.g. `"1.1.13"`).
 
 ## Firmware update (DFU)
 
