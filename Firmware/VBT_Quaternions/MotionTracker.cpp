@@ -1,18 +1,17 @@
-// Part of the ODKI VBT Firmware
-// Copyright (C) 2026 Lodovico Cortelazzo
+// Part of the ODKI VBT tracking engine
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Required Notice: Copyright (c) 2026 Lodovico Cortelazzo (ODKI)
 //
-// Licensed under the GNU General Public License, Version 3 (this
-// specific version only, not "or any later version"), modified by the
-// Commons Clause License Condition v1.0 -- see LICENSE-FIRMWARE in the
-// repository root for the full text of both. In short: you may use,
-// study, modify, and share this file (including a modified version) for
-// non-commercial purposes; you may not sell it, or a product/service
-// substantially derived from it, without a separate agreement with the
-// copyright holder.
+// Source-available, not open source: licensed under the PolyForm
+// Noncommercial License 1.0.0 with the additional permissions in
+// LICENSE-ENGINE in the repository root (full text there). Free for
+// personal, hobby and study use, for research for the benefit of public
+// knowledge, and for use by universities, public research organisations,
+// charities and the other organisations listed in the license. Any other
+// use, including commercial use or selling devices or kits that contain
+// this code, needs a commercial licence from ODKI: contact@odki.tech.
 //
-// This program is distributed WITHOUT ANY WARRANTY, without even the
-// implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
-// PURPOSE -- see LICENSE-FIRMWARE for details.
+// Provided as is, without any warranty -- see LICENSE-ENGINE.
 
 #include "MotionTracker.h"
 #include "Config.h"

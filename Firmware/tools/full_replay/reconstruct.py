@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-# Part of the ODKI VBT Firmware
-# Copyright (C) 2026 Lodovico Cortelazzo
+# Part of the ODKI VBT tools
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Lodovico Cortelazzo (ODKI)
 #
-# Licensed under the GNU General Public License, Version 3 (this
-# specific version only, not "or any later version"), modified by the
-# Commons Clause License Condition v1.0 -- see LICENSE-FIRMWARE in the
-# repository root for the full text of both. In short: you may use,
-# study, modify, and share this file (including a modified version) for
-# non-commercial purposes; you may not sell it, or a product/service
-# substantially derived from it, without a separate agreement with the
-# copyright holder.
-#
-# This program is distributed WITHOUT ANY WARRANTY, without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
-# PURPOSE -- see LICENSE-FIRMWARE for details.
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain a
+# copy of the License in LICENSE-APACHE in the repository root or at
+# http://www.apache.org/licenses/LICENSE-2.0. Unless required by applicable
+# law or agreed to in writing, software distributed under the License is
+# distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied. See the License for the specific
+# language governing permissions and limitations under the License.
 
 """
 Reading a debug log and reconstructing, sample by sample, the IMU input of

@@ -1,0 +1,204 @@
+ODKI VBT — Tracking Engine License
+==================================
+
+Required Notice: Copyright (c) 2026 Lodovico Cortelazzo (ODKI)
+
+This file covers the ODKI VBT tracking engine:
+
+  - Firmware/VBT_Quaternions/MotionTracker.cpp and MotionTracker.h, and
+  - every other file whose header says it is under this license — today
+    Firmware/tools/host_replay/replay.cpp and
+    Firmware/tools/full_replay/harness.cpp, which compile the engine into
+    an offline replay tool by #including MotionTracker.cpp.
+
+The engine is source-available — not open source — under the PolyForm
+Noncommercial License 1.0.0, reproduced in full at the end of this file
+(https://polyformproject.org/licenses/noncommercial/1.0.0), together with
+the additional permissions below. The rest of the firmware and the tools
+are open source under the Apache License 2.0 (see LICENSE-APACHE and the
+overview in LICENSE); third-party code keeps its own license (see
+THIRD_PARTY_NOTICES.md).
+
+The licensor is Lodovico Cortelazzo, trading as ODKI. No separate legal
+entity has been formed yet; if an ODKI company is incorporated, these
+rights are intended to be assigned to it in writing, and "ODKI" below then
+includes it. Licences already granted stay valid.
+
+-----------------------------------------------------------------------
+In plain English (a summary only — the license text below, with the
+additional permissions and the licensor's understanding that follow
+this summary, is what governs)
+-----------------------------------------------------------------------
+
+- Free for personal, hobby and study use, for research for the benefit
+  of public knowledge, and for use by universities, public research
+  organisations, charities and the other organisations the license
+  lists — those organisations whatever the source of their funding. You
+  may build the sensor, run the engine, read it, change it and share it
+  for those purposes.
+- Research carried out by a company, or a company's use of research
+  results that contain the engine, is commercial use.
+- Any commercial use — for example integrating the engine, or code based
+  on it, into a product or service, or selling devices, boards or kits
+  that run it — needs a commercial licence from ODKI: contact@odki.tech.
+- Units from ODKI may be used for any purpose, including professional
+  coaching or use in a gym (additional permission 1 below).
+- Videos, articles, tutorials, reviews and courses about the project are
+  welcome, also monetised ones (additional permission 2 below).
+- Firmware versions up to and including v3.11.31 were released under
+  different terms (see "Earlier versions" below); this license applies
+  to v3.12.0 and later.
+- The "ODKI" name and logo are not licensed by this file (see
+  TRADEMARKS.md).
+- What is protected is this code. The ideas and the algorithm described
+  in Firmware/DOCUMENTATION.md are not: anyone may write their own
+  implementation.
+
+-----------------------------------------------------------------------
+Additional permissions
+-----------------------------------------------------------------------
+
+In addition to the license below, the licensor grants:
+
+1. Units from ODKI. Anyone who lawfully owns or uses a sensor unit sold
+   or otherwise supplied by ODKI — including a unit bought second-hand, a
+   unit lent for evaluation or demonstration, a replacement unit, and a
+   unit sold by a reseller or by a licensee authorised by ODKI in writing
+   — permission to use the firmware installed on that unit, the updates
+   ODKI publishes for it, and the tools in Firmware/tools/ with that unit
+   and with data recorded by it, for any purpose, including commercial
+   purposes such as professional coaching or use in a gym, including
+   making the copies needed for that use (for example installing an
+   update or installing the tools on a computer). The permission follows
+   the unit: it passes to each later lawful owner or user of that unit.
+   To the extent required by the licenses of third-party libraries
+   included in the firmware (such as the GNU Lesser General Public
+   License 2.1, see THIRD_PARTY_NOTICES.md), owners may also modify the
+   firmware for their own use on that unit and reverse-engineer it to
+   debug such modifications. Distributing the software, or running it on
+   other hardware, remains subject to the license below.
+
+2. Content about the project. Anyone may make, publish and monetise
+   videos, articles, tutorials, reviews and courses about this project,
+   and show and quote reasonable excerpts of the source code in them,
+   provided they do not distribute the software itself for a fee.
+
+-----------------------------------------------------------------------
+Licensor's understanding of the Distribution License
+-----------------------------------------------------------------------
+
+Making, selling or otherwise distributing copies of the software —
+modified or not, on its own or installed on a board, kit or device — for
+a fee, or as part of a product or service offered commercially, is not
+use for a permitted purpose, and the Distribution License below does not
+cover copies made for such a purpose. A commercial licence is available
+from ODKI: contact@odki.tech.
+
+-----------------------------------------------------------------------
+Earlier versions
+-----------------------------------------------------------------------
+
+Firmware and tools up to and including v3.11.31 (the state of the
+repository's main branch at commit 7c8d753, tagged v3.11.31-last-gpl)
+were released under the GNU General Public License v3.0 modified by the
+Commons Clause License Condition v1.0. Copies received under those terms
+remain under those terms; they do not apply to v3.12.0 or later. The
+over-the-air package of each release states which terms apply to it
+(Firmware/firmware-release/README.md).
+
+-----------------------------------------------------------------------
+Notes
+-----------------------------------------------------------------------
+
+Contributions to the official repository are additionally governed by
+the Contributor License Agreement in CONTRIBUTING.md.
+
+Firmware binaries built from this repository combine the engine (this
+license), the Apache-2.0 files, the vendored x-io Fusion library (MIT)
+and third-party libraries from the Arduino board package, each under its
+own license — see THIRD_PARTY_NOTICES.md. This license does not apply to
+them, and nothing in it restricts the rights their licenses give you.
+
+Consistency with LICENSE-HARDWARE: the hardware design files are under
+CC BY-NC-SA 4.0. Both licenses are noncommercial, but their definitions
+are not worded identically. If you are unsure whether something you want
+to do is allowed, ask (contact@odki.tech) rather than relying on a gap
+between the two.
+
+=======================================================================
+Full text of the PolyForm Noncommercial License 1.0.0
+=======================================================================
+
+# PolyForm Noncommercial License 1.0.0
+
+<https://polyformproject.org/licenses/noncommercial/1.0.0>
+
+## Acceptance
+
+In order to get any license under these terms, you must agree to them as both strict obligations and conditions to all your licenses.
+
+## Copyright License
+
+The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose.  However, you may only distribute the software according to [Distribution License](#distribution-license) and make changes or new works based on the software according to [Changes and New Works License](#changes-and-new-works-license).
+
+## Distribution License
+
+The licensor grants you an additional copyright license to distribute copies of the software.  Your license to distribute covers distributing the software with changes and new works permitted by [Changes and New Works License](#changes-and-new-works-license).
+
+## Notices
+
+You must ensure that anyone who gets a copy of any part of the software from you also gets a copy of these terms or the URL for them above, as well as copies of any plain-text lines beginning with `Required Notice:` that the licensor provided with the software.  For example:
+
+> Required Notice: Copyright Yoyodyne, Inc. (http://example.com)
+
+## Changes and New Works License
+
+The licensor grants you an additional copyright license to make changes and new works based on the software for any permitted purpose.
+
+## Patent License
+
+The licensor grants you a patent license for the software that covers patent claims the licensor can license, or becomes able to license, that you would infringe by using the software.
+
+## Noncommercial Purposes
+
+Any noncommercial purpose is a permitted purpose.
+
+## Personal Uses
+
+Personal use for research, experiment, and testing for the benefit of public knowledge, personal study, private entertainment, hobby projects, amateur pursuits, or religious observance, without any anticipated commercial application, is use for a permitted purpose.
+
+## Noncommercial Organizations
+
+Use by any charitable organization, educational institution, public research organization, public safety or health organization, environmental protection organization, or government institution is use for a permitted purpose regardless of the source of funding or obligations resulting from the funding.
+
+## Fair Use
+
+You may have "fair use" rights for the software under the law. These terms do not limit them.
+
+## No Other Rights
+
+These terms do not allow you to sublicense or transfer any of your licenses to anyone else, or prevent the licensor from granting licenses to anyone else.  These terms do not imply any other licenses.
+
+## Patent Defense
+
+If you make any written claim that the software infringes or contributes to infringement of any patent, your patent license for the software granted under these terms ends immediately. If your company makes such a claim, your patent license ends immediately for work on behalf of your company.
+
+## Violations
+
+The first time you are notified in writing that you have violated any of these terms, or done anything with the software not covered by your licenses, your licenses can nonetheless continue if you come into full compliance with these terms, and take practical steps to correct past violations, within 32 days of receiving notice.  Otherwise, all your licenses end immediately.
+
+## No Liability
+
+***As far as the law allows, the software comes as is, without any warranty or condition, and the licensor will not be liable to you for any damages arising out of these terms or the use or nature of the software, under any kind of legal claim.***
+
+## Definitions
+
+The **licensor** is the individual or entity offering these terms, and the **software** is the software the licensor makes available under these terms.
+
+**You** refers to the individual or entity agreeing to these terms.
+
+**Your company** is any legal entity, sole proprietorship, or other kind of organization that you work for, plus all organizations that have control over, are under the control of, or are under common control with that organization.  **Control** means ownership of substantially all the assets of an entity, or the power to direct its management and policies by vote, contract, or otherwise.  Control can be direct or indirect.
+
+**Your licenses** are all the licenses granted to you for the software under these terms.
+
+**Use** means anything you do with the software requiring one of your licenses.

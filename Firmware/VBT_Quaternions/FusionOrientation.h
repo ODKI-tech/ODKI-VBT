@@ -1,23 +1,19 @@
-// Part of the ODKI VBT Firmware
-// Copyright (C) 2026 Lodovico Cortelazzo
+// Part of the ODKI VBT firmware
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Lodovico Cortelazzo (ODKI)
 //
-// Licensed under the GNU General Public License, Version 3 (this
-// specific version only, not "or any later version"), modified by the
-// Commons Clause License Condition v1.0 -- see LICENSE-FIRMWARE in the
-// repository root for the full text of both. In short: you may use,
-// study, modify, and share this file (including a modified version) for
-// non-commercial purposes; you may not sell it, or a product/service
-// substantially derived from it, without a separate agreement with the
-// copyright holder.
+// Licensed under the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License. You may obtain a
+// copy of the License in LICENSE-APACHE in the repository root or at
+// http://www.apache.org/licenses/LICENSE-2.0. Unless required by applicable
+// law or agreed to in writing, software distributed under the License is
+// distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied. See the License for the specific
+// language governing permissions and limitations under the License.
 //
-// This program is distributed WITHOUT ANY WARRANTY, without even the
-// implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
-// PURPOSE -- see LICENSE-FIRMWARE for details.
-//
-// This file wraps the x-io Technologies Fusion library (src/Fusion/,
-// MIT license, Copyright (c) 2021 x-io Technologies - see
-// src/Fusion/LICENSE.md). The Fusion files themselves are NOT covered by
-// LICENSE-FIRMWARE; only this wrapper is.
+// This file wraps the x-io Technologies Fusion library, vendored unmodified
+// in src/Fusion/ under the MIT license (Copyright (c) 2021 x-io
+// Technologies - see src/Fusion/LICENSE.md and THIRD_PARTY_NOTICES.md).
 
 #ifndef FUSION_ORIENTATION_H
 #define FUSION_ORIENTATION_H

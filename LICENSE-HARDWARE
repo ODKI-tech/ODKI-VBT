@@ -2,23 +2,20 @@ ODKI VBT — Hardware License
 =============================
 
 This covers the hardware design files in this repository: the bill of
-materials, CAD/mechanical/PCB source files, and assembly instructions
-under Hardware/.
+materials, CAD/mechanical source files, and the assembly and bootloader
+instructions under Hardware/.
 
 License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0
 International (CC BY-NC-SA 4.0). Full legal text below; human-readable
 summary at https://creativecommons.org/licenses/by-nc-sa/4.0/.
 
-Copyright holder: Lodovico Cortelazzo
+Copyright holder: Lodovico Cortelazzo (ODKI)
 
-Note: "ODKI" throughout this document currently refers to Lodovico
-Cortelazzo, trading as ODKI — no separate legal entity has been formed
-yet. The copyright holder above is the sole current holder of the
-rights this license grants and restricts. If and when an ODKI company
-is incorporated, these rights are intended to be formally assigned to
-it; until that happens, references elsewhere to "ODKI" retaining or
-exercising rights (e.g. the right to sell an assembled sensor) mean
-Lodovico Cortelazzo personally.
+Note: "ODKI" throughout this document refers to Lodovico Cortelazzo,
+trading as ODKI — no separate legal entity has been formed yet. The
+copyright holder above holds the rights this license grants. If an ODKI
+company is incorporated, these rights are intended to be assigned to it
+in writing; licences already granted stay valid.
 
 -----------------------------------------------------------------------
 In plain language (a summary only — the full legal text below is what
@@ -26,36 +23,35 @@ actually governs)
 -----------------------------------------------------------------------
 
 You may download these design files, 3D-print or fabricate them, and
-assemble your own sensor for personal use — including at a university,
-for research, as long as the resulting device isn't sold. You may also
-share your own modified version of these files publicly, as long as:
+assemble your own sensor — for yourself, or at a university for
+research — and share your own modified version of these files publicly,
+as long as:
 
   - you credit this project ("Attribution"),
-  - your use isn't commercial ("NonCommercial" — you may not sell a
-    device, kit, or file built from this design, or a modified version
-    of it, whether you're an individual, a university, or a company),
+  - your use isn't commercial ("NonCommercial" — you may not use these
+    files, or copies or adaptations of them, primarily for commercial
+    advantage: for example, selling the files, prints made from them, or
+    kits or devices that include such prints),
   - and you release your modified files under this same license
     ("ShareAlike") — so improvements can flow back to everyone, the same
     way you benefited from this one.
 
-Only ODKI may sell an assembled, ODKI-branded sensor built from this (or
-a compatible) design. The "ODKI" name and logo are intended to be
-separately protected as a trademark (registration pending, see the note
-above) — that protection, once in place, is independent of this file
-license.
+This license covers the design files only. It does not license the ODKI
+name or logo: only ODKI may sell sensors under the ODKI name (see
+TRADEMARKS.md). The name is not a registered trademark at the time of
+writing.
 
-Note on consistency with LICENSE-FIRMWARE: this hardware license's
-"NonCommercial" restriction (CC BY-NC-SA 4.0) and the firmware's "Sell"
-restriction (Commons Clause, see LICENSE-FIRMWARE) are two different
-legal definitions, drawn from two different licensing frameworks, and
-are not worded identically — a use that is fine under one definition is
-not automatically fine under the other. The shared intent behind both,
-regardless of the exact wording of either: nobody other than the
-copyright holder may sell a device, kit, or product built from this
-project's hardware design files or firmware, or from a modified version
-of them. If you're unsure whether something you want to do is allowed,
-ask before doing it, rather than relying on a gap between the two
-definitions.
+Note on consistency with LICENSE-ENGINE: this hardware license's
+"NonCommercial" condition (CC BY-NC-SA 4.0) and the tracking engine's
+noncommercial license (PolyForm Noncommercial 1.0.0, see
+LICENSE-ENGINE) are two different legal definitions, drawn from two
+different licensing frameworks, and are not worded identically — a use
+that is fine under one is not automatically fine under the other. The
+rest of the firmware and the tools are under the Apache License 2.0
+(see LICENSE). If you're unsure whether something you want to do is
+allowed, ask (contact@odki.tech) before doing it, rather than relying on
+a gap between the two definitions. A commercial licence for the design
+files is available from ODKI.
 
 =======================================================================
 Full legal text of CC BY-NC-SA 4.0, referenced above

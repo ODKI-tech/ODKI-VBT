@@ -1,30 +1,77 @@
 ODKI VBT — License Overview
 ============================
 
-This repository does not use a single license — the firmware and the
-hardware design are licensed separately, under different terms, because
-they're different kinds of work with different existing license
-ecosystems (software vs. hardware/creative-commons licensing). There is
-no third, overarching license beyond the two below; GitHub's automatic
-license detection looks for a single root LICENSE file, so it won't
-identify either one correctly from this file alone — read the two files
-themselves for the actual terms.
+This repository is "open core": most of it is open source, the tracking
+engine is source-available. There is no single license for the whole
+repository; GitHub's automatic license detection will not describe it
+correctly from this file. Every source file names its license in an
+SPDX-License-Identifier line at the top. The licensor of everything
+below that is not third-party is Lodovico Cortelazzo (ODKI).
 
-- **Firmware** (`Firmware/`) — see [LICENSE-FIRMWARE](LICENSE-FIRMWARE):
-  GNU General Public License v3.0, modified by the Commons Clause License
-  Condition v1.0 (source-available: use, study, modify, and share for
-  non-commercial purposes; selling is reserved to ODKI).
-- **Hardware** (`Hardware/`) — see [LICENSE-HARDWARE](LICENSE-HARDWARE):
-  Creative Commons Attribution-NonCommercial-ShareAlike 4.0
-  International (CC BY-NC-SA 4.0), with the same commercial-sale
-  restriction reserved to ODKI.
-- **BLE protocol specification** (`Firmware/BLE_PROTOCOL.md` only, not
-  the firmware code that implements it) — released under CC0 1.0
-  (public domain), see the license note at the top of that file.
-- **Companion app** (`Apps/`) — closed-source, not covered by any
-  license in this repository; see the note in
-  [Apps/README.md](Apps/README.md).
+Which file is under which license
+---------------------------------
 
-See [README.md](README.md) for a plain-language summary of what all this
-means in practice, and [CONTRIBUTING.md](CONTRIBUTING.md) for how
-contributions are licensed back (the CLA).
+- Tracking engine — PolyForm Noncommercial 1.0.0 with additional
+  permissions, see LICENSE-ENGINE. Source-available, NOT open source.
+    Firmware/VBT_Quaternions/MotionTracker.cpp, MotionTracker.h
+    Firmware/tools/host_replay/replay.cpp, Firmware/tools/full_replay/harness.cpp
+      (offline tools that compile the engine in)
+    Firmware/DOCUMENTATION.md and the figures in Firmware/img/
+  Free for personal, hobby and study use, for research for the benefit
+  of public knowledge, and for universities, public research
+  organisations, charities and the other organisations the license
+  lists. Commercial use — including selling devices or kits that run the
+  engine, or building it into a product — needs a commercial licence
+  from ODKI (contact@odki.tech). Units from ODKI may be used for any
+  purpose. The ideas and algorithm the documentation explains are not
+  restricted; explaining them does not make them proprietary, and short
+  quotations for study, criticism or review are free.
+
+- Everything else in the firmware and the tools — Apache License 2.0,
+  see LICENSE-APACHE and NOTICE. Open source.
+    Firmware/VBT_Quaternions/ except the engine and src/Fusion/
+      (VBT_Quaternions.ino, Config.h, TrackingTypes.h, BleServer,
+      BatteryMonitor, PowerManager, StatusLED, FusionOrientation)
+    Firmware/tools/ except the two files named above (log viewer, live
+      monitor, host_replay and full_replay scripts, the regression and
+      calibration tests, the validation pipeline and its PROTOCOL.md)
+    Firmware/firmware-release/README.md, README.md, CONTRIBUTING.md,
+      TRADEMARKS.md and the other repository documents, unless they say
+      otherwise
+
+- BLE protocol specification — Firmware/BLE_PROTOCOL.md only (not the
+  code that implements it): CC0 1.0, see the note at the top of that
+  file. Anyone may build a client or a compatible device from it.
+
+- Hardware design — Hardware/ (bill of materials, CAD files, assembly
+  and bootloader instructions): CC BY-NC-SA 4.0, see LICENSE-HARDWARE.
+
+- Third-party code — keeps its own license:
+    Firmware/VBT_Quaternions/src/Fusion/ — x-io Fusion, MIT (its
+      LICENSE.md in that folder)
+  Firmware binaries (Firmware/firmware-release/*.zip and the firmware on
+  units from ODKI) also contain libraries from the Arduino board package
+  (among them the Arduino core for nRF52 under the GNU LGPL 2.1) — see
+  THIRD_PARTY_NOTICES.md.
+
+- Companion app — Apps/: the published builds (e.g. the Android APK)
+  are proprietary software of Lodovico Cortelazzo (ODKI). No license is
+  granted for them beyond installing and using them; see Apps/README.md.
+
+Earlier versions
+----------------
+
+Firmware and tools up to and including v3.11.31 (main branch, commit
+7c8d753, tagged v3.11.31-last-gpl) were released under the GNU GPL v3.0
+modified by the Commons Clause License Condition v1.0. Copies received
+under those terms stay under those terms; they do not apply to v3.12.0
+and later.
+
+Names and contributions
+-----------------------
+
+No license here grants the ODKI name or logo (TRADEMARKS.md).
+Contributions to the official repository are covered by the Contributor
+License Agreement in CONTRIBUTING.md.
+
+See README.md for a plain-language summary.

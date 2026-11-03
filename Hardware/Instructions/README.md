@@ -6,7 +6,7 @@ Step-by-step guide to build one ODKI VBT unit from the parts in [`../BOM`](../BO
 
 This guide assumes you're already comfortable **soldering**, **handling a LiPo battery safely** (short-circuiting, puncturing, or reverse-wiring one can cause a fire), and **flashing firmware onto a bare development board** with the Arduino IDE. If any of that is unfamiliar, get help from someone who has done it before, or practice on scrap hardware first — this is not a beginner-friendly first electronics project.
 
-This design and these instructions are provided as-is, under the terms of [LICENSE-HARDWARE](../../LICENSE-HARDWARE) and [LICENSE-FIRMWARE](../../LICENSE-FIRMWARE) (no warranty of any kind). Building and assembling a unit from them is entirely at your own risk — the author/ODKI accepts no responsibility for any damage to your components, injury, fire, or other loss resulting from it.
+This design and these instructions are provided as-is, under the terms of [LICENSE-HARDWARE](../../LICENSE-HARDWARE) (the firmware: see [LICENSE](../../LICENSE)), with no warranty of any kind. Building and assembling a unit from them is entirely at your own risk — ODKI accepts no responsibility for any damage to your components, injury, fire, or other loss resulting from it.
 
 ## What you need
 

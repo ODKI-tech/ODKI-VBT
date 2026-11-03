@@ -1,0 +1,13 @@
+ODKI VBT
+Copyright 2026 Lodovico Cortelazzo (ODKI)
+
+This product includes software developed by Lodovico Cortelazzo (ODKI)
+and licensed under the Apache License, Version 2.0 (LICENSE-APACHE).
+
+Not every file in this repository is under the Apache License 2.0: the
+tracking engine is under PolyForm Noncommercial 1.0.0 (LICENSE-ENGINE),
+the hardware design under CC BY-NC-SA 4.0 (LICENSE-HARDWARE), the BLE
+protocol specification under CC0 1.0, and the vendored x-io Fusion
+library under the MIT license. See LICENSE for the map of which file is
+under which license, and THIRD_PARTY_NOTICES.md for the third-party
+components of the firmware binaries.

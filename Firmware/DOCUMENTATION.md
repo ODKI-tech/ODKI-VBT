@@ -1,6 +1,6 @@
 # ODKI VBT Firmware Documentation
 
-**License note:** this document is covered by the same license as the firmware it describes — see [`LICENSE-FIRMWARE`](../LICENSE-FIRMWARE) (GPL-3.0 + Commons Clause) in the repository root. (The BLE wire protocol has its own, more permissive license — see the [License section](BLE_PROTOCOL.md#license) of `BLE_PROTOCOL.md`.)
+**License note:** this document (and the figures in `img/`) is under the same license as the tracking engine it mainly describes — PolyForm Noncommercial 1.0.0 with ODKI's additional permissions, see [`LICENSE-ENGINE`](../LICENSE-ENGINE). That covers the text, not the ideas: explaining the algorithm here does not restrict anyone from implementing it themselves, and short quotations for study, criticism or review are free. The firmware outside the engine and the tools are open source under Apache-2.0, the BLE wire protocol is CC0 (see the [License section](BLE_PROTOCOL.md#license) of `BLE_PROTOCOL.md`); the map is in [`LICENSE`](../LICENSE).
 
 This document describes the firmware that runs on the ODKI VBT sensor: a Seeed XIAO nRF52840 Sense (an nRF52840 microcontroller with an onboard LSM6DS3TR-C accelerometer/gyroscope), programmed with the Arduino framework. It is organized as one chapter per source file, in roughly the order a newcomer should read them: the entry point first, then the core rep-detection algorithm, then BLE, then the supporting hardware modules.
 

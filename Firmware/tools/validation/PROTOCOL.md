@@ -10,7 +10,7 @@
 | Reference | a linear encoder (linear position transducer), verified as in section 4 |
 | Study type | in-house engineering study by ODKI. Not independent, and not a laboratory study |
 | Code | this folder: `capture.py`, `import_ref.py`, `align.py`, `pair_reps.py`, `analyze.py` |
-| Data licence | **CC BY 4.0** (dataset); the code keeps the repository's licence (`LICENSE-FIRMWARE`) |
+| Data licence | **CC BY 4.0** (dataset); the code is under the Apache License 2.0 (`LICENSE-APACHE`; firmware v3.11.31 and earlier: the licence it was released with) |
 
 ## 1. Question
 

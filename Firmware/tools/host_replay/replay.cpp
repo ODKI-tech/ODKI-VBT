@@ -1,3 +1,21 @@
+// Part of the ODKI VBT tracking engine
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// Required Notice: Copyright (c) 2026 Lodovico Cortelazzo (ODKI)
+//
+// Source-available, not open source: licensed under the PolyForm
+// Noncommercial License 1.0.0 with the additional permissions in
+// LICENSE-ENGINE in the repository root (full text there). Free for
+// personal, hobby and study use, for research for the benefit of public
+// knowledge, and for use by universities, public research organisations,
+// charities and the other organisations listed in the license. Any other
+// use, including commercial use or selling devices or kits that contain
+// this code, needs a commercial licence from ODKI: contact@odki.tech.
+//
+// Provided as is, without any warranty -- see LICENSE-ENGINE.
+//
+// This tool #includes MotionTracker.cpp (the engine) and is therefore
+// under the engine's license, like the engine itself.
+
 // Replays a stream of vertical (world-Z) accelerations through the REAL tracking
 // engine (MotionTracker.cpp, compiled unchanged on the PC) and prints the same
 // S/R/B/P debug log the firmware prints over serial - so the output can be opened

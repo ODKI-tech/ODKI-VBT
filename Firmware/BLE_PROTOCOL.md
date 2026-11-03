@@ -1,6 +1,6 @@
 # ODKI VBT — BLE Protocol Reference
 
-**License note:** unlike the rest of this repository, *this document* is released under **CC0 1.0** (public domain dedication, see the [License](#license) section at the end) — deliberately, so any third-party app or integration can implement a client against it with zero legal uncertainty, commercial or not.
+**License note:** unlike the other documents in this repository, *this document* is released under **CC0 1.0** (public domain dedication, see the [License](#license) section at the end) — deliberately, so any third-party app or integration can implement a client against it with zero legal uncertainty, commercial or not.
 
 This is the byte-exact specification of the sensor's Bluetooth Low Energy interface: every characteristic UUID, every packet's layout down to the byte offset, and every scale factor needed to turn a raw value back into a physical one. It's written so a **third-party client** — a script, a different mobile app, a home-automation integration, anything — can talk to the device without needing to read the firmware source at all.
 
@@ -225,8 +225,8 @@ There is no `.h`/`.cpp` in this firmware implementing the second stage — it's 
 
 ## License
 
-This document (`BLE_PROTOCOL.md` only — not the firmware source it describes, see [`LICENSE-FIRMWARE`](../LICENSE-FIRMWARE) for that) is released under **CC0 1.0 Universal**: to the extent possible under law, the author(s) have waived all copyright and related or neighboring rights to this document. You may copy, modify, distribute, and use it — including commercially, including without attribution — with no conditions at all.
+This document (`BLE_PROTOCOL.md` only — not the firmware source it describes, see [`LICENSE`](../LICENSE) for that) is released under **CC0 1.0 Universal**: to the extent possible under law, the author(s) have waived all copyright and related or neighboring rights to this document. You may copy, modify, distribute, and use it — including commercially, including without attribution — with no conditions at all.
 
 Full legal text: <https://creativecommons.org/publicdomain/zero/1.0/legalcode>
 
-This applies only to the protocol *specification* in this file — implementing a compatible client (an app, a script, an integration) based on it is unrestricted. It does not relicense the firmware itself, which remains under [`LICENSE-FIRMWARE`](../LICENSE-FIRMWARE).
+This applies only to the protocol *specification* in this file — implementing a compatible client (an app, a script, an integration) based on it is unrestricted. It does not relicense the firmware itself (Apache-2.0, with the tracking engine under PolyForm Noncommercial — see [`LICENSE`](../LICENSE)).
