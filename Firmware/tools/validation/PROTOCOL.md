@@ -4,9 +4,9 @@
 
 | | |
 |---|---|
-| Version | 1.0 (draft for sign-off, see section 15). Revised on 26/10/2026, before any data was collected: the reference instrument changed to a linear encoder |
+| Version | 1.0 (draft for sign-off, see section 15). Revised on 26/10/2026, before any data was collected: the reference instrument changed to a linear encoder. Revised on 03/11/2026, before the pilot and before any data was collected: the firmware under test fixed at 3.12.0 |
 | Device | ODKI-VBT sensor (Seeed XIAO nRF52840 Sense, LSM6DS3TR-C IMU) |
-| Firmware under test | fixed for the whole study: **3.11.32** if released before the pilot, otherwise 3.11.31 (**TBD**, section 15) |
+| Firmware under test | **3.12.0** (Fusion orientation filter; decided on 03/11/2026, before any data was collected) |
 | Reference | a linear encoder (linear position transducer), verified as in section 4 |
 | Study type | in-house engineering study by ODKI. Not independent, and not a laboratory study |
 | Code | this folder: `capture.py`, `import_ref.py`, `align.py`, `pair_reps.py`, `analyze.py` |
@@ -198,7 +198,6 @@ None so far. Every change after the first Phase 3 session is listed here with it
 | Item | Default if not decided |
 |---|---|
 | Sign-off of the thresholds in section 8 | not frozen until signed |
-| Firmware for the whole study: 3.11.32 (log-only additions) or 3.11.31 | 3.11.31 |
 | Export format of the linear encoder: raw position or velocity time series and its sampling rate (if it only exports per-rep values, sections 5 and 9 are revised before the pilot) | — |
 | Phone records at 240 fps | video step skipped and declared |
 | Insurance cover for third-party participants | loads capped at 80% 1RM |
