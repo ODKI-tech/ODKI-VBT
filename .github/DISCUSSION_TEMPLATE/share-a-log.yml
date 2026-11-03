@@ -1,0 +1,45 @@
+title: "[Log] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share a set recorded over USB (`vbt_live_monitor.py` → Record to file). Shared logs help test and improve the tracking engine and may be included in the open community dataset under **CC BY 4.0** — only if you tick the box below.
+
+        **Before attaching, please:** rename the file without names or dates (e.g. `squat_60pct_set1.log`), and check it contains only sensor rows. Logs never contain your name, but don't add personal details in the text either. No health information, please.
+  - type: dropdown
+    id: exercise
+    attributes:
+      label: Exercise
+      options: [Back squat, Front squat, Bench press, Deadlift, Overhead press, Other]
+    validations:
+      required: true
+  - type: input
+    id: load
+    attributes:
+      label: Approximate load (% of your estimated 1RM, or a 10 kg band)
+      placeholder: "about 70% / 80-90 kg"
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware version (from VERSION or the app)
+      placeholder: "3.12.0"
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything odd? Missed or extra reps, mounting position, reference device used (if any).
+  - type: textarea
+    id: files
+    attributes:
+      label: Log file(s)
+      description: Drag the .log file(s) here (zip them if GitHub refuses the extension).
+    validations:
+      required: true
+  - type: checkboxes
+    id: licence
+    attributes:
+      label: Dataset
+      options:
+        - label: I recorded this log myself (or have the lifter's consent) and agree that ODKI may include it, anonymised, in the public community dataset under CC BY 4.0, crediting the handle above.
+          required: false

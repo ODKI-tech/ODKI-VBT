@@ -1,5 +1,7 @@
 # Contributing to ODKI VBT
 
+Everyone taking part in the project — issues, pull requests, Discussions — follows the [Code of Conduct](CODE_OF_CONDUCT.md). Questions and builds are welcome in [Discussions](https://github.com/ODKI-tech/ODKI-VBT/discussions).
+
 Thanks for considering it. The process below is intentionally lightweight — the goal is to keep changes easy to review and the codebase easy for the next person to pick up.
 
 Before anything else: **read the licenses** — the map is in [`LICENSE`](LICENSE). In short:

@@ -1,0 +1,36 @@
+title: "[Build] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Built an ODKI-VBT? Show it off. Builds posted here can be featured in the README and on odki.tech **only with your explicit OK** (tick the box below). The first 20 builders are credited as **Founding builders** in the repository and in the app.
+  - type: input
+    id: who
+    attributes:
+      label: Name or handle, and where you train (city or country, optional)
+      placeholder: "Marco, Bologna"
+  - type: textarea
+    id: build
+    attributes:
+      label: Your build
+      description: Board source, printing material, anything you changed, how long it took, what was hard.
+    validations:
+      required: true
+  - type: textarea
+    id: photos
+    attributes:
+      label: Photos
+      description: Drag images here. Please don't include faces or other people without their consent.
+  - type: textarea
+    id: use
+    attributes:
+      label: What you use it for (optional)
+      placeholder: "Squat and bench with my powerlifting team"
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Featuring
+      options:
+        - label: ODKI may feature my photos and text (with my name/handle as written above) in the README, on odki.tech and on ODKI's social channels. I can ask for removal at any time at contact@odki.tech.
+          required: false

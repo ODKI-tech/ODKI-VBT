@@ -53,6 +53,16 @@ The sensor fuses its onboard accelerometer and gyroscope into a stable orientati
 
 **Not yet validated: the protocol is published before the data.** The study compares the sensor with a verified linear encoder. Its protocol, acceptance thresholds and analysis code are fixed in advance in [`Firmware/tools/validation/PROTOCOL.md`](Firmware/tools/validation/PROTOCOL.md), and the raw paired data will be published whatever it shows. Until then, no accuracy figures are claimed.
 
+## Community
+
+Questions, builds and ideas live in [GitHub Discussions](https://github.com/ODKI-tech/ODKI-VBT/discussions):
+
+- **Show your build**: post a photo of your ODKI-VBT. The first 20 builders are credited as *Founding builders*.
+- **Share a log**: recorded a set over USB? Shared logs help test and improve the tracking engine and, with your consent, join the open community dataset (CC BY 4.0).
+- **Ideas** and **Q&A**: features you'd like in the free app, or anything you're stuck on.
+
+Bugs go to [Issues](https://github.com/ODKI-tech/ODKI-VBT/issues). Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Contributing
 
 Both the hardware and firmware are meant to be read and modified. `Firmware/DOCUMENTATION.md` is written specifically to get a new contributor from "never seen this codebase" to "can confidently modify the rep-detection algorithm" — start there. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for how to report a bug, propose a change, and the code style expected in a pull request.
