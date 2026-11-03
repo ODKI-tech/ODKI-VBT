@@ -22,7 +22,7 @@ THIRD_PARTY_NOTICES.md).
 The licensor is Lodovico Cortelazzo, trading as ODKI. No separate legal
 entity has been formed yet; if an ODKI company is incorporated, these
 rights are intended to be assigned to it in writing, and "ODKI" below then
-includes it. Licences already granted stay valid.
+includes it. "ODKI" also includes the licensor's successors and assigns. Licences already granted stay valid.
 
 -----------------------------------------------------------------------
 In plain English (a summary only — the license text below, with the
@@ -99,7 +99,7 @@ Earlier versions
 -----------------------------------------------------------------------
 
 Firmware and tools up to and including v3.11.31 (the state of the
-repository's main branch at commit 7c8d753, tagged v3.11.31-last-gpl)
+repository's main branch at commit 7c8d753)
 were released under the GNU General Public License v3.0 modified by the
 Commons Clause License Condition v1.0. Copies received under those terms
 remain under those terms; they do not apply to v3.12.0 or later. The

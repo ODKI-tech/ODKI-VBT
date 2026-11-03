@@ -62,7 +62,7 @@ Earlier versions
 ----------------
 
 Firmware and tools up to and including v3.11.31 (main branch, commit
-7c8d753, tagged v3.11.31-last-gpl) were released under the GNU GPL v3.0
+7c8d753) were released under the GNU GPL v3.0
 modified by the Commons Clause License Condition v1.0. Copies received
 under those terms stay under those terms; they do not apply to v3.12.0
 and later.
