@@ -91,6 +91,7 @@ What to expect, from the bootloader's source:
 | The `.uf2` copy fails or the drive reappears unchanged | The bootloader refused the file (wrong board file, or identity mismatch) | Check you used the `ble_sense` file; otherwise use method B |
 | `adafruit-nrfutil` stops with a timeout or "No ACK" | Wrong port, another program holding it, or the port name changed after the 1200-baud restart | Close other serial programs, list the ports again, re-run with the new name (and without `--touch 1200` if the board is already in serial update mode) |
 | Board shows no sign of life after a bootloader update | Bootloader damaged (interrupted while it was being replaced) | Needs SWD: an nRF52 programmer (J-Link, or a CMSIS-DAP probe) on the XIAO's SWD pads, then flash `xiao_nrf52840_ble_sense_bootloader-0.9.2-OTAFIX2.3-BP1.4_s140_7.3.0.hex` from the same release; on a glued unit this means opening the case |
+| The app never offers an update | The phone or tablet is offline (the app checks GitHub each time it connects), or the sensor already runs the latest version | Connect the phone to the internet, then disconnect and reconnect the sensor in the app |
 | An OTA update from the app stalls on a board you converted | Still the old bootloader, or a phone BLE quirk | Check `INFO_UF2.TXT`; retry the update (OTAFIX's README lists DFU settings that help on some Android phones) |
 
 ## 6. Risks, in short

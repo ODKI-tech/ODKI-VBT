@@ -10,4 +10,4 @@ Planned distribution: a downloadable installer/zip attached to this repository's
 2. Open the app; pair/connect to the sensor from the device list.
 3. Calibrate (hold the sensor/bar still and click Calibrate).
 4. Start a set to see live velocity and rep data; each completed rep appears automatically.
-5. Firmware updates, when available, are offered in-app.
+5. Firmware updates, when available, are offered in-app. The phone or tablet must be online: the app looks for updates (and downloads them) from this repository each time it connects to the sensor, so with no internet connection no update is offered.

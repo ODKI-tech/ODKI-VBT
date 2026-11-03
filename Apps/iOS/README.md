@@ -11,4 +11,4 @@ Planned distribution: TestFlight (Apple's beta-testing platform) for early teste
 3. Connect to the sensor from the device list.
 4. Calibrate (hold the sensor/bar still and tap Calibrate).
 5. Start a set to see live velocity and rep data; each completed rep appears automatically.
-6. Firmware updates, when available, are offered in-app. On a self-built sensor they need the OTAFIX bootloader — see [`Hardware/Instructions/BOOTLOADER.md`](../../Hardware/Instructions/BOOTLOADER.md).
+6. Firmware updates, when available, are offered in-app. On a self-built sensor they need the OTAFIX bootloader — see [`Hardware/Instructions/BOOTLOADER.md`](../../Hardware/Instructions/BOOTLOADER.md). The phone or tablet must be online: the app looks for updates (and downloads them) from this repository each time it connects to the sensor, so with no internet connection no update is offered.
