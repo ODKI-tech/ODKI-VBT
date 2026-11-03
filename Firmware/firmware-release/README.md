@@ -5,6 +5,19 @@ The live OTA update the companion app checks for and downloads (see `FirmwareUpd
 - **`manifest.json`** — a single static JSON file the app fetches over HTTPS (via `raw.githubusercontent.com`) on every launch to check for an update: `{"version": "MAJOR.MINOR.PATCH", "url": "<direct link to the matching .zip>", "notes": "<changelog shown to the tester>"}`. **Keep `notes` a plain string with no unescaped quotes** — an earlier release once broke the update check entirely this way (invalid JSON silently fails `jsonDecode`, which the app treats as "no update available", not an error).
 - **`vbt_firmware_X.Y.Z_OTA.zip`** — the actual Nordic Secure DFU package for that version. Only the *latest* one needs to stay here (older ones can be deleted once superseded — the app only ever looks at `manifest.json`'s current `url`, there's no version history to preserve in this folder specifically; the git history of this folder already preserves every past `.zip` if one is ever needed).
 
+## Licence of each binary
+
+A firmware binary is licensed under the terms of the source it was built from; the libraries linked into it keep their own licences ([`../../THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md)).
+
+| Release | Licence |
+|---|---|
+| v3.11.31 and every earlier release (the `.zip` files in this folder's git history) | GNU GPL v3.0 modified by the Commons Clause License Condition v1.0, as the source of those versions; copies received under those terms stay under them |
+| v3.12.0 and later | open core, as described in [`../../LICENSE`](../../LICENSE): the tracking engine under PolyForm Noncommercial 1.0.0 with the additional permissions in [`LICENSE-ENGINE`](../../LICENSE-ENGINE), the rest of the firmware under Apache-2.0 ([`LICENSE-APACHE`](../../LICENSE-APACHE), [`NOTICE`](../../NOTICE)), x-io Fusion under MIT |
+
+## Bootloader
+
+Updating from the app over Bluetooth needs the **OTAFIX** bootloader on the sensor; with the bootloader the XIAO nRF52840 Sense ships with, the OTA transfer stalled on ODKI's sensors. How to check which bootloader a sensor has and how to install OTAFIX: [`../../Hardware/Instructions/BOOTLOADER.md`](../../Hardware/Instructions/BOOTLOADER.md). Over USB, every package here can be flashed with either bootloader (`adafruit-nrfutil dfu serial`).
+
 ## Cutting a release
 
 1. Bump `FirmwareVersion::PATCH` (or `MINOR`/`MAJOR`) in [`../VBT_Quaternions/Config.h`](../VBT_Quaternions/Config.h), matching the version note already added at the top of the changed file(s) (see `MotionTracker.cpp`'s convention).
