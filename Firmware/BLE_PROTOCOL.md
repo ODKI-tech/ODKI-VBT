@@ -111,6 +111,8 @@ Python decode: `struct.unpack("<B4hH2hBB", data)`.
 
 Retroactively drift-corrected velocity for a time range that was already streamed as raw via `Stream`. Sent in chunks when the bracket covering that range closes; a bracket can span thousands of samples, far more than fit in one BLE packet. A client should replace the portion of its live graph already drawn from `Stream` in `[startTimestampMs, startTimestampMs + sampleCount × sampleIntervalMs)` with these values.
 
+A bracket starts at the last still sample before a movement (its corrected value is 0) and ends at the sample where the next stillness is confirmed; the samples of a pause in between two brackets are not sent here, so a client keeps their live `Stream` values (0 while still). Up to and including 3.12.0 the chunks also carried the pause before the movement, with a non-zero, wrongly extrapolated correction (fixed in 3.12.1, see [Bracket drift correction](DOCUMENTATION.md#bracket-drift-correction)); a client needs no change.
+
 | Offset | Size | Field | Type | Scale | Unit |
 |---|---|---|---|---|---|
 | 0 | 2 | `bracketId` | uint16 | direct | increments on every bracket close |
@@ -123,7 +125,7 @@ Retroactively drift-corrected velocity for a time range that was already streame
 
 Only the first `sampleCount` entries of `correctedVelZ` are meaningful — a bracket's final chunk is usually partial, and the remaining slots are zero-padding to be ignored.
 
-**Known limitation (up to and including 3.12.0):** the firmware actually samples at about 95Hz (periods of 10–12 ms, see [Known limitations](DOCUMENTATION.md#known-limitations)), while `sampleIntervalMs` is the nominal 10. A chunk's samples therefore span about 5 % more time than `sampleCount × sampleIntervalMs`, so a curve redrawn with the nominal spacing comes out slightly compressed in time. A fix is planned for a later release.
+**Known limitation (up to and including 3.12.1):** the firmware actually samples at about 95Hz (periods of 10–12 ms, see [Known limitations](DOCUMENTATION.md#known-limitations)), while `sampleIntervalMs` is the nominal 10. A chunk's samples therefore span about 5 % more time than `sampleCount × sampleIntervalMs`, so a curve redrawn with the nominal spacing comes out slightly compressed in time. A fix is planned for a later release.
 
 Python decode: `struct.unpack("<HHHBIH20h", data)`.
 

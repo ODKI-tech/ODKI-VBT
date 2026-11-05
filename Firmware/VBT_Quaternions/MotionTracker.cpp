@@ -802,6 +802,29 @@ namespace {
   // is read-only (always FUSION). No change to the BLE packets; the Device
   // Information Software Revision String now carries the same
   // "MAJOR.MINOR.PATCH" as the Firmware Revision String.
+  //
+  // v3.12.1: the CorrectedCurve no longer changes samples where the sensor
+  // was still. Reported by the user: a pause that the live curve showed as
+  // 0 became a non-zero velocity once the bracket's CorrectedCurve arrived.
+  // Cause: since v3.11.2 the anchor (baselineRawVel/bracketStartT) follows
+  // velZ for as long as flatCombined holds, but the still samples were
+  // still appended to bracketBuf and never dropped. When the bracket closed
+  // after the next rep, enqueueCorrectedCurveChunks() applied
+  // corrected(t) = velZ(t) - baseline - drift*(t-t0)/(t1-t0) to the whole
+  // buffer, so for the pause (t < t0) the drift ramp was extrapolated
+  // backwards - by (t0-t)/(t1-t0) times the bracket's drift, up to 0.68 m/s
+  // on a recorded squat set (a 1.2 s pause before 0.2 s of motion). Fix: in
+  // the confirmed-still block of stepPhaseEngine(), with no phase open and
+  // none waiting to be re-scored, bracketBuf keeps only the current sample
+  // (the new anchor, corrected value 0). A bracket now covers the last
+  // still sample before the motion up to the next stillness; the pause
+  // itself is not re-sent, so the app keeps the live value (0). Phase
+  // scoring is unchanged; a rep can differ only through openPhase()'s
+  // look-back (phaseLookbackSamples), which could reach still samples
+  // before t0 and now stops at t0. Per-rep output identical on the 5
+  // recorded squat sets of tools/full_replay/ (see DOCUMENTATION.md). Side effect: a long pause no longer fills bracketBuf
+  // (before, 30 s of stillness forced a bracket close via the capacity
+  // safety net). No change to the BLE packets or the log format.
   // ============================================================================
 
   // --- Sampling ---
@@ -1973,6 +1996,20 @@ namespace {
       // the reading during the current pause.
       if (repCalibCount >= 2) {
         repCalibIntercept = velZ - repCalibRate * sessionT;
+      }
+      // v3.12.1 (see the version note at the top of this file): the anchor
+      // just moved to THIS sample (bracketStartT = sessionT), so the
+      // bracket now starts here - drop the still samples buffered before
+      // it. Before this fix they stayed in bracketBuf with t < t0, and
+      // enqueueCorrectedCurveChunks() extrapolated the bracket's drift ramp
+      // BACKWARDS over the pause: the CorrectedCurve then turned a pause
+      // the live value had shown as 0 into a non-zero velocity. Only when
+      // no phase is open and none is waiting to be re-scored (their
+      // indices point into bracketBuf); on the rising edge itself
+      // closeBracketFn() has already emptied the buffer (bracketCount==0).
+      if (!phaseOpen && closedPhaseCount == 0 && bracketCount > 1) {
+        bracketBuf[0] = bracketBuf[bracketCount - 1];
+        bracketCount = 1;
       }
     }
   }

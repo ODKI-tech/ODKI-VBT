@@ -21,7 +21,7 @@ Firmware and tools up to and including v3.11.31 were released under the GNU GPL 
 
 | | |
 |---|---|
-| Firmware | v3.12.0; updates over the air from the app (the phone must be online; needs the OTAFIX bootloader, see [`Hardware/Instructions/BOOTLOADER.md`](Hardware/Instructions/BOOTLOADER.md)) |
+| Firmware | v3.12.1; updates over the air from the app (the phone must be online; needs the OTAFIX bootloader, see [`Hardware/Instructions/BOOTLOADER.md`](Hardware/Instructions/BOOTLOADER.md)) |
 | Android app | 1.0.3, APK in [Apps/Android/](Apps/Android/); Google Play test coming |
 | iOS app | not published yet |
 | Accuracy | **not yet validated** (see [Validation](#validation)) |

@@ -35,6 +35,10 @@
 // against the R rows of a log recorded with them).
 // stdout: the firmware's own S/R/B/P log, plus one "F," row per sample:
 //   F,t_ms,q0,q1,q2,q3,accIgnored,accErrDeg,accRecovery,startup,overrange,resBiasX,resBiasY,resBiasZ
+// With the environment variable ODKI_DUMP_CHUNKS set, also one "C," row per
+// CorrectedCurve chunk (what the app receives over BLE), off by default so the
+// regression output is unchanged:
+//   C,bracketId,chunkIndex,totalChunks,startTimestampMs,sampleCount,v0,v1,...
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -56,6 +60,7 @@ unsigned long millis() { return g_now; }
 int main(int argc, char** argv) {
   FusionOrientationSettings fs;
   bool legacyConfig = false;
+  const bool dumpChunks = std::getenv("ODKI_DUMP_CHUNKS") != nullptr;
   for (int i = 1; i < argc; i++) {
     const char* eq = std::strchr(argv[i], '=');
     if (!eq) continue;
@@ -123,7 +128,15 @@ int main(int argc, char** argv) {
     RepResult r;
     while (MotionTracker::peekCompletedRep(r)) MotionTracker::popCompletedRep();
     CorrectedCurveChunk c;
-    while (MotionTracker::peekCorrectedCurveChunk(c)) MotionTracker::popCorrectedCurveChunk();
+    while (MotionTracker::peekCorrectedCurveChunk(c)) {
+      if (dumpChunks) {
+        std::printf("C,%u,%u,%u,%lu,%u", (unsigned)c.bracketId, (unsigned)c.chunkIndex, (unsigned)c.totalChunks,
+                    (unsigned long)c.startTimestampMs, (unsigned)c.sampleCount);
+        for (unsigned k = 0; k < c.sampleCount; k++) std::printf(",%.4f", c.correctedVelZ[k]);
+        std::printf("\n");
+      }
+      MotionTracker::popCorrectedCurveChunk();
+    }
   }
   MotionTracker::setTrackingActive(false);
   return 0;
