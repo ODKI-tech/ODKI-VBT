@@ -125,7 +125,7 @@ A bracket starts at the last still sample before a movement (its corrected value
 
 Only the first `sampleCount` entries of `correctedVelZ` are meaningful — a bracket's final chunk is usually partial, and the remaining slots are zero-padding to be ignored.
 
-**Known limitation (up to and including 3.12.4):** the firmware actually samples at about 95Hz (periods of 10–12 ms, see [Known limitations](DOCUMENTATION.md#known-limitations)), while `sampleIntervalMs` is the nominal 10. A chunk's samples therefore span about 5 % more time than `sampleCount × sampleIntervalMs`, so a curve redrawn with the nominal spacing comes out slightly compressed in time. A fix is planned for a later release.
+**Known limitation:** the firmware actually samples at about 95Hz (periods of 10–12 ms, see [Known limitations](DOCUMENTATION.md#known-limitations)), while `sampleIntervalMs` is the nominal 10. A chunk's samples therefore span about 5 % more time than `sampleCount × sampleIntervalMs`, so a curve redrawn with the nominal spacing comes out slightly compressed in time. A fix is planned for a later release.
 
 Python decode: `struct.unpack("<HHHBIH20h", data)`.
 

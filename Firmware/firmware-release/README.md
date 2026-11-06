@@ -25,3 +25,5 @@ Updating from the app over Bluetooth needs the **OTAFIX** bootloader on the sens
 3. Rename it to `vbt_firmware_X.Y.Z_OTA.zip`, replace the previous one here, and delete the old `.zip`.
 4. Update this folder's `manifest.json`: new `version`, `url` pointing at the new filename, and `notes` describing the change for testers (validate it's well-formed JSON before committing — `python3 -m json.tool manifest.json`).
 5. Commit and push to `main` — the app reads directly from the raw file on the default branch, no separate publish step needed.
+
+The current version number lives only in `Config.h`, this folder (`manifest.json`, the `.zip` name) and the version notes in the source. Do not write it anywhere else (READMEs, documentation, website): those point to this folder instead, so a release never needs them updated.

@@ -76,7 +76,7 @@ List the ports first (`ls /dev/cu.usbmodem*` on macOS) and close any other progr
 What to expect, from the bootloader's source:
 - It works from the firmware currently running (any ODKI firmware, which has the core's 1200-baud touch), whatever Adafruit-based bootloader is installed: the *current* bootloader receives the package and replaces SoftDevice and bootloader. Stock and OTAFIX both use S140 7.3.0, so the SoftDevice is rewritten with the same version.
 - **The firmware is erased:** in single-bank mode the package is received into the application area. When the new bootloader starts it finds no valid firmware and, since OTAFIX 2.1, waits in **Bluetooth update mode** (`XIAO_DFU`) — no USB drive, no serial port.
-- Reinstall the firmware **over Bluetooth**: the companion app cannot see a sensor in this state, so use Nordic's *nRF Device Firmware Update* app (Android/iOS) with `vbt_firmware_3.12.1_OTA.zip` copied to the phone, target `XIAO_DFU`, settings as recommended in OTAFIX's README (PRN on). On a board whose reset button is reachable, a double reset gives the USB drive instead.
+- Reinstall the firmware **over Bluetooth**: the companion app cannot see a sensor in this state, so use Nordic's *nRF Device Firmware Update* app (Android/iOS) with the `vbt_firmware_X.Y.Z_OTA.zip` currently in [`Firmware/firmware-release/`](../../Firmware/firmware-release/) copied to the phone, target `XIAO_DFU`, settings as recommended in OTAFIX's README (PRN on). On a board whose reset button is reachable, a double reset gives the USB drive instead.
 
 ## 4. After the bootloader update
 
