@@ -2,7 +2,7 @@
 
 The ODKI VBT firmware is built from the files in this repository **and** from third-party code: one library vendored in this repository (x-io Fusion) and libraries that come with the Arduino board package `Seeeduino:nrf52` 1.1.13 (the Adafruit nRF52 Arduino core as packaged by Seeed) and the Arduino library *Seeed Arduino LSM6DS3* 2.0.7. A firmware binary built from this repository — including every `vbt_firmware_X.Y.Z_OTA.zip` in [`Firmware/firmware-release/`](Firmware/firmware-release/) and the firmware installed on units supplied by ODKI — contains the components marked "in the firmware binary" below. Each keeps its own license; ODKI's licenses (see [LICENSE](LICENSE)) do not apply to them and do not restrict the rights their licenses give you.
 
-This file is the notice that accompanies those binaries. It was compiled from the license files of the exact versions used to build v3.12.0 (checked against the symbols linked into the image); v3.12.1 is built from the same library versions.
+This file is the notice that accompanies those binaries. It was compiled from the license files of the exact versions used to build v3.12.0 (checked against the symbols linked into the image); v3.12.1 and v3.12.4 are built from the same library versions.
 
 | Component | Version | Where | License |
 |---|---|---|---|

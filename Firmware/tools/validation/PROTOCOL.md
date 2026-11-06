@@ -4,9 +4,9 @@
 
 | | |
 |---|---|
-| Version | 1.0 (draft for sign-off, see section 15). Revised on 26/10/2026, before any data was collected: the reference instrument changed to a linear encoder. Revised on 03/11/2026, before the pilot and before any data was collected: the firmware under test fixed at 3.12.0. Revised on 05/11/2026, before the pilot and before any data was collected: the firmware under test changed to 3.12.1 (the drift-corrected curve no longer changes the pauses between reps) |
+| Version | 1.0 (draft for sign-off, see section 15). Revised on 26/10/2026, before any data was collected: the reference instrument changed to a linear encoder. Revised on 03/11/2026, before the pilot and before any data was collected: the firmware under test fixed at 3.12.0. Revised on 05/11/2026, before the pilot and before any data was collected: the firmware under test changed to 3.12.1 (the drift-corrected curve no longer changes the pauses between reps). Revised on 06/11/2026, before the pilot and before any data was collected: the firmware under test changed to 3.12.4 (the accelerometer bias is no longer learned during motion; bias and drift parameters can no longer be changed over Bluetooth) |
 | Device | ODKI-VBT sensor (Seeed XIAO nRF52840 Sense, LSM6DS3TR-C IMU) |
-| Firmware under test | **3.12.1** (Fusion orientation filter; 3.12.0 decided on 03/11/2026, changed to 3.12.1 on 05/11/2026, both before any data was collected) |
+| Firmware under test | **3.12.4** (Fusion orientation filter; 3.12.0 decided on 03/11/2026, changed to 3.12.1 on 05/11/2026 and to 3.12.4 on 06/11/2026, all before any data was collected) |
 | Reference | a linear encoder (linear position transducer), verified as in section 4 |
 | Study type | in-house engineering study by ODKI. Not independent, and not a laboratory study |
 | Code | this folder: `capture.py`, `import_ref.py`, `align.py`, `pair_reps.py`, `analyze.py` |

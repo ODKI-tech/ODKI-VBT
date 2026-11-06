@@ -68,10 +68,15 @@
     never automatically stopped on the firmware side.
   - Config (Read/Write): algorithm parameters adjustable at runtime (rep
     direction Up/Down, anti-bounce, phase thresholds - see RuntimeConfig
-    in MotionTracker.h) - consumed below with
+    in TrackingTypes.h) - consumed below with
     BleServer::takeConfigUpdate()/MotionTracker::setConfig(). NOT
     persisted to flash: every reboot starts again from the compiled
-    defaults.
+    defaults. v3.12.4: the bias and drift-correction fields
+    (accZBiasIdleStillTimeS, gyroBiasIdleStillTimeS, accZBiasGyroMaxDegS,
+    accZBiasAccMagToleranceMps2, emaAlpha, minCrossingExcursionMps,
+    minCrossingDurationS) are firmware-only: still in the packet, but a
+    written value is ignored and the compiled default applies (the Read
+    echo shows it) - see lockFirmwareOnlyFields() in BleServer.cpp.
   - Every 30 seconds, independent of tracking: battery status (standard
     Battery Service, see BleServer.h).
 */

@@ -30,6 +30,15 @@ what the app sees:
 
     using (t0, t1, baseline, drift, basisTotal) from each "B," row.
 
+The raw velZ is the integral of worldAccZRaw, drift included. Up to
+firmware 3.12.1 it was never zeroed (it ran from the session start, so its
+offset grew over a set); since 3.12.2 the firmware sets it to 0 on every
+confirmed-still sample (shiftVelocityFrame() in MotionTracker.cpp), so on
+newer logs it reads 0 in every pause and its drift restarts from each
+pause. The "B," baseline moves with it (usually 0 since 3.12.2) and the
+sample that closes a bracket keeps the bracket's frame, so the formula
+above gives the same corrected curve on both kinds of log.
+
 Modes:
 
   (default)  static overview of the whole session: both curves overlaid,

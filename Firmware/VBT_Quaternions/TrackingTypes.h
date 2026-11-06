@@ -61,9 +61,11 @@ enum class PhaseState : uint8_t {
 // on a not-yet-converged bias residual. During motion it shows the raw
 // delta from the last confirmed still reference - not yet corrected for
 // THIS rep's drift (that's only known once the bracket closes, see
-// CorrectedCurve). This is not a return to v3.10.x's ZUPT: velZ itself is
-// NEVER zeroed, only the anchor used to reference this value - the
-// bracket correction math (drift = velZ - baseline) remains identical.
+// CorrectedCurve). This is not a return to v3.10.x's ZUPT: this value is
+// held at ~0 by moving the anchor, not by zeroing velZ; since v3.12.2 velZ
+// is also shifted to 0 while confirmed still, but the anchor and the
+// buffered bracket samples move with it, so the bracket correction math
+// (drift = velZ - baseline) and this value are unchanged.
 // worldPosZ is a live integration of the same quantity (so with the same
 // behavior), for the graph only - the authoritative data for each
 // completed rep comes from peekCompletedRep().
@@ -146,6 +148,15 @@ enum class RepDirection : uint8_t {
 // re-sending the last configuration used on every new connection, if
 // different from the defaults.
 //
+// v3.12.4: seven of these fields are FIRMWARE-ONLY - accZBiasIdleStillTimeS,
+// gyroBiasIdleStillTimeS, accZBiasGyroMaxDegS, accZBiasAccMagToleranceMps2,
+// emaAlpha, minCrossingExcursionMps, minCrossingDurationS. They keep their
+// place in the 38-byte Config packet (same layout for every app version),
+// but a value written over BLE is ignored: the compiled default always
+// applies, and the Config Read echo shows it (lockFirmwareOnlyFields() in
+// BleServer.cpp). Apps up to 1.0.5 re-sent stored values of these fields,
+// which their UI does not expose. Each is marked FIRMWARE-ONLY below.
+//
 // v3.11.0: ALL the parameters of the new phase/bracket engine are here,
 // validated against 8 real hardware logs with sim_v2_drift.py before
 // porting (see the version note in MotionTracker.cpp). The old
@@ -158,16 +169,31 @@ enum class RepDirection : uint8_t {
 // bracket mechanism absorbs an isolated shock anyway in the next drift
 // measurement.
 // accZBiasIdleStillTimeS/gyroBiasIdleStillTimeS/maxPlausibleVelocityMps/
-// repDirection are unchanged from v3.10.x.
+// repDirection are unchanged from v3.10.x (except the
+// accZBiasIdleStillTimeS default, 0.05 -> 0.3 s in v3.12.3).
 struct RuntimeConfig {
   RepDirection repDirection = RepDirection::Up;
   float maxPlausibleVelocityMps = 4.0f;
-  float accZBiasIdleStillTimeS = 0.05f;
+  // v3.12.3: 0.05 -> 0.3 s. With 0.05 s (5 samples) the accelerometer
+  // bias (accBiasVec, MotionTracker.cpp) also learned DURING motion -
+  // whenever the bar moved with near-constant acceleration and little
+  // rotation - absorbing real acceleration: on a deadlift log worldAccZ
+  // read -0.2..-0.4 m/s^2 in every pause, drift reached -1.5 m/s in one
+  // bracket, a rep was lost and stillness was confirmed late. 0.3 s
+  // (same as gyroBiasIdleStillTimeS): 10/10 reps, drift per bracket
+  // +-0.07 m/s, lowest drift on the recorded squat sets too.
+  // FIRMWARE-ONLY since v3.12.4: ignored when written over BLE, the
+  // compiled default always applies (BleServer.cpp, lockFirmwareOnlyFields()).
+  float accZBiasIdleStillTimeS = 0.3f;
+  // FIRMWARE-ONLY since v3.12.4: ignored when written over BLE, the
+  // compiled default always applies (BleServer.cpp, lockFirmwareOnlyFields()).
   float gyroBiasIdleStillTimeS = 0.3f;
 
   // --- bias (v3.11.0: now adjustable, previously compile-time constants) ---
   // Gyroscope magnitude threshold (degrees/s) below which a sample is
   // considered a candidate for the accZBias/gyroBias update.
+  // FIRMWARE-ONLY since v3.12.4: ignored when written over BLE, the
+  // compiled default always applies (BleServer.cpp, lockFirmwareOnlyFields()).
   float accZBiasGyroMaxDegS = 12.0f;
   // Half-band (m/s^2) of the excursion |total acceleration| must stay
   // within over a short sliding window for a sample to be considered a
@@ -175,6 +201,8 @@ struct RuntimeConfig {
   // an absolute distance from g - see the version note).
   // v3.11.0: tuned from 0.6 to 0.12 (full sweep on SQUAT_5/6, -14%/-43%
   // residual drift velocity) - see the version note.
+  // FIRMWARE-ONLY since v3.12.4: ignored when written over BLE, the
+  // compiled default always applies (BleServer.cpp, lockFirmwareOnlyFields()).
   float accZBiasAccMagToleranceMps2 = 0.12f;
 
   // --- Flat-guard (phase/bracket close on flatness) ---
@@ -241,14 +269,20 @@ struct RuntimeConfig {
   // Weight of a just-closed bracket's measurement on the EMA estimate of
   // the drift rate (used to provisionally correct phases that close
   // before their bracket closes).
+  // FIRMWARE-ONLY since v3.12.4: ignored when written over BLE, the
+  // compiled default always applies (BleServer.cpp, lockFirmwareOnlyFields()).
   float emaAlpha = 0.3f;
 
   // --- Rep-cycle calibration (independent of the bracket) ---
   // Minimum excursion (m/s, negative) required since a cycle started for
   // a negative->positive crossing to be considered a true cycle boundary
   // (complete rep), not noise.
+  // FIRMWARE-ONLY since v3.12.4: ignored when written over BLE, the
+  // compiled default always applies (BleServer.cpp, lockFirmwareOnlyFields()).
   float minCrossingExcursionMps = -0.03f;
   // Minimum duration (s) of a cycle for it to contribute to calibration.
+  // FIRMWARE-ONLY since v3.12.4: ignored when written over BLE, the
+  // compiled default always applies (BleServer.cpp, lockFirmwareOnlyFields()).
   float minCrossingDurationS = 0.3f;
 };
 

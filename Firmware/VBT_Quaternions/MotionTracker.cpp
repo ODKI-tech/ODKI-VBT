@@ -825,6 +825,54 @@ namespace {
   // recorded squat sets of tools/full_replay/ (see DOCUMENTATION.md). Side effect: a long pause no longer fills bracketBuf
   // (before, 30 s of stillness forced a bracket close via the capacity
   // safety net). No change to the BLE packets or the log format.
+  //
+  // v3.12.2: velZ is set to 0 during confirmed stillness. Up to 3.12.1
+  // velZ was the raw integral since the session start and drifted freely
+  // (only the anchor baselineRawVel followed it while still). Now, on
+  // every confirmed-still sample except one where a bracket closed, the
+  // velocity frame is shifted by c = velZ (shiftVelocityFrame()): velZ,
+  // prevVelZ, baselineRawVel and bracketBuf[].velZ move by -c, the
+  // rep-calibration sums and intercept by the matching amount, and
+  // lastCrossingRawPos keeps the displacement since the last crossing.
+  // Every difference the engine uses is unchanged, so reps, the corrected
+  // curve, refVelZ and velZLive are identical to 3.12.1 on the replayed
+  // recorded sets (last printed digit at most). The tests on the SIGN of
+  // the velocity (checkZeroCrossing(), the backfill in openPhase()) keep
+  // reading the velocity integrated since the session start, velZ +
+  // velZFrameOffset: moving them to the new frame changed rep detection.
+  // Not applied on a sample where a bracket closed (the "B," row and the
+  // "S," row of that sample must stay in the same frame for
+  // vbt_log_viewer.py); the next confirmed-still sample does the shift.
+  // Visible effect: the logged velZ reads exactly 0 while still (except
+  // the bracket-closing sample), and the logged repCalibIntercept and the
+  // "B," baseline (now usually 0) change accordingly; the live monitor's
+  // "drift" readout (velZ - velZLive) shows the drift since the last
+  // stillness. No change to the BLE packets or the log format.
+  //
+  // v3.12.3: the accelerometer bias learns only after 0.3 s of stillness
+  // (RuntimeConfig::accZBiasIdleStillTimeS default 0.05 -> 0.3 s, the same
+  // as gyroBiasIdleStillTimeS). With 0.05 s (5 samples) accBiasVec also
+  // learned DURING motion - whenever the bar moved with near-constant
+  // acceleration and little rotation - and absorbed real acceleration: on
+  // a recorded deadlift set worldAccZ read -0.2..-0.4 m/s^2 in the pauses,
+  // the drift reached -1.5 m/s in one bracket, one rep of 10 was lost (its
+  // concentric was too short on velZLive and was discarded) and stillness
+  // was confirmed late. With 0.3 s: 10/10 reps, drift per bracket within
+  // about +-0.07 m/s, stillness confirmed in 0.09 s in every pause and
+  // rep-cycle calibration active. On 5 recorded squat sets the drift is
+  // lower too and rep values shift by a few percent; one set previously
+  // counted as 4 reps now gives 10 (the true count was not recorded - not
+  // verified).
+  //
+  // v3.12.4: the bias and drift-correction parameters are firmware-only
+  // (BleServer.cpp, lockFirmwareOnlyFields()). The 38-byte Config packet
+  // keeps its layout, but accZBiasIdleStillTimeS, gyroBiasIdleStillTimeS,
+  // accZBiasGyroMaxDegS, accZBiasAccMagToleranceMps2, emaAlpha,
+  // minCrossingExcursionMps and minCrossingDurationS written over BLE are
+  // ignored: the compiled defaults always apply, and the Config Read echo
+  // shows them. Reason: apps up to 1.0.5 re-sent stored values of these
+  // fields, which their UI does not expose, and would have pushed the old
+  // 0.05 s back on every connection. No change to the tracking engine.
   // ============================================================================
 
   // --- Sampling ---
@@ -845,9 +893,9 @@ namespace {
   // declaration below) - the gates that read them (accZBiasIdleStillTimeS,
   // gyroBiasIdleStillTimeS) each use a different window length over the
   // SAME rings, so the capacity has to cover the longer of the two - 200
-  // (2s) is generous headroom for a value set over BLE (clamped in
-  // secondsToQuietSamples() below, otherwise it would read past the
-  // array's bounds - the same bug as v3.11.12, impossible here by
+  // (2s) is generous headroom for a value set over BLE up to v3.12.3
+  // (firmware-only since v3.12.4; clamped in secondsToQuietSamples()
+  // below, otherwise it would read past the array's bounds - the same bug as v3.11.12, impossible here by
   // construction). A third gate used to read these same rings too
   // (flatGuardOverrideStillTimeS, defaulting to 1.0s/100 samples) - see
   // the v3.11.27 version note near the top of the file for why it was
@@ -1086,12 +1134,20 @@ namespace {
   // ============================================================================
 
   // velZ: RAW vertical velocity, already sign-oriented (repDirectionSign
-  // applied) - ALWAYS integrated, NEVER zeroed/leaked. Corresponds to
-  // self.velZ in sim_v2_drift.py.
+  // applied) - ALWAYS integrated, never leaked or clamped. Corresponds to
+  // self.velZ in sim_v2_drift.py. Up to v3.12.1 it was never zeroed (the
+  // integral since the session start); since v3.12.2 its frame is shifted
+  // to 0 on every confirmed-still sample (shiftVelocityFrame()), which
+  // leaves every difference the engine uses unchanged - between two
+  // stillnesses it is still the raw integral, drift included.
   float velZ = 0;
   float prevAccZDirected = 0; // previous INTEGRATION input (pre-median, v3.11.29) - for velZ's trapezoidal integration
   bool trapezoidPrimedZ = false;
   float prevVelZ = 0; // for checkZeroCrossingFn
+  // v3.12.2: sum of every shift applied by shiftVelocityFrame() - velZ +
+  // velZFrameOffset is the velocity integrated since the session start (the
+  // velZ of 3.12.1), still used by the sign tests, see shiftVelocityFrame().
+  float velZFrameOffset = 0;
   float rawPosCumulative = 0; // position integral, NEVER zeroed - see checkZeroCrossingFn
 
   float sessionT = 0; // seconds since tracking started (self.t in Python)
@@ -1253,7 +1309,9 @@ namespace {
   // without this clamp, a high value set over BLE would make
   // excursionFlat()/absoluteFlat() read past the bounds of
   // gyroMagQuietRing/accMagQuietRing (the same bug as v3.11.12, impossible
-  // here by construction).
+  // here by construction). Since v3.12.4 the two bias times are
+  // firmware-only (a value written over BLE is ignored), so the clamp now
+  // only guards against a compiled default above 2 s.
   uint16_t secondsToQuietSamples(float seconds) {
     int32_t n = (int32_t)(seconds * (1000.0f / (float)SAMPLE_INTERVAL_MS) + 0.5f);
     if (n < 1) n = 1;
@@ -1486,7 +1544,8 @@ namespace {
     uint16_t nBackfill = 0;
     while (nBackfill < avail && nBackfill < maxBackfill) {
       const BracketSample& h = bracketBuf[idxInBracket - 1 - nBackfill];
-      int8_t hDir = (h.velZ > 0.0f) ? 1 : (h.velZ < 0.0f ? -1 : 0);
+      float hv = h.velZ + velZFrameOffset; // v3.12.2: session-start frame, as in 3.12.1 - see shiftVelocityFrame()
+      int8_t hDir = (hv > 0.0f) ? 1 : (hv < 0.0f ? -1 : 0);
       if (hDir != phaseType) break;
       nBackfill++;
     }
@@ -1525,8 +1584,12 @@ namespace {
   }
 
   void checkZeroCrossing() {
-    if (velZ < sinceCrossingMin) sinceCrossingMin = velZ;
-    if (prevVelZ < 0.0f && velZ >= 0.0f && sinceCrossingMin < activeConfig.minCrossingExcursionMps) {
+    // v3.12.2: the crossing is detected on the velocity integrated since
+    // the session start (velZ + velZFrameOffset), exactly as in 3.12.1 -
+    // see shiftVelocityFrame(). sinceCrossingMin is in the same frame.
+    float vAbs = velZ + velZFrameOffset, prevAbs = prevVelZ + velZFrameOffset;
+    if (vAbs < sinceCrossingMin) sinceCrossingMin = vAbs;
+    if (prevAbs < 0.0f && vAbs >= 0.0f && sinceCrossingMin < activeConfig.minCrossingExcursionMps) {
       if (lastCrossingT >= 0.0f) {
         float duration = sessionT - lastCrossingT;
         if (duration >= activeConfig.minCrossingDurationS) {
@@ -1711,7 +1774,12 @@ namespace {
     }
   }
 
+  // v3.12.2: set by closeBracketFn(), cleared at the top of every
+  // stepPhaseEngine() call - see shiftVelocityFrame() below.
+  bool bracketClosedThisStep = false;
+
   void closeBracketFn() {
+    bracketClosedThisStep = true;
     float t0 = bracketStartT;
     float t1 = sessionT;
     float baseline = baselineRawVel;
@@ -1803,6 +1871,46 @@ namespace {
     }
   }
 
+  // v3.12.2: zeroes velZ during confirmed stillness. Until 3.12.1 velZ was
+  // the raw integral since the session start and drifted freely (only the
+  // anchor baselineRawVel followed it). Now, on every confirmed-still
+  // sample, the velocity frame is shifted by c = velZ: velZ becomes 0 and
+  // every stored quantity expressed in the same frame moves by the same
+  // constant, so every DIFFERENCE the engine uses is unchanged:
+  //  - baselineRawVel, bracketBuf[].velZ: drift = velZ - baseline and the
+  //    corrected curve velZ - baseline - ramp are invariant;
+  //  - repCalib (y = offset of the frame at time t): every point y_i moves
+  //    by -c, so SumY -= n*c, SumTY -= c*SumT and the intercept -= c - the
+  //    refit gives the same rate and an intercept lower by exactly c;
+  //  - prevVelZ: same frame as velZ;
+  //  - lastCrossingRawPos: the displacement since the last crossing is
+  //    measured in the new frame over the WHOLE interval, so the part
+  //    before the shift loses c*(sessionT - lastCrossingT).
+  // velZLive, refVelZ, livePosZ and the Flat-guard rings are differences
+  // and do not change. The tests on the SIGN of the velocity itself
+  // (checkZeroCrossing(), the backfill in openPhase()) keep reading the
+  // velocity integrated since the session start (velZ + velZFrameOffset):
+  // moving them to the new frame was tried and changed the rep detection
+  // on the recorded sets (one squat set went from 4 reps to 1), so it is not
+  // part of this change. Result on the recorded sets: same reps, same
+  // values, same corrected curve as 3.12.1 (last printed digit at most);
+  // only the logged velZ, repCalibIntercept and the "B," baseline change.
+  // Not applied on a sample where a bracket closed: the "B," line of that
+  // bracket and the "S," line of the same sample must stay in the same
+  // frame so vbt_log_viewer.py can rebuild the corrected curve. The next
+  // confirmed-still sample does the shift.
+  void shiftVelocityFrame(float c) {
+    velZFrameOffset += c;
+    velZ -= c;
+    prevVelZ -= c;
+    baselineRawVel -= c;
+    if (lastCrossingT >= 0.0f) lastCrossingRawPos += c * (sessionT - lastCrossingT);
+    for (uint16_t i = 0; i < bracketCount; i++) bracketBuf[i].velZ -= c;
+    repCalibSumY -= (float)repCalibCount * c;
+    repCalibSumTY -= c * repCalibSumT;
+    repCalibIntercept -= c;
+  }
+
   float livePredictedOffset() {
     if (repCalibCount >= 2) {
       return repCalibRate * sessionT + repCalibIntercept;
@@ -1843,6 +1951,7 @@ namespace {
   // (bracketBuf), so those are NOT made noisier by this change.
   void stepPhaseEngine(float dt, float worldAccZDirected, float integrationAccZDirected) {
     sessionT += dt;
+    bracketClosedThisStep = false;
 
     float incrZ = trapezoidPrimedZ ? (integrationAccZDirected + prevAccZDirected) * 0.5f * dt : integrationAccZDirected * dt;
     velZ += incrZ;
@@ -1860,8 +1969,10 @@ namespace {
     float velZLive = velZ - livePredictedOffset();
     // v3.11.19: the plausibility clamp applies HERE, to velZLive - not to
     // velZ above - see the version note at the top of this file. velZ is
-    // the raw integral and is, by design (v3.11.0), NEVER reset or
-    // touched - on a long session it is EXPECTED to run past any
+    // the raw integral and is, by design (v3.11.0), never clamped (since
+    // v3.12.2 its frame is shifted to 0 while confirmed still, see
+    // shiftVelocityFrame(), which changes no difference) - on a long
+    // stretch without stillness it is EXPECTED to run past any
     // "plausible" bound as drift accumulates, exactly like it did in the
     // diagnosed capture (pinned at exactly 4.0000 for 15 consecutive
     // samples, confirming the clamp was firing on drift, not on a real
@@ -2011,6 +2122,8 @@ namespace {
         bracketBuf[0] = bracketBuf[bracketCount - 1];
         bracketCount = 1;
       }
+      // v3.12.2: velZ to 0 while still - see shiftVelocityFrame().
+      if (!bracketClosedThisStep) shiftVelocityFrame(velZ);
     }
   }
 
@@ -2023,7 +2136,7 @@ namespace {
     prevWorldAccX = prevWorldAccY = 0;
     trapezoidPrimed = false;
 
-    velZ = 0; prevAccZDirected = 0; trapezoidPrimedZ = false;
+    velZ = 0; prevAccZDirected = 0; trapezoidPrimedZ = false; velZFrameOffset = 0;
     prevVelZ = 0; rawPosCumulative = 0;
     sessionT = 0;
     trackingStartMs = millis();
@@ -2184,9 +2297,11 @@ namespace {
   // RuntimeConfig::debugLogEnabled flag before this version) - ONE CSV
   // line per sample at 100Hz, type "S". v3.11.0: the
   // velZ column (was trueVelZ) is now the new engine's RAW velocity
-  // (never zeroed); the shockRejected column removed (anti-shock filter no
-  // longer exists, see v3.11.10 near the top of the file); zuptHold ->
-  // bracketClosed (a bracket closed on this sample).
+  // (never zeroed up to v3.12.1; since v3.12.2 it reads exactly 0 while
+  // confirmed still, except on the sample that closes a bracket, see
+  // shiftVelocityFrame()); the shockRejected column removed (anti-shock
+  // filter no longer exists, see v3.11.10 near the top of the file);
+  // zuptHold -> bracketClosed (a bracket closed on this sample).
   void logSampleCsv(float dt) {
     const char* state = (livePhaseState == PhaseState::Concentric) ? "concentric" :
                          (livePhaseState == PhaseState::Eccentric) ? "eccentric" : "idle";
@@ -2279,8 +2394,10 @@ namespace {
     // during a real pause, and during motion shows the raw delta from the
     // last confirmed still reference (not yet corrected for THIS rep's
     // drift - that arrives via CorrectedCurve when its bracket closes).
-    // velZ itself (measurement/bracket/rep-calibration, never zeroed)
-    // always stays unchanged.
+    // velZ itself (measurement/bracket/rep-calibration) is not changed
+    // here (since v3.12.2 it is shifted to 0 while confirmed still, in
+    // stepPhaseEngine() - see shiftVelocityFrame(); refVelZ is a
+    // difference and does not change).
     float dirVel = velZ - baselineRawVel; // already oriented
     refVelZ = dirVel;
 

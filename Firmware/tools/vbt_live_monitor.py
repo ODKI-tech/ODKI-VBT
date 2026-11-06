@@ -19,13 +19,26 @@ VBT ODKI - live serial monitor
 A small desktop GUI that opens the device's USB-serial port and plots the
 debug log (the "S,../R,../B,../P,.." lines - see logSampleCsv()/
 reportPhaseScore()/closeBracketFn()/closePhaseFn() in MotionTracker.cpp) as
-it streams in, in real time: raw and/or corrected velocity (toggle between
-the two, or both at once), acceleration, the current phase (idle/
+it streams in, in real time: three velocity traces, each with its own
+checkbox (any combination) - velZLive (the live corrected estimate the
+engine decides on), velZ raw, and "corrected" (the retroactively
+corrected curve, see below) - acceleration, the current phase (idle/
 eccentric/concentric) and rep number, and every completed rep as it's
 scored. The colors and dark theme deliberately mirror the phone app's own
 live chart (see stream_line_chart.dart / app_colors.dart in the ODKI-VBT
 app) - same palette, same phase colors, same raw-vs-corrected convention
-(one hue, corrected drawn solid, raw drawn faint).
+(one hue, velZLive drawn solid, raw drawn faint). The "corrected" trace
+has its own color (white): it is rebuilt from the "B," rows with the same
+formula as vbt_log_viewer.py,
+    corrected(t) = velZ(t) - baseline - drift * (t - t0) / basisTotal
+for t0 <= t <= t1, and is drawn only when each bracket closes (a
+confirmed stillness), so it lags the two live traces; samples outside any
+closed bracket stay empty, as in the viewer. One difference: the
+bracket-closing sample t1 is shown (~0 m/s), where vbt_log_viewer.py
+leaves it empty. The "drift" readout is velZ - velZLive; since firmware
+3.12.2 velZ is set to 0 during confirmed stillness (see
+shiftVelocityFrame() in MotionTracker.cpp), so it shows the drift
+accumulated since the last stillness, not since START.
 
 Not a purely passive reader: the Calibrate/Start/Stop buttons send the
 plain-text `CALIBRATE`/`START`/`STOP` serial commands added in firmware
@@ -226,7 +239,16 @@ FONT_MONO = "Menlo"
 RAW_ALPHA = 0.40
 LIVE_ALPHA = 1.0
 
-CHART_MODES = [("live", "velZLive"), ("raw", "velZ raw"), ("both", "Both")]
+# Velocity traces, each with its own checkbox (any combination). "corrected"
+# is the curve the app receives retroactively (CorrectedCurve), rebuilt here
+# from the "B," rows with the same formula as vbt_log_viewer.py:
+#   corrected(t) = velZ(t) - baseline - drift * (t - t0) / basisTotal
+# for t0 <= t <= t1. It appears only when a bracket closes (a confirmed
+# stillness), so it lags the live traces; samples outside any closed
+# bracket (the pause before a rep, or a bracket still open) stay empty,
+# exactly as in vbt_log_viewer.py.
+TRACES = [("live", "velZLive", True), ("raw", "velZ raw", True), ("corr", "corrected", True)]
+CORRECTED_COLOR = TEXT_PRIMARY
 
 # Start-delay choices (seconds) - a self-timer so whoever's about to lift
 # has time to get under the bar before START actually fires. "No delay"
@@ -339,6 +361,16 @@ class SampleBuffer:
         self.t: collections.deque[float] = collections.deque(maxlen=self.MAXLEN)
         self.vel_raw: collections.deque[float] = collections.deque(maxlen=self.MAXLEN)
         self.vel_live: collections.deque[float] = collections.deque(maxlen=self.MAXLEN)
+        # firmware sessionT of each sample (sum of dt_ms, the clock of the
+        # "B," rows' t0/t1 - same as vbt_log_viewer.py) and the corrected
+        # velocity (NaN until the sample's bracket closes)
+        self.session_t: collections.deque[float] = collections.deque(maxlen=self.MAXLEN)
+        self.vel_corr: collections.deque[float] = collections.deque(maxlen=self.MAXLEN)
+        self._session_t_now = 0.0
+        # the last closed bracket: its "B," row is printed BEFORE the "S,"
+        # row of the sample that closed it (t1), so that sample is
+        # corrected when it arrives, in add_sample()
+        self._last_bracket: dict | None = None
         self.acc: collections.deque[float] = collections.deque(maxlen=self.MAXLEN)
         self.state: collections.deque[str] = collections.deque(maxlen=self.MAXLEN)
         self.rep: collections.deque[int] = collections.deque(maxlen=self.MAXLEN)
@@ -358,6 +390,9 @@ class SampleBuffer:
         self.t.append(t)
         self.vel_raw.append(row["velZ"])
         self.vel_live.append(row["velZLive"])
+        self._session_t_now += row["dt_ms"] / 1000.0
+        self.session_t.append(self._session_t_now)
+        self.vel_corr.append(self._corrected_value(self._last_bracket, self._session_t_now, row["velZ"]))
         self.acc.append(row["worldAccZ"])
         self.state.append(row["state"])
         self.rep.append(int(row["rep"]))
@@ -366,6 +401,25 @@ class SampleBuffer:
             self.still_events.append(t)
         self._prev_still = still
         return t
+
+    @staticmethod
+    def _corrected_value(br: dict | None, st: float, velz: float) -> float:
+        if br is None or not (br["t0"] - 1e-6 <= st <= br["t1"] + 1e-6):
+            return float("nan")
+        span = br["basisTotal"] if br["basisTotal"] > 1e-9 else (br["t1"] - br["t0"])
+        if span <= 1e-9:
+            return velz - br["baseline"]
+        return velz - br["baseline"] - br["drift"] * (st - br["t0"]) / span
+
+    def add_bracket(self, row: dict) -> None:
+        """Fills the corrected velocity of the samples already received
+        that belong to this bracket (t0 <= sessionT <= t1)."""
+        self._last_bracket = row
+        for i in range(len(self.session_t) - 1, -1, -1):
+            st = self.session_t[i]
+            if st < row["t0"] - 1e-6:
+                break
+            self.vel_corr[i] = self._corrected_value(row, st, self.vel_raw[i])
 
     def add_rep(self, row: dict, t_now: float) -> None:
         self.rep_events.append((t_now, int(row["rep"]), row["peakVelocity"],
@@ -378,15 +432,16 @@ class SampleBuffer:
     def latest_t(self) -> float:
         return self.t[-1] if self.t else 0.0
 
-    def window_arrays(self, window_s: float) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def window_arrays(self, window_s: float) -> tuple[np.ndarray, ...]:
         if not self.t:
-            return (np.array([]),) * 4
+            return (np.array([]),) * 5
         t_arr = np.fromiter(self.t, dtype=float)
         lo = t_arr[-1] - window_s
         idx = np.searchsorted(t_arr, lo)
         return (t_arr[idx:], np.fromiter(self.vel_raw, dtype=float)[idx:],
                 np.fromiter(self.vel_live, dtype=float)[idx:],
-                np.fromiter(self.acc, dtype=float)[idx:])
+                np.fromiter(self.acc, dtype=float)[idx:],
+                np.fromiter(self.vel_corr, dtype=float)[idx:])
 
 
 # ----------------------------------------------------------------------
@@ -423,7 +478,7 @@ class LiveMonitorApp(tk.Tk):
         self.line_queue: queue.Queue = queue.Queue()
         self.buf = SampleBuffer()
         self.window_s = tk.IntVar(value=20)
-        self.chart_mode = tk.StringVar(value="both")
+        self.trace_vars = {key: tk.BooleanVar(value=default) for key, _label, default in TRACES}
         self.paused = False
         self.record_file: TextIO | None = None
         self.recording = False
@@ -551,8 +606,8 @@ class LiveMonitorApp(tk.Tk):
         toolbar2.pack(side=tk.TOP, fill=tk.X)
 
         ttk.Label(toolbar2, text="Trace:", style="Muted.TLabel").pack(side=tk.LEFT)
-        for value, label in CHART_MODES:
-            ttk.Radiobutton(toolbar2, text=label, value=value, variable=self.chart_mode,
+        for key, label, _default in TRACES:
+            ttk.Checkbutton(toolbar2, text=label, variable=self.trace_vars[key],
                              command=self._apply_chart_mode).pack(side=tk.LEFT, padx=(6, 0))
 
         ttk.Label(toolbar2, text="Window:", style="Muted.TLabel").pack(side=tk.LEFT, padx=(24, 4))
@@ -639,6 +694,9 @@ class LiveMonitorApp(tk.Tk):
         # opacity (raw faint, corrected solid), not by a second color
         self.line_raw, = self.ax_vel.plot([], [], color=ELECTRIC_BLUE, lw=1.5, alpha=RAW_ALPHA, label="velZ raw")
         self.line_live, = self.ax_vel.plot([], [], color=ELECTRIC_BLUE, lw=1.8, alpha=LIVE_ALPHA, label="velZLive")
+        # the retroactive curve is not a live trace: its own color, so it
+        # can be told apart from velZLive when both are on
+        self.line_corr, = self.ax_vel.plot([], [], color=CORRECTED_COLOR, lw=1.6, label="corrected", zorder=4)
         self.still_scatter = self.ax_vel.scatter([], [], color=VOLT_LIME, marker="o", s=20,
                                                   zorder=5, label="stillness confirmed")
         self.discard_scatter = self.ax_vel.scatter([], [], color=ALERT_RED, marker="|", s=150,
@@ -661,9 +719,9 @@ class LiveMonitorApp(tk.Tk):
         self._rep_markers_key = None  # last-drawn (t, rep) tuple set - skip rebuild when unchanged
 
     def _build_vel_legend(self):
-        handles = [h for h in (self.line_raw, self.line_live, self.still_scatter, self.discard_scatter)
+        handles = [h for h in (self.line_raw, self.line_live, self.line_corr, self.still_scatter, self.discard_scatter)
                    if h.get_visible()]
-        leg = self.ax_vel.legend(handles=handles, loc="upper left", fontsize=8, ncol=4,
+        leg = self.ax_vel.legend(handles=handles, loc="upper left", fontsize=8, ncol=5,
                                   facecolor=BG_SURFACE_RAISED, edgecolor=BORDER_SUBTLE, labelcolor=TEXT_SECONDARY)
         leg.get_frame().set_alpha(0.9)
 
@@ -851,9 +909,9 @@ class LiveMonitorApp(tk.Tk):
         self.pause_btn.config(text="Resume" if self.paused else "Pause")
 
     def _apply_chart_mode(self):
-        mode = self.chart_mode.get()
-        self.line_raw.set_visible(mode in ("raw", "both"))
-        self.line_live.set_visible(mode in ("live", "both"))
+        self.line_raw.set_visible(self.trace_vars["raw"].get())
+        self.line_live.set_visible(self.trace_vars["live"].get())
+        self.line_corr.set_visible(self.trace_vars["corr"].get())
         self._build_vel_legend()
         self.canvas.draw_idle()
 
@@ -869,6 +927,7 @@ class LiveMonitorApp(tk.Tk):
         self._rep_markers_key = None
         self.line_raw.set_data([], [])
         self.line_live.set_data([], [])
+        self.line_corr.set_data([], [])
         self.line_acc.set_data([], [])
         self.still_scatter.set_offsets(np.empty((0, 2)))
         self.discard_scatter.set_offsets(np.empty((0, 2)))
@@ -961,7 +1020,9 @@ class LiveMonitorApp(tk.Tk):
 
         row = parse_row(line, "B", B_COLUMNS)
         if row is not None:
-            return  # bracket closes aren't drawn live (retroactive correction, see vbt_log_viewer.py) - logged only
+            self.buf.add_bracket(row)  # fills the "corrected" trace for this bracket's samples
+            self._dirty = True
+            return
 
         # v3.11.33: firmware identity (version, orientation filter)
         m = VERSION_RE.search(line)
@@ -1030,24 +1091,26 @@ class LiveMonitorApp(tk.Tk):
 
     def _redraw(self):
         window_s = self.window_s.get()
-        t, vraw, vlive, acc = self.buf.window_arrays(window_s)
+        t, vraw, vlive, acc, vcorr = self.buf.window_arrays(window_s)
         if len(t) == 0:
             self.canvas.draw_idle()
             return
 
         self.line_raw.set_data(t, vraw)
         self.line_live.set_data(t, vlive)
+        self.line_corr.set_data(t, vcorr)
         self.line_acc.set_data(t, acc)
 
         t_lo, t_hi = t[0], max(t[-1], t[0] + 1.0)
         self.ax_vel.set_xlim(t_lo, t_hi)
 
-        mode = self.chart_mode.get()
         visible_series = []
-        if mode in ("raw", "both"):
+        if self.trace_vars["raw"].get():
             visible_series.append(vraw)
-        if mode in ("live", "both"):
+        if self.trace_vars["live"].get():
             visible_series.append(vlive)
+        if self.trace_vars["corr"].get():
+            visible_series.append(vcorr)
         finite = np.concatenate(visible_series) if visible_series else np.array([0.0])
         finite = finite[np.isfinite(finite)]
         if finite.size:

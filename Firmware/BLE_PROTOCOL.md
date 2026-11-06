@@ -125,7 +125,7 @@ A bracket starts at the last still sample before a movement (its corrected value
 
 Only the first `sampleCount` entries of `correctedVelZ` are meaningful — a bracket's final chunk is usually partial, and the remaining slots are zero-padding to be ignored.
 
-**Known limitation (up to and including 3.12.1):** the firmware actually samples at about 95Hz (periods of 10–12 ms, see [Known limitations](DOCUMENTATION.md#known-limitations)), while `sampleIntervalMs` is the nominal 10. A chunk's samples therefore span about 5 % more time than `sampleCount × sampleIntervalMs`, so a curve redrawn with the nominal spacing comes out slightly compressed in time. A fix is planned for a later release.
+**Known limitation (up to and including 3.12.4):** the firmware actually samples at about 95Hz (periods of 10–12 ms, see [Known limitations](DOCUMENTATION.md#known-limitations)), while `sampleIntervalMs` is the nominal 10. A chunk's samples therefore span about 5 % more time than `sampleCount × sampleIntervalMs`, so a curve redrawn with the nominal spacing comes out slightly compressed in time. A fix is planned for a later release.
 
 Python decode: `struct.unpack("<HHHBIH20h", data)`.
 
@@ -162,7 +162,9 @@ Any other value, or a write shorter than 1 byte, is silently ignored.
 
 ## Config — `…c2b2`, Read/Write, 38 bytes
 
-Runtime-adjustable algorithm parameters, mirroring the firmware's `RuntimeConfig` struct field-for-field. **Not persisted to flash** — the firmware always boots from its compiled defaults, so a client that wants non-default settings must re-send this characteristic on every new connection. Reading it returns the defaults until a client writes otherwise, and from then on the last packet written. A write is echoed back into the Read value immediately, exactly as received — before the firmware has necessarily applied it internally, and **without** the defensive clamps the firmware applies when it does (see below), so a Read can show a value the algorithm is not actually using.
+Runtime-adjustable algorithm parameters, mirroring the firmware's `RuntimeConfig` struct field-for-field. **Not persisted to flash** — the firmware always boots from its compiled defaults, so a client that wants non-default settings must re-send this characteristic on every new connection. Reading it returns the defaults until a client writes otherwise, and from then on the last packet written. A write is echoed back into the Read value immediately, as received — except for the firmware-only fields (below), which the echo shows at their compiled defaults — before the firmware has necessarily applied it internally, and **without** the defensive clamps the firmware applies when it does (see below), so a Read can show a value the algorithm is not actually using.
+
+**Firmware-only fields (v3.12.4+).** Seven fields — `accZBiasIdleStillTimeMs`, `gyroBiasIdleStillTimeMs`, `accZBiasGyroMaxDegSx10`, `accZBiasAccMagToleranceX1000`, `emaAlphaX1000`, `minCrossingExcursionMmps`, `minCrossingDurationMs`, marked in the table below — keep their place in the packet, so the layout and size are unchanged for every client, but the values a client writes there are **ignored**: the firmware always uses its compiled defaults for them, and a Read returns those defaults. A client should still send a full, well-formed 38-byte packet; the simplest correct behaviour is to send back, in these seven fields, what it last read. On firmware before v3.12.4 they are applied like every other field.
 
 **Chunked writes (v3.11.31+).** Besides the single 38-byte write, the firmware accepts the same packet as consecutive writes of `[offset][data…]`, each at most 20 bytes long: byte 0 is the offset of `data` within the 38-byte packet, the rest is that slice of the packet. Chunks must arrive in order starting at offset 0, each continuing exactly where the previous one ended; the packet is applied only once all 38 bytes are in. An out-of-order or out-of-range chunk discards what was assembled so far; a chunk with offset 0 always starts over. The companion app sends two chunks, `[0x00][bytes 0–18]` and `[0x13][bytes 19–37]`. Between chunks a Read still returns the last complete packet. Firmware before v3.11.31 rejects any write that isn't exactly 38 bytes (the characteristic had a fixed length), so a client should check `Firmware Revision` first and fall back to the single write on older firmware.
 
@@ -172,10 +174,10 @@ See [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#runtimeconfig-field-reference
 |---|---|---|---|---|---|
 | 0 | 1 | `repDirection` | uint8 | direct | `0`=Up, `1`=Down |
 | 1 | 2 | `maxPlausibleVelocityMmps` | uint16 | direct | mm/s |
-| 3 | 2 | `accZBiasIdleStillTimeMs` | uint16 | direct | ms |
-| 5 | 2 | `gyroBiasIdleStillTimeMs` | uint16 | direct | ms |
-| 7 | 2 | `accZBiasGyroMaxDegSx10` | uint16 | ÷10 | degrees/s |
-| 9 | 2 | `accZBiasAccMagToleranceX1000` | uint16 | ÷1000 | m/s² |
+| 3 | 2 | `accZBiasIdleStillTimeMs` | uint16 | direct | ms — **firmware-only** since v3.12.4, ignored on write |
+| 5 | 2 | `gyroBiasIdleStillTimeMs` | uint16 | direct | ms — **firmware-only** since v3.12.4, ignored on write |
+| 7 | 2 | `accZBiasGyroMaxDegSx10` | uint16 | ÷10 | degrees/s — **firmware-only** since v3.12.4, ignored on write |
+| 9 | 2 | `accZBiasAccMagToleranceX1000` | uint16 | ÷1000 | m/s² — **firmware-only** since v3.12.4, ignored on write |
 | 11 | 2 | `flatGuardMaxVelocityMmps` | uint16 | direct | mm/s |
 | 13 | 1 | `velocityOverrideFlatWindowSamples` | uint8 | direct | samples |
 | 14 | 2 | `velocityFlatBandMmps` | uint16 | direct | mm/s |
@@ -190,9 +192,9 @@ See [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#runtimeconfig-field-reference
 | 28 | 2 | `maxPhaseDurationMs` | uint16 | direct | ms |
 | 30 | 1 | `phaseLookbackSamples` | uint8 | direct | samples |
 | 31 | 1 | `reversalConfirmSamples` | uint8 | direct | samples |
-| 32 | 2 | `emaAlphaX1000` | uint16 | ÷1000 | dimensionless, [0, 1] |
-| 34 | 2 | `minCrossingExcursionMmps` | **int16** | direct | mm/s, always ≤ 0 |
-| 36 | 2 | `minCrossingDurationMs` | uint16 | direct | ms |
+| 32 | 2 | `emaAlphaX1000` | uint16 | ÷1000 | dimensionless, [0, 1] — **firmware-only** since v3.12.4, ignored on write |
+| 34 | 2 | `minCrossingExcursionMmps` | **int16** | direct | mm/s, always ≤ 0 — **firmware-only** since v3.12.4, ignored on write |
+| 36 | 2 | `minCrossingDurationMs` | uint16 | direct | ms — **firmware-only** since v3.12.4, ignored on write |
 
 Every field is unsigned except `minCrossingExcursionMmps` at offset 34 — the one signed field in the packet.
 
@@ -201,6 +203,8 @@ Python decode: `struct.unpack("<BHHHHHHBHBBHBBHHHHBBHhH", data)` — 23 fields, 
 A write shorter than 38 bytes is ignored entirely (the whole packet, not just the missing tail).
 
 **Firmware-side clamps** (applied in `MotionTracker::setConfig()`, because these fields index fixed 64-sample ring buffers): `maxVelocityFlatWindowSamples`, `maxAccelerationFlatWindowSamples` and `velocityOverrideFlatWindowSamples` are capped at 64; `velocityOverrideFlatWindowSamples` is also raised to at least 30; `minVelocityFlatWindowSamples`/`minAccelerationFlatWindowSamples` are raised to at least 1 and lowered to their matching `max…` value if larger. No other field is range-checked.
+
+**v3.12.4:** the seven bias and drift-correction fields became firmware-only (see above). Layout and size unchanged. Reason: a client that stores and re-sends fields its user cannot see (the companion app up to 1.0.5 did) would otherwise override a default changed in a firmware update — v3.12.3 raised `accZBiasIdleStillTimeMs` from 50 to 300.
 
 **v3.11.27:** `flatGuardOverrideStillTimeMs` (a uint16 duration, was offset 13) was removed and replaced by `velocityOverrideFlatWindowSamples` (a uint8 sample count) at the same offset — the packet shrank from 39 to 38 bytes. The old field gated a raw gyroscope/accelerometer quiet-time safety net that in practice almost never fired (it required a full, unbroken second with zero noise anywhere in it); the new field instead widens the SAME velocity/acceleration flatness tests the sensor already runs (to a fixed window of 30–64 samples; the companion app offers 30–60) once the corrected velocity estimate is outside `flatGuardMaxVelocityMps` — see [`Firmware/DOCUMENTATION.md`](DOCUMENTATION.md#the-flat-guards-two-tier-design) for the full reasoning. A client built against the pre-v3.11.27 39-byte layout will have its Config writes silently ignored by v3.11.27+ firmware — update the packet size and field before talking to updated firmware.
 

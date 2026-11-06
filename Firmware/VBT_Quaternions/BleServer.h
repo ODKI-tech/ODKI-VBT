@@ -89,6 +89,9 @@
 //                                 the last configuration used on every new
 //                                 connection. Read always returns the
 //                                 configuration ACTIVE at that moment.
+//                                 v3.12.4: seven bias/drift-correction
+//                                 fields are firmware-only - ignored on
+//                                 write, see RuntimeConfigPacket below.
 //
 // RepSummary is Notify, NEVER indicate(): indicate() blocks the entire
 // loop() (and therefore also IMU sampling) until the client confirms,
@@ -223,13 +226,22 @@ struct SystemStatusPacket {
 //
 // v3.11.0: phase/bracket engine, ALL parameters validated with
 // sim_v2_drift.py - see the version note in MotionTracker.cpp.
+//
+// v3.12.4: the seven bias and drift-correction fields marked
+// "firmware-only" below keep their place in the packet (same 38-byte
+// layout, so every app version keeps working), but the values a client
+// writes are IGNORED: the compiled defaults always apply, and the Read
+// echo shows them (lockFirmwareOnlyFields() in BleServer.cpp). Reason:
+// apps up to 1.0.5 re-sent stored values of fields their UI does not
+// expose, and would have pushed the old accZBiasIdleStillTimeS (0.05 s,
+// 0.3 s since v3.12.3) back on every connection.
 struct RuntimeConfigPacket {
   uint8_t repDirection;                       // 0=Up, 1=Down
   uint16_t maxPlausibleVelocityMmps;          // x1    -> mm/s
-  uint16_t accZBiasIdleStillTimeMs;           // x1    -> ms
-  uint16_t gyroBiasIdleStillTimeMs;           // x1    -> ms (v3.11.0: gap filled in - never exposed before v3.10.6)
-  uint16_t accZBiasGyroMaxDegSx10;            // x10   -> degrees/s
-  uint16_t accZBiasAccMagToleranceX1000;      // x1000 -> m/s^2
+  uint16_t accZBiasIdleStillTimeMs;           // x1    -> ms (firmware-only, v3.12.4)
+  uint16_t gyroBiasIdleStillTimeMs;           // x1    -> ms (v3.11.0: gap filled in - never exposed before v3.10.6; firmware-only, v3.12.4)
+  uint16_t accZBiasGyroMaxDegSx10;            // x10   -> degrees/s (firmware-only, v3.12.4)
+  uint16_t accZBiasAccMagToleranceX1000;      // x1000 -> m/s^2 (firmware-only, v3.12.4)
   uint16_t flatGuardMaxVelocityMmps;          // x1    -> mm/s
   uint8_t velocityOverrideFlatWindowSamples;  // direct, samples (v3.11.27, replaces flatGuardOverrideStillTimeMs - see RuntimeConfig)
   uint16_t velocityFlatBandMmps;              // x1    -> mm/s
@@ -244,9 +256,9 @@ struct RuntimeConfigPacket {
   uint16_t maxPhaseDurationMs;                // x1    -> ms
   uint8_t phaseLookbackSamples;               // direct, samples
   uint8_t reversalConfirmSamples;             // direct, samples
-  uint16_t emaAlphaX1000;                     // x1000 -> dimensionless [0,1]
-  int16_t minCrossingExcursionMmps;           // x1    -> mm/s, negative
-  uint16_t minCrossingDurationMs;             // x1    -> ms
+  uint16_t emaAlphaX1000;                     // x1000 -> dimensionless [0,1] (firmware-only, v3.12.4)
+  int16_t minCrossingExcursionMmps;           // x1    -> mm/s, negative (firmware-only, v3.12.4)
+  uint16_t minCrossingDurationMs;             // x1    -> ms (firmware-only, v3.12.4)
 }; // 38 bytes (v3.11.27: was 39 - flatGuardOverrideStillTimeMs (uint16_t)
    // replaced by velocityOverrideFlatWindowSamples (uint8_t), see the
    // version note in MotionTracker.cpp: the raw-quiet-time safety net was
@@ -280,7 +292,8 @@ struct RuntimeConfigPacket {
 // Command (Write, 1 byte):
 //   0x00 STOP, 0x01 START, 0x02 CALIBRATE
 //
-// Config (Read/Write, 38 bytes, v3.11.0/v3.11.24/v3.11.27): see RuntimeConfigPacket above.
+// Config (Read/Write, 38 bytes, v3.11.0/v3.11.24/v3.11.27): see RuntimeConfigPacket above
+// (v3.12.4: seven firmware-only fields, ignored on write).
 //
 // ============================================================================
 // STANDARD SERVICES (Bluetooth SIG) - see the comment at the top of the file

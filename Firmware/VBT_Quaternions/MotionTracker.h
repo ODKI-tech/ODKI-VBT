@@ -25,7 +25,9 @@
 // then retroactive search for zero-crossings) is replaced by a "phase"
 // engine (opened/closed for flatness, reversal, or timeout - IDENTICAL to
 // how it was in firmware V2.0) + a "bracket" drift-correction layer: the
-// integrated velocity always stays RAW (never zeroed/leaked), phases are
+// integrated velocity always stays RAW (never leaked; never zeroed up to
+// v3.12.1 - since v3.12.2 its frame is shifted to 0 during confirmed
+// stillness, which changes no difference the engine uses), phases are
 // closed when a bracket (= interval between two moments of confirmed
 // stillness) closes, the drift measured at that moment is applied
 // RETROACTIVELY and linearly over time to all samples in the bracket.

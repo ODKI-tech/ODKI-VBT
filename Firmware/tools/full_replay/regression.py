@@ -14,7 +14,7 @@
 
 """
 Regression test of the whole tracking chain (Fusion orientation filter +
-engine), pinned to the behaviour of firmware 3.12.0.
+engine), pinned to the behaviour of firmware 3.12.4.
 
   python regression.py                  synthetic data, golden file committed
   python regression.py --update         rewrite the synthetic golden file
@@ -24,7 +24,7 @@ engine), pinned to the behaviour of firmware 3.12.0.
 Synthetic mode generates a deterministic IMU recording (a tilted sensor, six
 squat-like reps with small rotations, sensor noise and a gyroscope bias -
 made-up motion, not a measurement), replays it through harness.cpp and
-compares every rep's final R row with golden/synthetic_3.12.0.json.
+compares every rep's final R row with golden/synthetic_3.12.4.json.
 
 Real mode reads DIR/golden.json: for each entry the log (read in place), the
 REC_START block, the pinned initial state (the "I," line: accelScaleG and
@@ -51,7 +51,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import full_replay as FR  # noqa: E402
 
-GOLDEN = os.path.join(HERE, "golden", "synthetic_3.12.0.json")
+GOLDEN = os.path.join(HERE, "golden", "synthetic_3.12.4.json")
 G = 9.80665
 
 
@@ -187,7 +187,7 @@ def check_synthetic(binary, update):
     if update:
         os.makedirs(os.path.dirname(GOLDEN), exist_ok=True)
         with open(GOLDEN, "w") as f:
-            json.dump({"firmware": "3.12.0", "note": "synthetic made-up motion, see regression.py",
+            json.dump({"firmware": "3.12.4", "note": "synthetic made-up motion, see regression.py",
                        "input_sha256": in_sha, "output_sha256": output_digest(out),
                        "R_columns": ["peakVelocity", "meanVelocity", "peakAcceleration", "meanAcceleration",
                                      "displacementM", "eccPeakVelocity", "eccMeanVelocity", "quality1",

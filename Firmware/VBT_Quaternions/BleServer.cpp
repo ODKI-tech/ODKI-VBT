@@ -193,10 +193,30 @@ namespace {
   uint8_t configAssembly[sizeof(RuntimeConfigPacket)];
   uint16_t configAssembledLen = 0;
 
+  // v3.12.4: the bias and drift-correction parameters are firmware-only.
+  // The packet still carries them (same 38-byte layout, so every app
+  // version keeps working), but the values written by the client are
+  // IGNORED: the compiled defaults always apply, and the Read echo
+  // (writeConfigCharacteristic below) shows them. Reason: an app kept
+  // re-sending stored values of fields its UI does not expose - after
+  // accZBiasIdleStillTimeS moved from 0.05 to 0.3 s (v3.12.3) every app
+  // up to 1.0.5 would have pushed the old 0.05 back on each connection.
+  void lockFirmwareOnlyFields(RuntimeConfig& cfg) {
+    const RuntimeConfig& d = MotionTracker::defaultConfig();
+    cfg.accZBiasIdleStillTimeS = d.accZBiasIdleStillTimeS;
+    cfg.gyroBiasIdleStillTimeS = d.gyroBiasIdleStillTimeS;
+    cfg.accZBiasGyroMaxDegS = d.accZBiasGyroMaxDegS;
+    cfg.accZBiasAccMagToleranceMps2 = d.accZBiasAccMagToleranceMps2;
+    cfg.emaAlpha = d.emaAlpha;
+    cfg.minCrossingExcursionMps = d.minCrossingExcursionMps;
+    cfg.minCrossingDurationS = d.minCrossingDurationS;
+  }
+
   void applyConfigPacket(const uint8_t* data) {
     RuntimeConfigPacket pkt;
     memcpy(&pkt, data, sizeof(pkt));
     pendingConfig = packetToConfig(pkt);
+    lockFirmwareOnlyFields(pendingConfig);
     configUpdateAvailable = true;
     writeConfigCharacteristic(pendingConfig);
   }
