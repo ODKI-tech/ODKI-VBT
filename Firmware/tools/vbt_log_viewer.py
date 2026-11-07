@@ -130,6 +130,8 @@ S_COLUMNS_V3 = S_COLUMNS_V2 + ["accRawX", "accRawY", "accRawZ"]
 # v3.11.33 appends the replay state: accelScaleG and the body-frame
 # accBiasVec. 48 fields; s_df always has these columns too.
 S_COLUMNS_V4 = S_COLUMNS_V3 + ["accelScaleG", "accBiasX", "accBiasY", "accBiasZ"]
+# v3.12.5 (diagnostic build) appended the 416Hz saturation taps.
+S_COLUMNS_V5 = S_COLUMNS_V4 + ["accPeakG", "accClipCount", "accSampleCount", "gyroPeakDegS", "gyroClipCount"]
 
 R_COLUMNS = [
     "rep", "peakVelocity", "meanVelocity", "peakAcceleration", "meanAcceleration",
@@ -185,8 +187,9 @@ def parse_lines(lines):
     for line in lines:
         if line.startswith("S,"):
             parts = line.split(",")[1:]
-            if len(parts) in (len(S_COLUMNS), len(S_COLUMNS_V2), len(S_COLUMNS_V3), len(S_COLUMNS_V4)):
-                s_rows.append(parts + ["nan"] * (len(S_COLUMNS_V4) - len(parts)))
+            if len(parts) in (len(S_COLUMNS), len(S_COLUMNS_V2), len(S_COLUMNS_V3), len(S_COLUMNS_V4),
+                              len(S_COLUMNS_V5)):
+                s_rows.append(parts + ["nan"] * (len(S_COLUMNS_V5) - len(parts)))
         elif line.startswith("R,"):
             parts = line.split(",")[1:]
             if len(parts) == len(R_COLUMNS):
@@ -199,8 +202,8 @@ def parse_lines(lines):
     if not s_rows:
         return None, None, None
 
-    s_df = pd.DataFrame(s_rows, columns=S_COLUMNS_V4)
-    numeric_cols = [c for c in S_COLUMNS_V4 if c != "state"]
+    s_df = pd.DataFrame(s_rows, columns=S_COLUMNS_V5)
+    numeric_cols = [c for c in S_COLUMNS_V5 if c != "state"]
     for c in numeric_cols:
         s_df[c] = pd.to_numeric(s_df[c], errors="coerce")
 

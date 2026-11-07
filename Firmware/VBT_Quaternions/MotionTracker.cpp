@@ -1009,11 +1009,30 @@ namespace {
   MedianFilter3 accMedianFilter;
   MedianFilter3 gyroMedianFilter;
 
+  // v3.12.5 (diagnostic build): saturation taps of the last 10ms window,
+  // log-only (end of the "S," row) - see FastSampleAccumulator.
+  float lastAccPeakG = 0, lastGyroPeakDegS = 0;
+  uint16_t lastAccClipCount = 0, lastAccSampleCount = 0, lastGyroClipCount = 0;
+
   struct FastSampleAccumulator {
     float sumAx = 0, sumAy = 0, sumAz = 0;
     uint32_t countA = 0;
     float sumGx = 0, sumGy = 0, sumGz = 0;
     uint32_t countG = 0;
+    // v3.12.5 (diagnostic build): per-window saturation check on the raw
+    // 416Hz readings - largest absolute raw value on any axis and how many
+    // readings sat at full scale (int16 at or beyond +-32760).
+    int32_t peakRawA = 0, peakRawG = 0;
+    uint16_t clipA = 0, clipG = 0;
+    static int32_t absMax3(const uint8_t* buf) {
+      int32_t m = 0;
+      for (uint8_t k = 0; k < 3; k++) {
+        int32_t v = (int16_t)(buf[2 * k] | (buf[2 * k + 1] << 8));
+        if (v < 0) v = -v;
+        if (v > m) m = v;
+      }
+      return m;
+    }
 
     void poll() {
       uint8_t status = 0;
@@ -1025,6 +1044,9 @@ namespace {
           sumAy += imu.calcAccel((int16_t)(buf[2] | (buf[3] << 8)));
           sumAz += imu.calcAccel((int16_t)(buf[4] | (buf[5] << 8)));
           countA++;
+          int32_t m = absMax3(buf);
+          if (m > peakRawA) peakRawA = m;
+          if (m >= 32760) clipA++;
         }
       }
       if (status & 0x02) {
@@ -1034,6 +1056,9 @@ namespace {
           sumGy += imu.calcGyro((int16_t)(buf[2] | (buf[3] << 8)));
           sumGz += imu.calcGyro((int16_t)(buf[4] | (buf[5] << 8)));
           countG++;
+          int32_t m = absMax3(buf);
+          if (m > peakRawG) peakRawG = m;
+          if (m >= 32760) clipG++;
         }
       }
     }
@@ -1049,6 +1074,12 @@ namespace {
       } else {
         gx = imu.readFloatGyroX(); gy = imu.readFloatGyroY(); gz = imu.readFloatGyroZ();
       }
+      lastAccPeakG = imu.calcAccel((int16_t)(peakRawA > 32767 ? 32767 : peakRawA));
+      lastAccClipCount = clipA;
+      lastAccSampleCount = (uint16_t)countA;
+      lastGyroPeakDegS = imu.calcGyro((int16_t)(peakRawG > 32767 ? 32767 : peakRawG));
+      lastGyroClipCount = clipG;
+      peakRawA = peakRawG = 0; clipA = clipG = 0;
       sumAx = sumAy = sumAz = 0; countA = 0;
       sumGx = sumGy = sumGz = 0; countG = 0;
     }
@@ -2357,7 +2388,13 @@ namespace {
     Serial.print(accelScaleG, 5); Serial.print(',');
     Serial.print(accBiasVec[0], 5); Serial.print(',');
     Serial.print(accBiasVec[1], 5); Serial.print(',');
-    Serial.println(accBiasVec[2], 5);
+    Serial.print(accBiasVec[2], 5); Serial.print(',');
+    // v3.12.5 (diagnostic build): saturation taps, appended at the END.
+    Serial.print(lastAccPeakG, 3); Serial.print(',');
+    Serial.print(lastAccClipCount); Serial.print(',');
+    Serial.print(lastAccSampleCount); Serial.print(',');
+    Serial.print(lastGyroPeakDegS, 1); Serial.print(',');
+    Serial.println(lastGyroClipCount);
   }
 
   // Integrates worldAccX/Y (cosmetic leak, streaming/debug) and advances
@@ -2537,7 +2574,8 @@ void MotionTracker::setTrackingActive(bool active) {
                       "gyroFilteredX,gyroFilteredY,gyroFilteredZ,"
                       "velClamped,bracketClosed,confirmedStillNow,flatGuardOverrideFired,"
                       "worldAccZRaw,gyroRawX,gyroRawY,gyroRawZ,accRawX,accRawY,accRawZ,"
-                      "accelScaleG,accBiasX,accBiasY,accBiasZ");
+                      "accelScaleG,accBiasX,accBiasY,accBiasZ,"
+                      "accPeakG,accClipCount,accSampleCount,gyroPeakDegS,gyroClipCount");
       Serial.println("R,rep,peakVelocity,meanVelocity,peakAcceleration,meanAcceleration,"
                       "displacementM,eccPeakVelocity,eccMeanVelocity,quality1,correctionStatus");
       // v3.11.7, NEW: one line per closed bracket - see the comment on

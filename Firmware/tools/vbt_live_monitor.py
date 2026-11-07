@@ -174,6 +174,8 @@ S_COLUMNS_V2 = S_COLUMNS + ["worldAccZRaw", "gyroRawX", "gyroRawY", "gyroRawZ"]
 S_COLUMNS_V3 = S_COLUMNS_V2 + ["accRawX", "accRawY", "accRawZ"]
 # v3.11.33 appended accelScaleG and accBiasX/Y/Z.
 S_COLUMNS_V4 = S_COLUMNS_V3 + ["accelScaleG", "accBiasX", "accBiasY", "accBiasZ"]
+# v3.12.5 (diagnostic build) appended the 416Hz saturation taps (not plotted).
+S_COLUMNS_V5 = S_COLUMNS_V4 + ["accPeakG", "accClipCount", "accSampleCount", "gyroPeakDegS", "gyroClipCount"]
 
 R_COLUMNS = [
     "rep", "peakVelocity", "meanVelocity", "peakAcceleration", "meanAcceleration",
@@ -994,7 +996,7 @@ class LiveMonitorApp(tk.Tk):
             self._log_console("=== REC_STOP ===")
             return
 
-        row = (parse_row(line, "S", S_COLUMNS_V4) or parse_row(line, "S", S_COLUMNS_V3)
+        row = (parse_row(line, "S", S_COLUMNS_V5) or parse_row(line, "S", S_COLUMNS_V4) or parse_row(line, "S", S_COLUMNS_V3)
                or parse_row(line, "S", S_COLUMNS_V2)
                or parse_row(line, "S", S_COLUMNS))
         if row is not None:

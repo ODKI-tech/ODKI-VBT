@@ -23,6 +23,8 @@ Log layouts accepted (fields after "S,"):
   41  firmware 3.11.28-3.11.31  + worldAccZRaw, gyroRawX/Y/Z
   44  firmware 3.11.32          + accRawX/Y/Z (pre-median body-frame accelerometer)
   48  firmware >= 3.11.33       + accelScaleG, accBiasX/Y/Z (state the replay needs)
+  53  firmware 3.12.5 (diag.)   + accPeakG, accClipCount, accSampleCount, gyroPeakDegS,
+                                gyroClipCount (416Hz saturation taps, ignored here)
 
 The first 41 fields are parsed by vbt_log_viewer.py (imported, never copied);
 the trailing ones here.
