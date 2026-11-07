@@ -132,6 +132,10 @@ S_COLUMNS_V3 = S_COLUMNS_V2 + ["accRawX", "accRawY", "accRawZ"]
 S_COLUMNS_V4 = S_COLUMNS_V3 + ["accelScaleG", "accBiasX", "accBiasY", "accBiasZ"]
 # v3.12.5 (diagnostic build) appended the 416Hz saturation taps.
 S_COLUMNS_V5 = S_COLUMNS_V4 + ["accPeakG", "accClipCount", "accSampleCount", "gyroPeakDegS", "gyroClipCount"]
+# v3.12.6 (test build) appended the shock-handling state: 0 none, 1 shock
+# window/candidate open (not a landing), 2 landing window, 3 landing impulse
+# applied on this sample. 54 fields; s_df always has this column too.
+S_COLUMNS_V6 = S_COLUMNS_V5 + ["shock"]
 
 R_COLUMNS = [
     "rep", "peakVelocity", "meanVelocity", "peakAcceleration", "meanAcceleration",
@@ -188,8 +192,8 @@ def parse_lines(lines):
         if line.startswith("S,"):
             parts = line.split(",")[1:]
             if len(parts) in (len(S_COLUMNS), len(S_COLUMNS_V2), len(S_COLUMNS_V3), len(S_COLUMNS_V4),
-                              len(S_COLUMNS_V5)):
-                s_rows.append(parts + ["nan"] * (len(S_COLUMNS_V5) - len(parts)))
+                              len(S_COLUMNS_V5), len(S_COLUMNS_V6)):
+                s_rows.append(parts + ["nan"] * (len(S_COLUMNS_V6) - len(parts)))
         elif line.startswith("R,"):
             parts = line.split(",")[1:]
             if len(parts) == len(R_COLUMNS):
@@ -202,8 +206,8 @@ def parse_lines(lines):
     if not s_rows:
         return None, None, None
 
-    s_df = pd.DataFrame(s_rows, columns=S_COLUMNS_V5)
-    numeric_cols = [c for c in S_COLUMNS_V5 if c != "state"]
+    s_df = pd.DataFrame(s_rows, columns=S_COLUMNS_V6)
+    numeric_cols = [c for c in S_COLUMNS_V6 if c != "state"]
     for c in numeric_cols:
         s_df[c] = pd.to_numeric(s_df[c], errors="coerce")
 

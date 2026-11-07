@@ -284,6 +284,42 @@ struct RuntimeConfig {
   // FIRMWARE-ONLY since v3.12.4: ignored when written over BLE, the
   // compiled default always applies (BleServer.cpp, lockFirmwareOnlyFields()).
   float minCrossingDurationS = 0.3f;
+
+  // --- Shock handling: landing impulse + orientation hold (v3.12.6) ---
+  // FIRMWARE-ONLY, and NOT carried by the BLE Config packet at all (its
+  // 38-byte layout is unchanged): packetToConfig() in BleServer.cpp starts
+  // from RuntimeConfig{}, so these always keep the compiled defaults.
+  // Tuned offline on recorded deadlift/squat sets (tools/full_replay/) -
+  // see the v3.12.6 version note in MotionTracker.cpp and the "Mechanical
+  // shocks" section of DOCUMENTATION.md.
+  // false = no shock window, no orientation hold, no landing impulse
+  // (the engine behaves exactly as without this layer).
+  bool shockHandlingEnabled = true;
+  // A shock window opens when the jerk of the unfiltered world-Z
+  // acceleration (accelerometer projected on the PREVIOUS sample's gravity)
+  // exceeds this (m/s^3)...
+  float shockJerkOpenMps3 = 800.0f;
+  // ...and closes after shockQuietSamples consecutive samples with jerk
+  // below shockJerkQuietMps3 (once it is longer than shockQualifySamples),
+  // or after shockMaxWindowSamples at most. While it is open the
+  // orientation filter is not updated (the quaternion is held).
+  float shockJerkQuietMps3 = 300.0f;
+  uint8_t shockQuietSamples = 3;
+  uint8_t shockMaxWindowSamples = 40;
+  // Samples a landing candidate is held for before it is either confirmed
+  // or released (its acceleration re-integrated unchanged).
+  uint8_t shockQualifySamples = 6;
+  // Landing = within the candidate: one sample with |acceleration| above
+  // shockLandingPeakAccMps2, AND (shockLandingSustainSamples samples above
+  // shockLandingSustainAccMps2 OR a raw gyroscope magnitude of at least
+  // shockLandingGyroDegS), AND the bar was moving down at the window's
+  // opening (live velocity below shockLandingMinDescentMps, in the
+  // configured concentric direction's frame).
+  float shockLandingPeakAccMps2 = 25.0f;
+  float shockLandingSustainAccMps2 = 20.0f;
+  uint8_t shockLandingSustainSamples = 2;
+  float shockLandingGyroDegS = 100.0f;
+  float shockLandingMinDescentMps = -0.05f;
 };
 
 #endif

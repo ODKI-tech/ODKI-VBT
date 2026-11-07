@@ -30,7 +30,9 @@ replay.cpp) with each variant of the input and compares the results:
 The shock detector of the hybrid variant is deliberately simple (raw jerk or
 raw |acc| over a threshold) - it is what is being evaluated, not a final design.
 
-Accepts the 41-, 44- and 48-field S rows of v3.11.28 and later. To replay a
+Accepts the 41-, 44-, 48-, 53- and 54-field S rows of v3.11.28 and later
+(the shock layer of the 54-field firmware is not exercised here: its detector
+runs in updateOrientationAndAcceleration(), which this replay bypasses). To replay a
 log from its raw IMU columns through the orientation filter as well, use
 ../full_replay/full_replay.py.
 

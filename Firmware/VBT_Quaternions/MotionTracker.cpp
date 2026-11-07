@@ -873,6 +873,55 @@ namespace {
   // shows them. Reason: apps up to 1.0.5 re-sent stored values of these
   // fields, which their UI does not expose, and would have pushed the old
   // 0.05 s back on every connection. No change to the tracking engine.
+  //
+  // v3.12.6 (test build): landing impulse + orientation hold at mechanical
+  // shocks. Diagnosis, on a recorded deadlift set with the bar put down on
+  // the floor 10 times (3.12.4 counted 4 reps, drift up to -12.8 m/s in
+  // one bracket): (1) at each landing the integrated acceleration has the
+  // WRONG SIGN - the bar arrives at -0.3..-0.5 m/s and the floor should
+  // give about +0.5 m/s, but the samples read -43, -40, -22... m/s^2
+  // (accRawZ -3.4 g) and the gyroscope alternates +-100-430 deg/s sample
+  // to sample: bar and plate vibration that the 10ms mean of the 416Hz
+  // readings aliases, so each landing integrated -1.2..-2.0 m/s and velZ
+  // stayed near -1.8 m/s with the bar at rest; (2) the same gyroscope
+  // burst rotates the quaternion: the tilt error against gravity, at
+  // rest, grew from 0.5 deg to 3-8 deg after the first landings, then
+  // 12, 23 and 43 deg. Past 10 deg Fusion rejects the accelerometer
+  // (accelerationRejection) and runs on the gyroscope alone, so the error
+  // never recovers (accelerometer ignored 94-100% of the time between two
+  // landings, until the 5 s forced recovery) and at 23/43 deg worldAccZ
+  // reads -0.7/-2.5 m/s^2 with the bar still. Stillness was no longer
+  // confirmed, brackets lasted 5-9 s and the linear correction lost reps.
+  // Fix, causal (60 ms of delay at most), in two parts:
+  //   - DETECTOR (shockDetectorStep(), before the orientation filter): the
+  //     jerk of the unfiltered acceleration projected on the PREVIOUS
+  //     sample's gravity, minus accelScaleG. Above shockJerkOpenMps3 (800)
+  //     a shock window opens; it closes after shockQuietSamples (3)
+  //     consecutive samples below shockJerkQuietMps3 (300) once longer than
+  //     shockQualifySamples (6), or after shockMaxWindowSamples (40). While
+  //     it is open (opening sample included) Fusion is NOT updated: the
+  //     quaternion is held at its pre-shock value.
+  //   - LANDING (shockEngineStep(), before the integration): at a jerk above
+  //     the threshold a candidate opens and stores vPre = velZ -
+  //     livePredictedOffset() (the live velocity); its samples are held out
+  //     of the integral. It is a LANDING if, within the candidate, one
+  //     sample exceeds 25 m/s^2, AND 2 samples exceed 20 m/s^2 or the raw
+  //     gyroscope reaches 100 deg/s, AND vPre < -0.05 m/s (the bar was going
+  //     down): then velZ -= vPre (the floor stops the bar), the held samples
+  //     are dropped and 0 is integrated until the window closes. Otherwise
+  //     the held increment is added back unchanged after 6 samples (or as
+  //     soon as the window has closed with at least 2 samples held).
+  // Replayed with tools/full_replay/ (Fusion + engine): that set gives
+  // 10/10 reps, max |drift| per bracket 0.13 m/s, displacement 0.53-0.59 m
+  // on reps 2-10 (rep 1: 0.42 m, not verified). Identical on 11 of the 22
+  // recorded logs (six squat sets, four deadlift sets without a detected
+  // landing, one capture); +-0.01-0.02 on reps elsewhere (orientation
+  // hold on isolated jerk peaks, and a capture with hard landings where
+  // the raw integral was already right); a set with a real knock goes
+  // 9 -> 10 reps and a shock test 2 -> 4 (true counts not verified). All
+  // thresholds in RuntimeConfig, firmware-only and NOT in the BLE Config
+  // packet (unchanged). Log: "shock" column appended to the "S," row.
+  // shockHandlingEnabled = false gives exactly the engine without it.
   // ============================================================================
 
   // --- Sampling ---
@@ -1805,6 +1854,90 @@ namespace {
     }
   }
 
+  // v3.12.6: shock handling (see the version note at the top of the file
+  // and RuntimeConfig::shockHandlingEnabled). Two halves:
+  //  - DETECTOR, updated in updateOrientationAndAcceleration() on every
+  //    sample (also before START): jerk of the unfiltered world-Z
+  //    acceleration, the shock window it opens/closes, and the orientation
+  //    hold while the window is open;
+  //  - ENGINE side, in stepPhaseEngine(): the landing candidate (held
+  //    acceleration), the landing decision and the landing impulse.
+  // Detector state. shockGravX/Y/Z: gravity direction (body frame) of the
+  // PREVIOUS sample, which the jerk is projected on - the current sample's
+  // attitude is not known yet when the detector runs (before the filter).
+  float shockGravX = 0, shockGravY = 0, shockGravZ = 1;
+  float shockPrevWz = 0;
+  bool shockPrevValid = false;
+  bool shockWindowOpen = false;   // window open after this sample's update
+  bool shockOpenedNow = false;    // the window opened on this sample
+  uint8_t shockQuietRun = 0;
+  uint8_t shockWindowLen = 0;
+  float shockJerkNow = 0;         // this sample's jerk (m/s^3)
+  // Engine-side state.
+  bool shockCandidate = false;    // landing candidate open (acceleration held)
+  bool shockLanding = false;      // landing confirmed, integrating 0 until the window closes
+  uint8_t shockCandSamples = 0;
+  uint8_t shockCandBigSamples = 0;
+  bool shockCandPeakSeen = false;
+  float shockCandGyroMax = 0;
+  float shockVPre = 0;            // live velocity when the candidate opened
+  float shockHeldIncrement = 0;   // held integral of the candidate's samples
+  // Log-only: the "shock" column of the "S," row (0 none, 1 window or
+  // candidate open, not a landing, 2 landing window, 3 the landing impulse
+  // was applied on this sample).
+  uint8_t shockLogState = 0;
+
+  // Gravity direction of the CURRENT attitude (the same expression
+  // updateOrientationAndAcceleration() uses).
+  void shockGravFromAhrs() {
+    float q0 = ahrs.q0(), q1 = ahrs.q1(), q2 = ahrs.q2(), q3 = ahrs.q3();
+    shockGravX = 2.0f * (q1 * q3 - q0 * q2);
+    shockGravY = 2.0f * (q0 * q1 + q2 * q3);
+    shockGravZ = q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3;
+  }
+
+  // Closes any open shock window and restarts the jerk from the current
+  // attitude: on START/STOP (with resetShockEngine()) and after the
+  // orientation is re-seeded by CALIBRATE.
+  void resetShockDetector() {
+    shockGravFromAhrs();
+    shockPrevWz = 0; shockPrevValid = false;
+    shockWindowOpen = false; shockOpenedNow = false;
+    shockQuietRun = 0; shockWindowLen = 0; shockJerkNow = 0;
+  }
+
+  void resetShockEngine() {
+    shockCandidate = false; shockLanding = false;
+    shockCandSamples = 0; shockCandBigSamples = 0; shockCandPeakSeen = false;
+    shockCandGyroMax = 0; shockVPre = 0; shockHeldIncrement = 0;
+    shockLogState = 0;
+  }
+
+  // Detector step - called by updateOrientationAndAcceleration() BEFORE the
+  // orientation filter, with the pre-median accelerometer (m/s^2). Returns
+  // true if the orientation must be held on this sample (window open,
+  // including the sample that opened it).
+  bool shockDetectorStep(float axRaw, float ayRaw, float azRaw, float dt) {
+    const RuntimeConfig& c = activeConfig;
+    float wz = axRaw * shockGravX + ayRaw * shockGravY + azRaw * shockGravZ - accelScaleG;
+    float j = shockPrevValid ? fabs(wz - shockPrevWz) / (dt > 1e-3f ? dt : 1e-3f) : 0.0f;
+    shockPrevWz = wz; shockPrevValid = true; shockJerkNow = j;
+    shockOpenedNow = false;
+    if (!c.shockHandlingEnabled) { shockWindowOpen = false; return false; }
+    if (!shockWindowOpen && j > c.shockJerkOpenMps3) {
+      shockWindowOpen = true; shockOpenedNow = true; shockQuietRun = 0; shockWindowLen = 0;
+    }
+    if (shockWindowOpen) {
+      if (shockWindowLen < 255) shockWindowLen++;
+      shockQuietRun = (j < c.shockJerkQuietMps3 && !shockOpenedNow) ? (uint8_t)(shockQuietRun + 1) : 0;
+      if ((shockQuietRun >= c.shockQuietSamples && shockWindowLen > c.shockQualifySamples) ||
+          shockWindowLen >= c.shockMaxWindowSamples) {
+        shockWindowOpen = false;
+      }
+    }
+    return shockWindowOpen || shockOpenedNow;
+  }
+
   // v3.12.2: set by closeBracketFn(), cleared at the top of every
   // stepPhaseEngine() call - see shiftVelocityFrame() below.
   bool bracketClosedThisStep = false;
@@ -1967,6 +2100,57 @@ namespace {
     return 0.0f;
   }
 
+  // Engine step - called by stepPhaseEngine() BEFORE the integration, with
+  // the integration input of this sample (directed). Returns the value to
+  // integrate (0 while a candidate is held or a landing window is open);
+  // may change velZ (release of the held increment, landing impulse).
+  float shockEngineStep(float dt, float integrationAccZDirected) {
+    const RuntimeConfig& c = activeConfig;
+    shockLogState = 0;
+    if (!c.shockHandlingEnabled) return integrationAccZDirected;
+    if (shockJerkNow > c.shockJerkOpenMps3 && !shockCandidate && !shockLanding) {
+      shockCandidate = true;
+      shockCandSamples = 0; shockCandBigSamples = 0; shockCandPeakSeen = false;
+      shockCandGyroMax = 0; shockHeldIncrement = 0;
+      shockVPre = velZ - livePredictedOffset();
+    }
+    if (shockCandidate) {
+      float aa = fabs(integrationAccZDirected);
+      if (aa > c.shockLandingPeakAccMps2) shockCandPeakSeen = true;
+      if (aa > c.shockLandingSustainAccMps2 && shockCandBigSamples < 255) shockCandBigSamples++;
+      // lastGyroRaw*: THIS sample's 10ms-mean gyroscope - update() runs
+      // updateOrientationAndAcceleration() before integrateMotion().
+      float gm = sqrt(lastGyroRawX * lastGyroRawX + lastGyroRawY * lastGyroRawY + lastGyroRawZ * lastGyroRawZ);
+      if (gm > shockCandGyroMax) shockCandGyroMax = gm;
+      bool sustained = shockCandBigSamples >= c.shockLandingSustainSamples || shockCandGyroMax >= c.shockLandingGyroDegS;
+      if (shockCandPeakSeen && sustained && shockVPre < c.shockLandingMinDescentMps) {
+        // Landing: the floor stops the bar. The measured impulse (wrong
+        // sign under aliased vibration) is replaced by the known one -
+        // the velocity at the opening goes to 0 - and the held samples
+        // are dropped.
+        velZ -= shockVPre;
+        shockCandidate = false; shockLanding = true;
+        shockLogState = 3;
+        return 0.0f;
+      }
+      shockHeldIncrement += integrationAccZDirected * dt;
+      shockLogState = 1;
+      if (++shockCandSamples >= c.shockQualifySamples || (!shockWindowOpen && shockCandSamples >= 2)) {
+        // Not a landing: the held samples are integrated unchanged (as a
+        // rectangle sum, 60 ms late at most).
+        velZ += shockHeldIncrement;
+        shockCandidate = false;
+      }
+      return 0.0f;
+    }
+    if (shockLanding) {
+      if (shockWindowOpen) { shockLogState = 2; return 0.0f; }
+      shockLanding = false;
+    }
+    if (shockWindowOpen || shockOpenedNow) shockLogState = 1;
+    return integrationAccZDirected;
+  }
+
   // One update() cycle of the phase/bracket engine on the Z axis - see
   // DriftCorrectedSim.step() in sim_v2_drift.py for the line-by-line
   // reference. Both accelerations are already bias-corrected (see
@@ -1983,6 +2167,10 @@ namespace {
   void stepPhaseEngine(float dt, float worldAccZDirected, float integrationAccZDirected) {
     sessionT += dt;
     bracketClosedThisStep = false;
+
+    // v3.12.6: landing candidate / landing impulse (may change velZ and
+    // replace this sample's integration input) - see shockEngineStep().
+    integrationAccZDirected = shockEngineStep(dt, integrationAccZDirected);
 
     float incrZ = trapezoidPrimedZ ? (integrationAccZDirected + prevAccZDirected) * 0.5f * dt : integrationAccZDirected * dt;
     velZ += incrZ;
@@ -2235,8 +2423,11 @@ namespace {
     float gz = (gzFiltered - gyroBiasZ) * DEG_TO_RAD;
 
     float accMag = sqrt(ax * ax + ay * ay + az * az);
+    // v3.12.6: shock window - the orientation is held (Fusion not updated)
+    // while it is open, see shockDetectorStep() and the version note.
+    bool holdOrientation = shockDetectorStep(axRaw, ayRaw, azRaw, dt);
     uint32_t filterT0 = micros();
-    ahrs.update(gx, gy, gz, ax, ay, az, dt);
+    if (!holdOrientation) ahrs.update(gx, gy, gz, ax, ay, az, dt);
     float q0 = ahrs.q0(), q1 = ahrs.q1(), q2 = ahrs.q2(), q3 = ahrs.q3();
     uint32_t filterUs = micros() - filterT0;
     loopTiming.filterSumUs += filterUs;
@@ -2245,6 +2436,7 @@ namespace {
     float gravBodyX = 2.0f * (q1 * q3 - q0 * q2);
     float gravBodyY = 2.0f * (q0 * q1 + q2 * q3);
     float gravBodyZ = q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3;
+    shockGravX = gravBodyX; shockGravY = gravBodyY; shockGravZ = gravBodyZ;
 
     float linAccX = ax - gravBodyX * accelScaleG;
     float linAccY = ay - gravBodyY * accelScaleG;
@@ -2394,7 +2586,11 @@ namespace {
     Serial.print(lastAccClipCount); Serial.print(',');
     Serial.print(lastAccSampleCount); Serial.print(',');
     Serial.print(lastGyroPeakDegS, 1); Serial.print(',');
-    Serial.println(lastGyroClipCount);
+    Serial.print(lastGyroClipCount); Serial.print(',');
+    // v3.12.6: shock handling state of this sample, appended at the END
+    // (0 none, 1 window/candidate open - not a landing, 2 landing window,
+    // 3 landing impulse applied on this sample).
+    Serial.println(shockLogState);
   }
 
   // Integrates worldAccX/Y (cosmetic leak, streaming/debug) and advances
@@ -2526,6 +2722,9 @@ void MotionTracker::calibrateOrientation() {
   float meanAy = sumAy / CALIBRATION_SAMPLES;
   float meanAz = sumAz / CALIBRATION_SAMPLES;
   ahrs.alignToGravity(meanAx, meanAy, meanAz);
+  // v3.12.6: the jerk restarts from the new attitude (no window carried over).
+  resetShockDetector();
+  resetShockEngine();
   gyroBiasX = sumGx / CALIBRATION_SAMPLES;
   gyroBiasY = sumGy / CALIBRATION_SAMPLES;
   gyroBiasZ = sumGz / CALIBRATION_SAMPLES;
@@ -2564,6 +2763,9 @@ void MotionTracker::setTrackingActive(bool active) {
   bool wasActive = trackingActive;
   trackingActive = active;
   resetTracking();
+  // v3.12.6: a new (or ended) session starts with no shock window.
+  resetShockDetector();
+  resetShockEngine();
   if (serialLogActive()) {
     if (active) {
       Serial.println("REC_START");
@@ -2575,7 +2777,7 @@ void MotionTracker::setTrackingActive(bool active) {
                       "velClamped,bracketClosed,confirmedStillNow,flatGuardOverrideFired,"
                       "worldAccZRaw,gyroRawX,gyroRawY,gyroRawZ,accRawX,accRawY,accRawZ,"
                       "accelScaleG,accBiasX,accBiasY,accBiasZ,"
-                      "accPeakG,accClipCount,accSampleCount,gyroPeakDegS,gyroClipCount");
+                      "accPeakG,accClipCount,accSampleCount,gyroPeakDegS,gyroClipCount,shock");
       Serial.println("R,rep,peakVelocity,meanVelocity,peakAcceleration,meanAcceleration,"
                       "displacementM,eccPeakVelocity,eccMeanVelocity,quality1,correctionStatus");
       // v3.11.7, NEW: one line per closed bracket - see the comment on

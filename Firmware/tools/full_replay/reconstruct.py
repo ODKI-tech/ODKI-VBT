@@ -24,7 +24,9 @@ Log layouts accepted (fields after "S,"):
   44  firmware 3.11.32          + accRawX/Y/Z (pre-median body-frame accelerometer)
   48  firmware >= 3.11.33       + accelScaleG, accBiasX/Y/Z (state the replay needs)
   53  firmware 3.12.5 (diag.)   + accPeakG, accClipCount, accSampleCount, gyroPeakDegS,
-                                gyroClipCount (416Hz saturation taps, ignored here)
+                                gyroClipCount (416Hz saturation taps, not used by the replay)
+  54  firmware 3.12.6 (test)    + shock (shock-handling state: 0 none, 1 window/candidate
+                                open, 2 landing window, 3 landing impulse applied)
 
 The first 41 fields are parsed by vbt_log_viewer.py (imported, never copied);
 the trailing ones here.
@@ -43,6 +45,8 @@ G = 9.80665
 N_V2 = 41
 EXTRA_V3 = ["accRawX", "accRawY", "accRawZ"]
 EXTRA_V4 = EXTRA_V3 + ["accelScaleG", "accBiasX", "accBiasY", "accBiasZ"]
+# trailing columns of the 53/54-field rows, carried into the S frame (NaN on older logs)
+EXTRA_V6 = EXTRA_V4 + ["accPeakG", "accClipCount", "accSampleCount", "gyroPeakDegS", "gyroClipCount", "shock"]
 P_COLUMNS = ["phaseId", "repNumber", "phaseType", "closeReason", "durationS",
              "sampleCount", "discarded", "reported"]
 P_COLUMNS_V2 = P_COLUMNS + ["t_start_ms", "t_end_ms"]
@@ -129,10 +133,10 @@ def parse_session(lines):
     # the extras aligned by re-deriving them from the numeric t_ms rows
     ex = [e for e, l in zip(extras, [l for l in trimmed if l.startswith("S,")])
           if re.match(r"^S,\d", l)]
-    for c in EXTRA_V4:
+    for c in EXTRA_V6:
         s_df[c] = np.nan
     if len(ex) == len(s_df):
-        for i, c in enumerate(EXTRA_V4):
+        for i, c in enumerate(EXTRA_V6):
             s_df[c] = pd.to_numeric(pd.Series([e[i] if len(e) > i else "nan" for e in ex]), errors="coerce")
     s_df = v.reconstruct_corrected(s_df, b_df)
     return {"s": s_df, "r": r_df, "b": b_df, "p": parse_p(lines)}
