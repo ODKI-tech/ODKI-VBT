@@ -339,7 +339,8 @@ struct RuntimeConfig {
   // filter is re-seeded on that mean (FusionOrientation::alignToGravity());
   // either way the re-level is then disarmed. It is also disarmed, without
   // acting, relevelTimeoutS after the landing. Only a landing arms it.
-  // false = no re-level (the shock layer behaves as in v3.12.6).
+  // false = no re-level; together with shockLandingMaxVPreMps = -0.05 the
+  // shock layer behaves exactly as in v3.12.6.
   bool relevelEnabled = true;
   float relevelGyroDegS = 20.0f;
   float relevelAccTolMps2 = 0.4f;

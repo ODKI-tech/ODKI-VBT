@@ -1993,7 +1993,9 @@ namespace {
   // relevelAccTolMps2) and sums their accelerometer; after
   // relevelStillSamples of them, re-seeds the attitude on the mean if the
   // estimated gravity is more than relevelMinDeg away from it, and
-  // disarms. Disarmed without acting relevelTimeoutS after the landing.
+  // disarms. A sample with the orientation held is skipped (it neither
+  // counts nor breaks the run). Disarmed without acting relevelTimeoutS
+  // after the landing (checked on samples that are not held).
   // The filter update that follows on the same sample starts from the
   // re-seeded attitude. Returns true if the attitude was re-seeded.
   bool relevelStep(float gx, float gy, float gz, float ax, float ay, float az,
