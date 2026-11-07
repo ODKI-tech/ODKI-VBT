@@ -26,7 +26,8 @@ Log layouts accepted (fields after "S,"):
   53  firmware 3.12.5 (diag.)   + accPeakG, accClipCount, accSampleCount, gyroPeakDegS,
                                 gyroClipCount (416Hz saturation taps, not used by the replay)
   54  firmware 3.12.6 (test)    + shock (shock-handling state: 0 none, 1 window/candidate
-                                open, 2 landing window, 3 landing impulse applied)
+                                open, 2 landing window, 3 landing impulse applied;
+                                4 orientation re-levelled, since the re-level test build)
 
 The first 41 fields are parsed by vbt_log_viewer.py (imported, never copied);
 the trailing ones here.

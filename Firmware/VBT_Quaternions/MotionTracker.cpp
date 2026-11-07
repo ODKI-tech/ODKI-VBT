@@ -923,6 +923,61 @@ namespace {
   // thresholds in RuntimeConfig, firmware-only and NOT in the BLE Config
   // packet (unchanged). Log: "shock" column appended to the "S," row.
   // shockHandlingEnabled = false gives exactly the engine without it.
+  //
+  // v3.12.7 (test build): re-level after a landing, and a shock with the
+  // bar still counts as a landing. Diagnosis, on a deadlift set recorded
+  // with 3.12.6 (8 reps, then the bar put down; 3.12.6 counted 7, one
+  // bracket drifted -1.20 m/s and, with the bar at rest at the end, the
+  // live velocity reached -2.07 m/s; no accelerometer saturation): (1) the
+  // bar REALLY rotates when it lands. While the shock window is open the
+  // tilt error against gravity stays where it was (1.3 deg at one landing);
+  // when the window closes it jumps (10.3 deg): the bar has turned about
+  // its axis and, with the orientation held, that rotation is thrown away.
+  // Fusion then recovers it slowly, or rejects the accelerometer above
+  // 10 deg, so the error grew from one pull to the next (5, 9, 11, 14 deg)
+  // and reached 26-36 deg at the final put-down: -0.5..-0.9 m/s^2 of
+  // phantom acceleration with the bar still, hence negative drift (and a
+  // polluted accelerometer bias); (2) a second knock 0.14 s after a
+  // landing (gyroscope 339 deg/s) arrived with vPre -0.02 m/s, above the
+  // -0.05 the landing test required, so its vibration was integrated
+  // (-0.8 m/s) and a rep was lost. Fix:
+  //   - RE-LEVEL (relevelStep(), before the orientation filter): a
+  //     confirmed landing arms it for at most relevelTimeoutS (3 s). On each
+  //     later sample with the orientation not held, a sample is still if
+  //     the bias-corrected gyroscope is below relevelGyroDegS (20 deg/s)
+  //     and the median-filtered |a| is within relevelAccTolMps2 (0.4 m/s^2)
+  //     of accelScaleG; after relevelStillSamples (8) consecutive still
+  //     samples, if the estimated gravity is more than relevelMinDeg (0.5
+  //     deg) from their mean accelerometer, the attitude is re-seeded on
+  //     that mean (ahrs.alignToGravity(), as CALIBRATE does: zero yaw,
+  //     Fusion's rejection/recovery state restarted, startup ramp skipped;
+  //     the firmware's own gyroscope and accelerometer bias estimates are
+  //     not touched). Only a landing arms it: arming it also whenever
+  //     Fusion ignores the accelerometer re-levelled during squats and
+  //     changed a squat set's rep count (9 instead of 10) - rejected.
+  //   - LANDING THRESHOLD: shockLandingMaxVPreMps (was
+  //     shockLandingMinDescentMps = -0.05) is +0.10 m/s: a strong, sustained
+  //     shock while the bar is not rising is the bar on the floor.
+  // Replayed with tools/full_replay/: that set 7 -> 8 reps, max |drift| per
+  // bracket 1.20 -> 0.20 m/s, live velocity at rest at the end -2.07 ->
+  // 0.00, 8 re-levels (0.7-10.7 deg). The deadlift set of the v3.12.6 note
+  // keeps its 10 reps (9 re-levels of 0.7-2.9 deg, values within 0.001);
+  // identical on the other squat and deadlift sets and two captures (18 logs);
+  // only three logs with landings change, with the same rep count: a shock
+  // test and a simulated-deadlift capture within +-0.03, a squat set with a
+  // knock within +-0.01 except its first rep (mean velocity 0.32 -> 0.30,
+  // displacement 0.78 -> 0.73 m: a re-level of 8.3 deg after the knock;
+  // the true values were not recorded). Stable (8 reps, 0 at rest) for gyroscope
+  // 10-40 deg/s, |a| tolerance 0.2-0.8 m/s^2, 4-30 still samples and a vPre
+  // threshold of 0..+0.2 m/s. Firmware-only RuntimeConfig fields, not in
+  // the BLE Config packet (protocol unchanged); the "S," row keeps 54
+  // fields, the shock column reads 4 on the sample of a re-level.
+  // relevelEnabled = false with shockLandingMaxVPreMps = -0.05 gives
+  // exactly the v3.12.6 engine. The quaternion streamed over BLE jumps on
+  // a re-level (tilt correction, and yaw back to 0 as after CALIBRATE).
+  // Not verified on hardware: the rotation at the landing is inferred from
+  // the data, not measured; touch-and-go pulls without stillness on the
+  // floor are not re-levelled.
   // ============================================================================
 
   // --- Sampling ---
@@ -1885,8 +1940,21 @@ namespace {
   float shockHeldIncrement = 0;   // held integral of the candidate's samples
   // Log-only: the "shock" column of the "S," row (0 none, 1 window or
   // candidate open, not a landing, 2 landing window, 3 the landing impulse
-  // was applied on this sample).
+  // was applied on this sample; 4, from relevelAppliedNow, is printed
+  // instead when the orientation was re-levelled on this sample).
   uint8_t shockLogState = 0;
+
+  // v3.12.7: re-level after a landing (see relevelStep() and the version
+  // note at the top of the file). Armed by a confirmed landing
+  // (shockEngineStep()), stepped in updateOrientationAndAcceleration().
+  bool relevelPending = false;
+  float relevelElapsedS = 0;      // time since the landing that armed it
+  uint8_t relevelRun = 0;         // consecutive still samples
+  float relevelSumX = 0, relevelSumY = 0, relevelSumZ = 0;  // their accelerometer sum
+  bool relevelAppliedNow = false; // log-only: re-levelled on this sample (shock column 4)
+
+  void relevelClearRun() { relevelRun = 0; relevelSumX = relevelSumY = relevelSumZ = 0; }
+  void relevelArm() { relevelPending = true; relevelElapsedS = 0; relevelClearRun(); }
 
   // Gravity direction of the CURRENT attitude (the same expression
   // updateOrientationAndAcceleration() uses).
@@ -1912,6 +1980,58 @@ namespace {
     shockCandSamples = 0; shockCandBigSamples = 0; shockCandPeakSeen = false;
     shockCandGyroMax = 0; shockVPre = 0; shockHeldIncrement = 0;
     shockLogState = 0;
+    relevelPending = false; relevelElapsedS = 0; relevelClearRun();
+    relevelAppliedNow = false;
+  }
+
+  // Re-level step (v3.12.7) - called by updateOrientationAndAcceleration()
+  // on every sample, after the shock detector and BEFORE the orientation
+  // filter update, with this sample's bias-corrected gyroscope (rad/s), the
+  // median-filtered accelerometer (m/s^2) and its magnitude. While armed by
+  // a landing and the orientation is not held: counts consecutive still
+  // samples (gyroscope below relevelGyroDegS, | |a| - accelScaleG | below
+  // relevelAccTolMps2) and sums their accelerometer; after
+  // relevelStillSamples of them, re-seeds the attitude on the mean if the
+  // estimated gravity is more than relevelMinDeg away from it, and
+  // disarms. Disarmed without acting relevelTimeoutS after the landing.
+  // The filter update that follows on the same sample starts from the
+  // re-seeded attitude. Returns true if the attitude was re-seeded.
+  bool relevelStep(float gx, float gy, float gz, float ax, float ay, float az,
+                   float accMag, bool holdOrientation, float dt) {
+    const RuntimeConfig& c = activeConfig;
+    if (!relevelPending) return false;
+    relevelElapsedS += dt;
+    if (!c.relevelEnabled || holdOrientation) return false;
+    float gmag = sqrt(gx * gx + gy * gy + gz * gz) * RAD_TO_DEG;
+    bool still = gmag < c.relevelGyroDegS && fabs(accMag - accelScaleG) < c.relevelAccTolMps2;
+    if (still) {
+      if (relevelRun < 255) relevelRun++;
+      relevelSumX += ax; relevelSumY += ay; relevelSumZ += az;
+    } else {
+      relevelClearRun();
+    }
+    if (relevelRun >= c.relevelStillSamples) {
+      float q0c = ahrs.q0(), q1c = ahrs.q1(), q2c = ahrs.q2(), q3c = ahrs.q3();
+      float gbx = 2.0f * (q1c * q3c - q0c * q2c);
+      float gby = 2.0f * (q0c * q1c + q2c * q3c);
+      float gbz = q0c * q0c - q1c * q1c - q2c * q2c + q3c * q3c;
+      float n = sqrt(relevelSumX * relevelSumX + relevelSumY * relevelSumY + relevelSumZ * relevelSumZ);
+      float cosang = (gbx * relevelSumX + gby * relevelSumY + gbz * relevelSumZ) / (n > 1e-6f ? n : 1e-6f);
+      float deg = acos(constrain(cosang, -1.0f, 1.0f)) * RAD_TO_DEG;
+      bool applied = false;
+      if (n > 1e-6f && deg > c.relevelMinDeg) {
+        // Re-seeds the quaternion (zero yaw, like CALIBRATE) and restarts
+        // Fusion's internal state (acceleration-rejection counters,
+        // startup ramp skipped). The firmware's gyroscope and accelerometer
+        // bias estimates are not touched.
+        ahrs.alignToGravity(relevelSumX, relevelSumY, relevelSumZ);
+        applied = true;
+      }
+      relevelPending = false; relevelClearRun();
+      return applied;
+    }
+    if (relevelElapsedS > c.relevelTimeoutS) { relevelPending = false; relevelClearRun(); }
+    return false;
   }
 
   // Detector step - called by updateOrientationAndAcceleration() BEFORE the
@@ -2124,14 +2244,17 @@ namespace {
       float gm = sqrt(lastGyroRawX * lastGyroRawX + lastGyroRawY * lastGyroRawY + lastGyroRawZ * lastGyroRawZ);
       if (gm > shockCandGyroMax) shockCandGyroMax = gm;
       bool sustained = shockCandBigSamples >= c.shockLandingSustainSamples || shockCandGyroMax >= c.shockLandingGyroDegS;
-      if (shockCandPeakSeen && sustained && shockVPre < c.shockLandingMinDescentMps) {
+      if (shockCandPeakSeen && sustained && shockVPre < c.shockLandingMaxVPreMps) {
         // Landing: the floor stops the bar. The measured impulse (wrong
         // sign under aliased vibration) is replaced by the known one -
         // the velocity at the opening goes to 0 - and the held samples
-        // are dropped.
+        // are dropped. v3.12.7: also when the bar was not moving (vPre up
+        // to +0.10 m/s): a strong, sustained shock with the bar still is
+        // the bar on the floor. Arms the re-level (relevelStep()).
         velZ -= shockVPre;
         shockCandidate = false; shockLanding = true;
         shockLogState = 3;
+        relevelArm();
         return 0.0f;
       }
       shockHeldIncrement += integrationAccZDirected * dt;
@@ -2427,6 +2550,8 @@ namespace {
     // v3.12.6: shock window - the orientation is held (Fusion not updated)
     // while it is open, see shockDetectorStep() and the version note.
     bool holdOrientation = shockDetectorStep(axRaw, ayRaw, azRaw, dt);
+    // v3.12.7: re-level after a landing, see relevelStep() and the version note.
+    relevelAppliedNow = relevelStep(gx, gy, gz, ax, ay, az, accMag, holdOrientation, dt);
     uint32_t filterT0 = micros();
     if (!holdOrientation) ahrs.update(gx, gy, gz, ax, ay, az, dt);
     float q0 = ahrs.q0(), q1 = ahrs.q1(), q2 = ahrs.q2(), q3 = ahrs.q3();
@@ -2590,8 +2715,9 @@ namespace {
     Serial.print(lastGyroClipCount); Serial.print(',');
     // v3.12.6: shock handling state of this sample, appended at the END
     // (0 none, 1 window/candidate open - not a landing, 2 landing window,
-    // 3 landing impulse applied on this sample).
-    Serial.println(shockLogState);
+    // 3 landing impulse applied on this sample; v3.12.7: 4 orientation
+    // re-levelled on this sample, printed instead of the other states).
+    Serial.println(relevelAppliedNow ? 4 : (int)shockLogState);
   }
 
   // Integrates worldAccX/Y (cosmetic leak, streaming/debug) and advances

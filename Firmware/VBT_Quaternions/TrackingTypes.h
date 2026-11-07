@@ -312,14 +312,40 @@ struct RuntimeConfig {
   // Landing = within the candidate: one sample with |acceleration| above
   // shockLandingPeakAccMps2, AND (shockLandingSustainSamples samples above
   // shockLandingSustainAccMps2 OR a raw gyroscope magnitude of at least
-  // shockLandingGyroDegS), AND the bar was moving down at the window's
-  // opening (live velocity below shockLandingMinDescentMps, in the
-  // configured concentric direction's frame).
+  // shockLandingGyroDegS), AND the bar was not rising at the window's
+  // opening (live velocity below shockLandingMaxVPreMps, in the configured
+  // concentric direction's frame). v3.12.7: +0.10 (was -0.05, then named
+  // shockLandingMinDescentMps): a strong, sustained shock with the bar
+  // still - a second knock right after a landing, the bar dropped onto the
+  // floor at the end - is the bar on the floor too, and integrating its
+  // vibration lost a rep (see the v3.12.7 version note in MotionTracker.cpp).
   float shockLandingPeakAccMps2 = 25.0f;
   float shockLandingSustainAccMps2 = 20.0f;
   uint8_t shockLandingSustainSamples = 2;
   float shockLandingGyroDegS = 100.0f;
-  float shockLandingMinDescentMps = -0.05f;
+  float shockLandingMaxVPreMps = 0.10f;
+
+  // --- Re-level after a landing (v3.12.7) ---
+  // Same status as the shock fields above: firmware-only, not in the BLE
+  // Config packet. The bar really rotates when it lands, and the orientation
+  // hold of the shock window throws that rotation away: after a landing the
+  // attitude is re-seeded from the measured gravity at the first stillness.
+  // A landing (shock column 3) arms it; on every later sample with the
+  // orientation not held, a sample is "still" if the bias-corrected
+  // gyroscope is below relevelGyroDegS AND the median-filtered |a| is
+  // within relevelAccTolMps2 of accelScaleG. After relevelStillSamples
+  // consecutive still samples, if the angle between the estimated gravity
+  // and their mean accelerometer exceeds relevelMinDeg, the orientation
+  // filter is re-seeded on that mean (FusionOrientation::alignToGravity());
+  // either way the re-level is then disarmed. It is also disarmed, without
+  // acting, relevelTimeoutS after the landing. Only a landing arms it.
+  // false = no re-level (the shock layer behaves as in v3.12.6).
+  bool relevelEnabled = true;
+  float relevelGyroDegS = 20.0f;
+  float relevelAccTolMps2 = 0.4f;
+  uint8_t relevelStillSamples = 8;
+  float relevelTimeoutS = 3.0f;
+  float relevelMinDeg = 0.5f;
 };
 
 #endif

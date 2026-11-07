@@ -176,7 +176,8 @@ S_COLUMNS_V3 = S_COLUMNS_V2 + ["accRawX", "accRawY", "accRawZ"]
 S_COLUMNS_V4 = S_COLUMNS_V3 + ["accelScaleG", "accBiasX", "accBiasY", "accBiasZ"]
 # v3.12.5 (diagnostic build) appended the 416Hz saturation taps (not plotted).
 S_COLUMNS_V5 = S_COLUMNS_V4 + ["accPeakG", "accClipCount", "accSampleCount", "gyroPeakDegS", "gyroClipCount"]
-# v3.12.6 (test build) appended the shock-handling state (not plotted).
+# v3.12.6 (test build) appended the shock-handling state (not plotted; the
+# re-level test build also writes 4 there, orientation re-levelled).
 S_COLUMNS_V6 = S_COLUMNS_V5 + ["shock"]
 
 R_COLUMNS = [

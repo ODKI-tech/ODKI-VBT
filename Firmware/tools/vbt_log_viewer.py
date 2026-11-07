@@ -134,7 +134,9 @@ S_COLUMNS_V4 = S_COLUMNS_V3 + ["accelScaleG", "accBiasX", "accBiasY", "accBiasZ"
 S_COLUMNS_V5 = S_COLUMNS_V4 + ["accPeakG", "accClipCount", "accSampleCount", "gyroPeakDegS", "gyroClipCount"]
 # v3.12.6 (test build) appended the shock-handling state: 0 none, 1 shock
 # window/candidate open (not a landing), 2 landing window, 3 landing impulse
-# applied on this sample. 54 fields; s_df always has this column too.
+# applied on this sample; the re-level test build adds 4, orientation
+# re-levelled on this sample (after a landing). 54 fields; s_df always has
+# this column too.
 S_COLUMNS_V6 = S_COLUMNS_V5 + ["shock"]
 
 R_COLUMNS = [
