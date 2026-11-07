@@ -915,10 +915,11 @@ namespace {
   // 10/10 reps, max |drift| per bracket 0.13 m/s, displacement 0.53-0.59 m
   // on reps 2-10 (rep 1: 0.42 m, not verified). Identical on 11 of the 22
   // recorded logs (six squat sets, four deadlift sets without a detected
-  // landing, one capture); +-0.01-0.02 on reps elsewhere (orientation
-  // hold on isolated jerk peaks, and a capture with hard landings where
-  // the raw integral was already right); a set with a real knock goes
-  // 9 -> 10 reps and a shock test 2 -> 4 (true counts not verified). All
+  // landing, one capture); same reps within +-0.01-0.02 on seven more
+  // (orientation hold on isolated jerk peaks) and within 0.03 on a capture
+  // with hard landings where the raw integral was already right; a set
+  // with a real knock goes 9 -> 10 reps and a shock test 2 -> 4 (true
+  // counts not verified). All
   // thresholds in RuntimeConfig, firmware-only and NOT in the BLE Config
   // packet (unchanged). Log: "shock" column appended to the "S," row.
   // shockHandlingEnabled = false gives exactly the engine without it.
