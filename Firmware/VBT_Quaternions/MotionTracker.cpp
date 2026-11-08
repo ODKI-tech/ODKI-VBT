@@ -1072,8 +1072,9 @@ namespace {
   // the worst case.
   const uint8_t REP_STORE_CAPACITY = 24;
   // Capacity of the Flat-guard sliding windows (velZHist/accZHist in
-  // sim_v2_drift.py) - well beyond the default configurable maximum (30),
-  // clamped in MotionTracker::setConfig().
+  // sim_v2_drift.py). MotionTracker::setConfig() caps every window field
+  // at it (velocityOverrideFlatWindowSamples at 40 since v3.12.8, see
+  // below); the defaults (20 and 30 samples) are well under it.
   const uint8_t FLAT_RING_CAPACITY = 64;
   // v3.12.8: accepted range of RuntimeConfig::velocityOverrideFlatWindowSamples
   // (was 30..FLAT_RING_CAPACITY), enforced in setConfig().
