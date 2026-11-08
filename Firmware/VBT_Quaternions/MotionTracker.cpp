@@ -991,6 +991,25 @@ namespace {
   // 40 only shifts the per-bracket drift slightly. Hence a wider range for
   // experiments, not a new default. BLE Config packet unchanged (uint8,
   // same offset); only the clamp in setConfig() changes.
+  //
+  // v3.12.9 (test build): the IMU I2C bus really runs at 400 kHz. Up to
+  // v3.12.8 MotionTracker::begin() called Wire.setClock(400000), but the
+  // Seeed LSM6DS3 library uses Wire1 on the XIAO nRF52840 Sense (a #define
+  // in LSM6DS3.cpp) and Wire (TWIM0) is never started, so setClock() was a
+  // no-op and the IMU bus stayed at the 100 kHz set by Wire1.begin(). At
+  // 100 kHz a poll() that finds new data (STATUS_REG plus two 6-byte reads)
+  // holds the bus for about 2 ms, against a new reading every 2.4 ms at
+  // 416 Hz, and processing a sample while logging takes about 5 ms with no
+  // polling: a 3.12.7 deadlift log averages 2.65 readings per period
+  // (1-3) instead of about 4.6 over its mean 11 ms period, and the late
+  // tick checks behind a 2 ms poll explain the 10-12 ms periods. Engine
+  // code unchanged; its input changes on the device (more readings per
+  // mean, steadier dt). Expected, not measured: about 3 readings per
+  // period while logging over USB (the readings that arrive during the
+  // 5 ms of processing still collapse into the one latched value).
+  // Not verified on hardware: 400 kHz on the internal bus (the
+  // LSM6DS3TR-C supports fast mode; signal integrity on this board to be
+  // checked through accSampleCount and the absence of read errors).
   // ============================================================================
 
   // --- Sampling ---
@@ -2820,7 +2839,18 @@ bool MotionTracker::begin() {
   imu.settings.gyroRange = 500;
 
   bool ok = (imu.begin() == 0);
+  // v3.12.9: the bus clock must be set on the TwoWire instance the LSM6DS3
+  // library talks to, AFTER imu.begin() (whose Wire.begin() resets it to
+  // 100 kHz). On the XIAO nRF52840 Sense the library redefines Wire as Wire1
+  // (TWIM1, the internal IMU bus) inside LSM6DS3.cpp; up to v3.12.8 this
+  // line called Wire.setClock() on TWIM0, which is never started, so the
+  // call did nothing and the IMU ran at 100 kHz. Same condition as the
+  // library's own #define.
+#if defined(TARGET_SEEED_XIAO_NRF52840_SENSE) || defined(TARGET_SEEED_XIAO_NRF52840_SENSE_PLUS)
+  Wire1.setClock(400000);
+#else
   Wire.setClock(400000);
+#endif
   return ok;
 }
 
