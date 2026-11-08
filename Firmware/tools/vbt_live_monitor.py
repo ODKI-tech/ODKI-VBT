@@ -67,7 +67,8 @@ just duplicate. On connect the tool asks `VERSION` (firmware >= 3.11.33)
 and shows the firmware version and orientation filter next to the port
 (older firmware answers "Unknown serial command", which is harmless). The
 `INFO,` line at REC_START and the `TIMING,` line before REC_STOP land in
-the recorded file like every other line. Every other line the firmware prints
+the recorded file like every other line; the "H," lines of the v3.12.10
+diagnostic build (416Hz FIFO stream) are recorded but not shown. Every other line the firmware prints
 on serial (battery status, BLE messages, calibration warnings,
 RESETREAS...) shows as-is in the console panel, and the tool
 resynchronizes automatically on "REC_START"/"REC_STOP".
@@ -988,6 +989,11 @@ class LiveMonitorApp(tk.Tk):
     def _handle_line(self, line):
         if self.recording and self.record_file is not None:
             self.record_file.write(line + "\n")
+
+        # v3.12.10 diagnostic build: the 416Hz FIFO stream (about 100 lines
+        # per second) goes to the recorded file only, not to the console.
+        if line.startswith("H,"):
+            return
 
         if line == "REC_START":
             self._clear_all()

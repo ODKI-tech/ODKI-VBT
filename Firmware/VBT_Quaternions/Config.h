@@ -31,7 +31,7 @@
 namespace FirmwareVersion {
   const uint8_t MAJOR = 3;
   const uint8_t MINOR = 12;
-  const uint8_t PATCH = 9;
+  const uint8_t PATCH = 10;
 }
 
 // v3.12.0: the x-io Fusion AHRS (src/Fusion/, MIT, wrapped by

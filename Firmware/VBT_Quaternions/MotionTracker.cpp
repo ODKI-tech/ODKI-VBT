@@ -1010,6 +1010,36 @@ namespace {
   // Not verified on hardware: 400 kHz on the internal bus (the
   // LSM6DS3TR-C supports fast mode; signal integrity on this board to be
   // checked through accSampleCount and the absence of read errors).
+  //
+  // v3.12.10 (diagnostic build, not a release): logs the complete 416Hz
+  // accelerometer + gyroscope stream from the LSM6DS3 FIFO, to compare
+  // offline the integral of every reading with the 10ms poll means the
+  // engine integrates (the open question is the concentric-phase error of
+  // -0.2..-0.3 m/s on some deadlift reps). Log-only: the engine code and
+  // its input path (FastSampleAccumulator) are those of 3.12.9; poll() now
+  // also returns whether it found a new reading. See FifoLogger for the
+  // design and DOCUMENTATION.md for the "H,"/"HSTAT," lines. Active only
+  // while recording with the USB log open. Enabling the FIFO does not
+  // change the output registers or the STATUS_REG data-ready bits poll()
+  // reads (separate data path in the datasheet; not verified on hardware).
+  // Budget, from a timing model of the loop (sensor, 400 kHz bus with a
+  // fixed cost per transaction, Serial cost per print call, calibrated so
+  // that at 100 kHz it reproduces the 3.12.7 log: 2.56 readings per mean
+  // against 2.65 measured, 5.0 ms per sample): the FIFO work runs only in
+  // idle gaps after an empty poll, so the sample cost (TIMING sampleMeanUs)
+  // is unchanged; the mean readings per sample stay within about 3 % of
+  // the same model without FIFO (-0.08..+0.06 over the scenarios tried);
+  // dt grows by up to 0.35 ms on average (a bus operation can delay the
+  // start of a sample, as a poll with data already does); every reading
+  // reaches the log with no overrun as long as a bus transaction costs at
+  // most about 100 us of overhead (at 150 us the FIFO overruns). Serial
+  // adds about 13 kB/s (one "H," line of about 4 sets x 24 hex digits per
+  // sample) to about 31 kB/s of "S," rows. One set per bus operation, as
+  // first planned, could not keep up in the model; hence up to 3 (5 with
+  // a backlog). To measure on the device: accSampleCount and dt_ms in the
+  // "S," rows against 3.12.9, sampleMeanUs/dtOver11ms in TIMING, and the
+  // HSTAT line (overruns, misaligned, droppedSets, maxLevelWords,
+  // opMeanUs/opMaxUs - the real cost of a bus operation).
   // ============================================================================
 
   // --- Sampling ---
@@ -1175,9 +1205,12 @@ namespace {
       return m;
     }
 
-    void poll() {
+    // v3.12.10: returns true when it read a new accelerometer or gyroscope
+    // reading (used only to schedule FifoLogger::idle(); the readings and
+    // the means are unchanged).
+    bool poll() {
       uint8_t status = 0;
-      if (imu.readRegister(&status, LSM6DS3_ACC_GYRO_STATUS_REG) != IMU_SUCCESS) return;
+      if (imu.readRegister(&status, LSM6DS3_ACC_GYRO_STATUS_REG) != IMU_SUCCESS) return false;
       if (status & 0x01) {
         uint8_t buf[6];
         if (imu.readRegisterRegion(buf, LSM6DS3_ACC_GYRO_OUTX_L_XL, 6) == IMU_SUCCESS) {
@@ -1202,6 +1235,7 @@ namespace {
           if (m >= 32760) clipG++;
         }
       }
+      return (status & 0x03) != 0;
     }
 
     void harvest(float& ax, float& ay, float& az, float& gx, float& gy, float& gz) {
@@ -1226,6 +1260,248 @@ namespace {
     }
   };
   FastSampleAccumulator fastSamples;
+
+  // v3.12.10 (diagnostic build): log-only copy of the complete 416Hz
+  // accelerometer + gyroscope stream, read from the LSM6DS3 FIFO and
+  // printed as "H," lines (format in DOCUMENTATION.md, "Serial debug log").
+  // The engine never reads it: its input is still FastSampleAccumulator's
+  // mean of the output-register readings. Active only while recording with
+  // the USB log open (started in setTrackingActive()), so BLE-only use does
+  // no extra I2C traffic.
+  //   - FIFO in continuous mode, accelerometer and gyroscope undecimated,
+  //     FIFO ODR 416Hz: every reading is one 6-word set, in the pattern
+  //     order Gx,Gy,Gz,XLx,XLy,XLz (FIFO_PATTERN 0..5).
+  //   - All the work runs in idle(), called by update() only after a
+  //     poll() that found no new reading, and each call does ONE bus
+  //     operation: a FIFO status read (4 bytes), a read of up to 3 sets
+  //     (5 while a backlog of 10+ sets is waiting), or the "H," line print.
+  //     At 400 kHz that is at most about 1.5 ms, less than the 2.4 ms
+  //     between two readings, so no reading arrives twice between two
+  //     polls and the poll means keep the readings they had without it.
+  //     One 12-byte set per operation could not keep up in the timing
+  //     model of the version note (the FIFO overran within 30 s).
+  //   - A status read gives the number of whole sets available; they are
+  //     read without re-reading the status (otherwise the drain cannot
+  //     keep up), and the next status read checks them: FIFO_PATTERN must
+  //     be 0 and no overrun. Only checked sets are printed (the status is
+  //     re-read right after each sample, before its line). If the check
+  //     fails, the unchecked sets are dropped, the FIFO is realigned
+  //     (single words discarded until FIFO_PATTERN is 0) or, on overrun or
+  //     read error, emptied and restarted, and the stream continues in a
+  //     new segment (seq from 0): a line never spans a gap.
+  struct FifoLogger {
+    static const uint8_t REG_FIFO_CTRL1 = 0x06, REG_FIFO_CTRL2 = 0x07, REG_FIFO_CTRL3 = 0x08,
+                         REG_FIFO_CTRL4 = 0x09, REG_FIFO_CTRL5 = 0x0A, REG_FIFO_STATUS1 = 0x3A,
+                         REG_FIFO_DATA_OUT_L = 0x3E;
+    static const uint8_t FIFO_CTRL3_NO_DECIMATION = 0x09;      // DEC_FIFO_GYRO = DEC_FIFO_XL = 1
+    static const uint8_t FIFO_CTRL5_CONTINUOUS_416HZ = 0x36;   // ODR_FIFO 416Hz, FIFO_MODE continuous
+    static const uint8_t SET_BYTES = 12;
+    static const uint8_t MAX_SETS_PER_LINE = 16;
+    // Sets per bus operation: 3 (39 bytes, about 0.9 ms at 400 kHz), 5
+    // (63 bytes, under the 64-byte Wire buffer, about 1.5 ms) while at
+    // least BACKLOG_SETS are waiting - see the version note.
+    static const uint8_t SETS_PER_READ = 3, SETS_PER_READ_BACKLOG = 5, BACKLOG_SETS = 10;
+    // "H," flags: what happened since the previous line (see DOCUMENTATION.md)
+    static const uint8_t FLAG_OVERRUN = 1, FLAG_MISALIGNED = 2, FLAG_LINE_FULL = 4, FLAG_READ_ERROR = 8;
+
+    struct Stats {
+      uint32_t sets = 0, lines = 0, overruns = 0, misaligned = 0, skippedWords = 0, droppedSets = 0;
+      uint32_t lineFull = 0, readErrors = 0, maxLevelWords = 0;
+      uint32_t ops = 0, opSumUs = 0, opMaxUs = 0;
+      uint32_t lineSumUs = 0, lineMaxUs = 0;
+    } stats;
+
+    bool active = false;
+    uint8_t buf[MAX_SETS_PER_LINE * SET_BYTES];
+    uint8_t nBuf = 0;           // sets in buf
+    uint8_t nChecked = 0;       // the first nChecked of them passed a status check
+    uint16_t knownSets = 0;     // sets the last status read reported, not yet read
+    bool lastOpWasStatus = false;
+    bool realigning = false;    // discarding words until FIFO_PATTERN is 0
+    bool segmentAfterLine = false;  // a gap happened with checked sets still in buf
+    uint8_t flags = 0;
+    uint16_t lastLevelWords = 0;
+    uint16_t seg = 0;           // segment: stream without gaps; 0 at REC_START
+    uint32_t seq = 0;           // index (within the segment) of buf[0]
+    bool emitPending = false;   // a sample was processed: print its line next
+    unsigned long emitTMs = 0;
+
+    bool restartFifo() {
+      knownSets = 0;
+      if (imu.writeRegister(REG_FIFO_CTRL5, 0x00) != IMU_SUCCESS) return false;  // bypass: empties the FIFO
+      if (imu.writeRegister(REG_FIFO_CTRL1, 0x00) != IMU_SUCCESS) return false;
+      if (imu.writeRegister(REG_FIFO_CTRL2, 0x00) != IMU_SUCCESS) return false;
+      if (imu.writeRegister(REG_FIFO_CTRL3, FIFO_CTRL3_NO_DECIMATION) != IMU_SUCCESS) return false;
+      if (imu.writeRegister(REG_FIFO_CTRL4, 0x00) != IMU_SUCCESS) return false;
+      if (imu.writeRegister(REG_FIFO_CTRL5, FIFO_CTRL5_CONTINUOUS_416HZ) != IMU_SUCCESS) return false;
+      uint8_t back[2] = {0, 0};
+      if (imu.readRegisterRegion(back, REG_FIFO_CTRL5, 1) != IMU_SUCCESS) return false;
+      return back[0] == FIFO_CTRL5_CONTINUOUS_416HZ;
+    }
+
+    // Called by setTrackingActive(true) with the USB log open. Fails (and
+    // stays off: no "H," lines, no HSTAT) if FIFO_CTRL5 does not read back.
+    bool start() {
+      stats = Stats();
+      nBuf = nChecked = 0; flags = 0; seg = 0; seq = 0; lastLevelWords = 0;
+      lastOpWasStatus = realigning = segmentAfterLine = emitPending = false;
+      active = restartFifo();
+      return active;
+    }
+
+    void stop() {
+      if (active) imu.writeRegister(REG_FIFO_CTRL5, 0x00);
+      active = false;
+      nBuf = nChecked = 0;
+    }
+
+    void markSample(unsigned long tMs) {
+      if (!active) return;
+      emitPending = true;
+      emitTMs = tMs;
+      knownSets = 0;          // the next operation is a status read (checks the sets read so far)
+      lastOpWasStatus = false;
+    }
+
+    // A gap: the unchecked sets are dropped; the stream resumes in a new
+    // segment, after the checked sets still in buf have been printed.
+    void gap(uint8_t flag) {
+      flags |= flag;
+      stats.droppedSets += nBuf - nChecked;
+      nBuf = nChecked;
+      knownSets = 0;
+      if (nBuf == 0) { seg++; seq = 0; } else segmentAfterLine = true;
+    }
+
+    void noteOp(uint32_t t0) {
+      uint32_t us = micros() - t0;
+      stats.ops++;
+      stats.opSumUs += us;
+      if (us > stats.opMaxUs) stats.opMaxUs = us;
+    }
+
+    // One bus operation (or the line print) per call, see above.
+    void idle(bool print) {
+      if (!active) return;
+      if (emitPending && lastOpWasStatus) { emit(print); return; }
+      if (segmentAfterLine) return;   // wait for the checked sets to be printed
+      if (knownSets == 0) { readStatus(); return; }
+      uint8_t kMax = knownSets >= BACKLOG_SETS ? SETS_PER_READ_BACKLOG : SETS_PER_READ;
+      uint8_t k = knownSets < kMax ? (uint8_t)knownSets : kMax;
+      if (nBuf + k > MAX_SETS_PER_LINE) {
+        // Line buffer full (only after a long stall): wait for the line.
+        if (!(flags & FLAG_LINE_FULL)) stats.lineFull++;
+        flags |= FLAG_LINE_FULL;
+        return;
+      }
+      uint32_t t0 = micros();
+      lastOpWasStatus = false;
+      if (imu.readRegisterRegion(&buf[nBuf * SET_BYTES], REG_FIFO_DATA_OUT_L, k * SET_BYTES) != IMU_SUCCESS) {
+        stats.readErrors++;
+        gap(FLAG_READ_ERROR);                 // unknown how much left the FIFO
+        if (!restartFifo()) stats.readErrors++;
+        lastOpWasStatus = true;               // nothing unchecked is left: the line may be printed
+        noteOp(t0);
+        return;
+      }
+      nBuf += k; knownSets -= k; stats.sets += k;
+      noteOp(t0);
+    }
+
+    void readStatus() {
+      uint32_t t0 = micros();
+      uint8_t st[4];
+      if (imu.readRegisterRegion(st, REG_FIFO_STATUS1, 4) != IMU_SUCCESS) {
+        stats.readErrors++;
+        flags |= FLAG_READ_ERROR;
+        noteOp(t0);
+        return;                               // retried on the next call
+      }
+      lastOpWasStatus = true;
+      uint16_t level = (uint16_t)st[0] | ((uint16_t)(st[1] & 0x07) << 8);
+      bool overrun = (st[1] & 0x40) != 0;
+      uint16_t pattern = (uint16_t)st[2] | ((uint16_t)(st[3] & 0x03) << 8);
+      lastLevelWords = level;
+      if (level > stats.maxLevelWords) stats.maxLevelWords = level;
+      if (overrun) {
+        stats.overruns++;
+        realigning = false;
+        gap(FLAG_OVERRUN);
+        if (!restartFifo()) stats.readErrors++;
+        noteOp(t0);
+        return;
+      }
+      if (pattern != 0) {
+        if (!realigning) { realigning = true; stats.misaligned++; gap(FLAG_MISALIGNED); }
+        if (!segmentAfterLine && level > 0) {
+          uint8_t w[2];
+          if (imu.readRegisterRegion(w, REG_FIFO_DATA_OUT_L, 2) == IMU_SUCCESS) stats.skippedWords++;
+          lastOpWasStatus = false;
+        }
+        noteOp(t0);
+        return;
+      }
+      realigning = false;
+      nChecked = nBuf;                        // everything read so far is good
+      knownSets = level / 6;
+      noteOp(t0);
+    }
+
+    static char hexDigit(uint8_t v) { return (char)(v < 10 ? '0' + v : 'a' + v - 10); }
+
+    // The "H," line with the checked sets (printed only when there is
+    // something to report). print == false (USB log closed mid-recording)
+    // drops them; the seq field shows the gap.
+    void emit(bool print) {
+      emitPending = false;
+      uint32_t t0 = micros();
+      uint8_t n = nChecked;
+      if ((n > 0 || flags != 0) && print) {
+        char line[40 + MAX_SETS_PER_LINE * SET_BYTES * 2];
+        int len = snprintf(line, 40, "H,%lu,%u,%lu,%u,%u,%u,", emitTMs, (unsigned)seg, (unsigned long)seq,
+                           (unsigned)n, (unsigned)flags, (unsigned)lastLevelWords);
+        if (len < 0 || len >= 40) len = 0;
+        for (uint16_t i = 0; i < (uint16_t)n * SET_BYTES; i += 2) {
+          // each int16 as 4 hex digits of its two's-complement value, high byte first
+          uint8_t lo = buf[i], hi = buf[i + 1];
+          line[len++] = hexDigit(hi >> 4); line[len++] = hexDigit(hi & 0x0F);
+          line[len++] = hexDigit(lo >> 4); line[len++] = hexDigit(lo & 0x0F);
+        }
+        line[len] = 0;
+        Serial.println(line);
+        stats.lines++;
+        uint32_t us = micros() - t0;
+        stats.lineSumUs += us;
+        if (us > stats.lineMaxUs) stats.lineMaxUs = us;
+      }
+      // keep the unchecked sets (none right after a status read)
+      uint8_t rest = nBuf - n;
+      for (uint16_t i = 0; i < (uint16_t)rest * SET_BYTES; i++) buf[i] = buf[n * SET_BYTES + i];
+      nBuf = rest; nChecked = 0;
+      seq += n;
+      flags = 0;
+      if (segmentAfterLine) { segmentAfterLine = false; seg++; seq = 0; }
+    }
+
+    void printStats() {
+      Serial.print("HSTAT,sets="); Serial.print(stats.sets);
+      Serial.print(",lines="); Serial.print(stats.lines);
+      Serial.print(",segments="); Serial.print((unsigned long)seg + 1);
+      Serial.print(",overruns="); Serial.print(stats.overruns);
+      Serial.print(",misaligned="); Serial.print(stats.misaligned);
+      Serial.print(",skippedWords="); Serial.print(stats.skippedWords);
+      Serial.print(",droppedSets="); Serial.print(stats.droppedSets);
+      Serial.print(",lineFull="); Serial.print(stats.lineFull);
+      Serial.print(",readErrors="); Serial.print(stats.readErrors);
+      Serial.print(",maxLevelWords="); Serial.print(stats.maxLevelWords);
+      Serial.print(",ops="); Serial.print(stats.ops);
+      Serial.print(",opMeanUs="); Serial.print(stats.ops ? (float)stats.opSumUs / stats.ops : 0.0f, 1);
+      Serial.print(",opMaxUs="); Serial.print(stats.opMaxUs);
+      Serial.print(",lineMeanUs="); Serial.print(stats.lines ? (float)stats.lineSumUs / stats.lines : 0.0f, 1);
+      Serial.print(",lineMaxUs="); Serial.println(stats.lineMaxUs);
+    }
+  };
+  FifoLogger fifoLog;
 
   // v3.11.13: accZBias used to be a SCALAR - the real residual isn't
   // constant, it depends on the current orientation (measured 0.33 near
@@ -2970,10 +3246,25 @@ void MotionTracker::setTrackingActive(bool active) {
       // v3.11.33: firmware identity and orientation filter, once per
       // recording.
       printInfoLine();
+      // v3.12.10 (diagnostic build): the 416Hz FIFO stream, "H," lines.
+      // No header line if the FIFO does not start (then no "H," lines).
+      if (fifoLog.start())
+        Serial.println("H,t_ms,seg,seq0,n,flags,levelWords,data(n x GxGyGzAxAyAz, int16 as 4 hex digits)");
     } else if (wasActive) {
       printTimingLine();
+      if (fifoLog.active) {
+        // last line: check the sets read since the last status, then print
+        fifoLog.knownSets = 0;
+        fifoLog.readStatus();
+        fifoLog.emitPending = true;
+        fifoLog.emit(true);
+        fifoLog.printStats();
+      }
+      fifoLog.stop();
       Serial.println("REC_STOP");
     }
+  } else {
+    fifoLog.stop();
   }
   if (active) resetLoopTiming();
 }
@@ -3035,10 +3326,15 @@ const RuntimeConfig& MotionTracker::currentConfig() { return activeConfig; }
 const RuntimeConfig& MotionTracker::defaultConfig() { return DEFAULT_CONFIG; }
 
 bool MotionTracker::update() {
-  fastSamples.poll();
+  bool gotReading = fastSamples.poll();
 
   unsigned long now = millis();
-  if (now - lastSampleTime < SAMPLE_INTERVAL_MS) return false;
+  if (now - lastSampleTime < SAMPLE_INTERVAL_MS) {
+    // v3.12.10: FIFO log work (one bus operation) only in the gap after a
+    // poll that found nothing - see FifoLogger.
+    if (!gotReading) fifoLog.idle(serialLogActive());
+    return false;
+  }
   float dt = (now - lastSampleTime) / 1000.0f;
   uint32_t dtMs = now - lastSampleTime;
   lastSampleTime = now;
@@ -3056,6 +3352,10 @@ bool MotionTracker::update() {
   }
 
   integrateMotion(dt);
+  // v3.12.10: the "H," line with the FIFO sets read up to now is printed
+  // in the next idle gap (see above), not here, so it does not lengthen
+  // the sample (readings arriving during it would be lost to the mean).
+  fifoLog.markSample(lastSampleTime);
   noteSampleTiming(sampleT0, dtMs);
 
   sample.worldVelX = worldVelX; sample.worldVelY = worldVelY;

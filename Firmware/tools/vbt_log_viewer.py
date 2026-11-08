@@ -261,10 +261,13 @@ def parse_session_info(lines):
     build also printed its build tag)
     and the "TIMING," line printed just before REC_STOP (micros() cost of the
     filter update and of a whole sample, loop period) as two dicts of
-    key -> value strings ({} when the firmware does not print them)."""
-    out = {"info": {}, "timing": {}}
+    key -> value strings ({} when the firmware does not print them).
+    v3.12.10 diagnostic build: also the "HSTAT," line (FIFO stream
+    statistics) under "hstat"; the 416Hz "H," lines themselves are ignored
+    here (tools/fifo416/fifo_worldz.py reads them)."""
+    out = {"info": {}, "timing": {}, "hstat": {}}
     for line in lines:
-        for prefix, key in (("INFO,", "info"), ("TIMING,", "timing")):
+        for prefix, key in (("INFO,", "info"), ("TIMING,", "timing"), ("HSTAT,", "hstat")):
             if line.startswith(prefix):
                 out[key] = dict(kv.split("=", 1) for kv in line[len(prefix):].split(",") if "=" in kv)
     return out
@@ -1106,6 +1109,8 @@ def main():
         print("Firmware: " + ", ".join(f"{k}={v}" for k, v in sinfo["info"].items()))
     if sinfo["timing"]:
         print("Timing:   " + ", ".join(f"{k}={v}" for k, v in sinfo["timing"].items()))
+    if sinfo["hstat"]:
+        print("FIFO:     " + ", ".join(f"{k}={v}" for k, v in sinfo["hstat"].items()))
 
     overrides, closes, stalls = scan_anomalies(s_df, args.gyro_thresh, args.min_still)
     print_anomaly_report(overrides, closes, stalls)

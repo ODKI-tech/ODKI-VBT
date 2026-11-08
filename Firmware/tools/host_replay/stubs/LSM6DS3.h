@@ -25,6 +25,7 @@ struct LSM6DS3 {
   int begin() { return 0; }
   int readRegister(uint8_t*, uint8_t) { return 0; }
   int readRegisterRegion(uint8_t*, uint8_t, uint8_t) { return 0; }
+  int writeRegister(uint8_t, uint8_t) { return 0; }  // v3.12.10: FifoLogger (stays off on the host: CTRL5 reads back 0)
   float calcAccel(int16_t) { return 0; }
   float calcGyro(int16_t) { return 0; }
   float readFloatAccelX() { return 0; } float readFloatAccelY() { return 0; } float readFloatAccelZ() { return 0; }
