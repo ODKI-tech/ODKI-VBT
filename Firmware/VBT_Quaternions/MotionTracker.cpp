@@ -1040,6 +1040,36 @@ namespace {
   // "S," rows against 3.12.9, sampleMeanUs/dtOver11ms in TIMING, and the
   // HSTAT line (overruns, misaligned, droppedSets, maxLevelWords,
   // opMeanUs/opMaxUs - the real cost of a bus operation).
+  //
+  // v3.12.11 (test build, not a release): softer landings, and the FIFO
+  // log stall. Three deadlift sessions with floor impacts (8 reps each,
+  // one sensor per session: 3.12.8, 3.12.9, 3.12.10) gave 8, 2 and 6 reps.
+  //   - On the last two the landings reached only 18-51 m/s^2 on world Z
+  //     (42-77 on the first; the single-reading peak accPeakG was lower
+  //     too, 2-6.7 g against 4.3-7.3 g): the shock window opened but the
+  //     landing was not confirmed (peak below 25 m/s^2, e.g. 18.5 m/s^2
+  //     with 506 deg/s of gyroscope), so the landing vibration was
+  //     integrated, velZ drifted and reps were lost. The replay reproduces
+  //     8 / 2 / 6. shockLandingPeakAccMps2 25 -> 18 and
+  //     shockLandingSustainAccMps2 20 -> 15: 8 / 8 / 8 in the replay; on
+  //     the other 24 recorded logs reps unchanged, peak velocities within
+  //     0.01 m/s except one rep (1.11 -> 1.09 m/s); the extra landings
+  //     there come with the bar still. Squat bottoms reach the same peak
+  //     values (15-27 m/s^2) with the bar going down: what keeps them out
+  //     is the sustained test (2 samples or the gyroscope), not the peak.
+  //     Margin: with sustained 18 one landing of those logs is still
+  //     missed. Thresholds fitted on the same logs: to be confirmed on new
+  //     recordings.
+  //   - The 400 kHz bus (3.12.9) raised the readings per mean only from
+  //     2.69 to 2.83: the readings are lost while a sample is processed,
+  //     not on the bus. It does remove the 11-12 ms samples (1032 of 2453
+  //     at 100 kHz, none at 400 kHz). Kept.
+  //   - FifoLogger stalled after 52 sets: a misaligned status read with
+  //     checked sets in the buffer sets segmentAfterLine, idle() then
+  //     waits for the line, but the line needs a status read first and
+  //     markSample() clears lastOpWasStatus - nothing ever ran again.
+  //     After a gap every set left in the buffer is checked, so the line
+  //     is now printed without waiting for a status read.
   // ============================================================================
 
   // --- Sampling ---
@@ -1384,7 +1414,10 @@ namespace {
     // One bus operation (or the line print) per call, see above.
     void idle(bool print) {
       if (!active) return;
-      if (emitPending && lastOpWasStatus) { emit(print); return; }
+      // v3.12.11: after a gap (segmentAfterLine) the buffer holds only
+      // checked sets, so the line needs no new status read (waiting for
+      // one stalled the stream: markSample() clears lastOpWasStatus).
+      if (emitPending && (lastOpWasStatus || segmentAfterLine)) { emit(print); return; }
       if (segmentAfterLine) return;   // wait for the checked sets to be printed
       if (knownSets == 0) { readStatus(); return; }
       uint8_t kMax = knownSets >= BACKLOG_SETS ? SETS_PER_READ_BACKLOG : SETS_PER_READ;

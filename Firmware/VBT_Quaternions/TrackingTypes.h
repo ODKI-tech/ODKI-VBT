@@ -320,8 +320,11 @@ struct RuntimeConfig {
   // still - a second knock right after a landing, the bar dropped onto the
   // floor at the end - is the bar on the floor too, and integrating its
   // vibration lost a rep (see the v3.12.7 version note in MotionTracker.cpp).
-  float shockLandingPeakAccMps2 = 25.0f;
-  float shockLandingSustainAccMps2 = 20.0f;
+  // v3.12.11: peak 18 (was 25), sustained 15 (was 20): softer landings,
+  // 18-25 m/s^2 on world Z, were not confirmed and cost reps (see the
+  // v3.12.11 version note in MotionTracker.cpp).
+  float shockLandingPeakAccMps2 = 18.0f;
+  float shockLandingSustainAccMps2 = 15.0f;
   uint8_t shockLandingSustainSamples = 2;
   float shockLandingGyroDegS = 100.0f;
   float shockLandingMaxVPreMps = 0.10f;
