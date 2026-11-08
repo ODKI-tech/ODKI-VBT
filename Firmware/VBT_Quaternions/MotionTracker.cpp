@@ -1093,6 +1093,30 @@ namespace {
   //     landing and cut the pull (one rep 1.39 -> 0.71 m/s); at -0.25 one
   //     more landing in a shock test log (one PV 1.88 -> 1.83 m/s).
   //     Fitted on the same logs: to be confirmed on new recordings.
+  //
+  // v3.12.13 (test build, not a release): the drift regression across
+  // landings. A deadlift set on 3.12.12 (8 reps, all counted) reported rep
+  // 2 at 1.16 m/s / 0.38 m (raw integral 1.35). The live drift prediction
+  // (livePredictedOffset(), the repCalib regression) assumes a drift
+  // growing linearly in time, each point being the mean offset between two
+  // zero crossings; a confirmed landing resets velZ at once, so an
+  // interval that contains one does not measure drift and the regression
+  // reads the step as a slope. There the second point gave a rate of
+  // 0.355 m/s per s; going from 1 to 2 points has no continuity patch, so
+  // velZLive jumped by -0.6 m/s during the eccentric; the next landing
+  // took that as vPre (-1.47 instead of about -0.55) and left velZ at
+  // +0.94 with the bar still (bracket drift +1.00).
+  //   - Fix: on a confirmed landing the rep calibration restarts (count
+  //     and sums to 0, the EMA predicts until two new points) and the
+  //     zero-crossing reference is dropped (lastCrossingT = -1), so the
+  //     interval containing the landing is not used. Replay of 29 logs:
+  //     every log without landings identical; that rep 1.16 -> 1.34 m/s,
+  //     0.38 -> 0.49 m, largest bracket drift 1.00 -> 0.06; elsewhere a
+  //     few reps change, towards the raw integral (one 1.27 -> 1.14 m/s,
+  //     raw 1.16). Rejected: continuity at the 1 -> 2 step (a squat set
+  //     10 -> 5 reps), vPre from the raw velocity (a set 8 -> 7), restart
+  //     without dropping the interval (reps appear, PV up to 3.4), dropping
+  //     the interval only (one rep 0.79 m).
   // ============================================================================
 
   // --- Sampling ---
@@ -2387,6 +2411,16 @@ namespace {
         // to +0.10 m/s): a strong, sustained shock with the bar still is
         // the bar on the floor. Arms the re-level (relevelStep()).
         velZ -= shockVPre;
+        // v3.12.13: the drift regression assumes a drift growing linearly
+        // in time; the landing has just reset the velocity, so the points
+        // collected so far, and the zero-crossing interval that contains
+        // the landing, no longer describe it. Start the rep calibration
+        // again (the EMA predicts until two new points) - see the version
+        // note at the top of the file.
+        repCalibCount = 0;
+        repCalibSumT = repCalibSumY = repCalibSumTT = repCalibSumTY = 0;
+        repCalibRate = 0; repCalibIntercept = 0;
+        lastCrossingT = -1.0f;
         shockCandidate = false; shockLanding = true;
         shockLogState = 3;
         relevelArm();
