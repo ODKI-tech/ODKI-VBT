@@ -330,8 +330,12 @@ struct RuntimeConfig {
   float shockLandingMaxVPreMps = 0.10f;
   // v3.12.12: below this vPre (bar clearly coming down) the peak and
   // sustained tests also accept the 10ms mean's 3D deviation from gravity,
-  // | |a| - accelScaleG |, not only |world Z|.
-  float shockLandingMagMaxVPreMps = -0.40f;
+  // | |a| - accelScaleG |, not only |world Z|. v3.12.14: -0.30 (was -0.40).
+  float shockLandingMagMaxVPreMps = -0.30f;
+  // v3.12.14: samples integrated normally (no shock candidate held, no
+  // landing window) needed after a suspension before stillness can be
+  // confirmed - a frozen velocity looks flat.
+  uint8_t stillSamplesAfterSuspend = 3;
 
   // --- Re-level after a landing (v3.12.7) ---
   // Same status as the shock fields above: firmware-only, not in the BLE

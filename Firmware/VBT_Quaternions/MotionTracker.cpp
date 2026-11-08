@@ -1117,6 +1117,34 @@ namespace {
   //     10 -> 5 reps), vPre from the raw velocity (a set 8 -> 7), restart
   //     without dropping the interval (reps appear, PV up to 3.4), dropping
   //     the interval only (one rep 0.79 m).
+  //
+  // v3.12.14 (test build, not a release): false stillness while the
+  // integration is suspended. A deadlift set on 3.12.13 reported rep 1 at
+  // 1.06 m/s / 0.39 m (raw floor-to-top integral 1.27). At the lift-off
+  // the plates rattled, a shock candidate held the integration (velZ
+  // frozen at +0.14 for 5 samples) while the median of worldAccZ passed
+  // near 0: the flat-guard saw a flat velocity and a flat acceleration,
+  // confirmed stillness with the bar rising and closed a 110 ms bracket
+  // with +0.176 m/s of "drift", which the live prediction then subtracted
+  // from the whole rep. Same pattern in other logs: a held candidate at a
+  // lift-off (+0.11), and a landing window (0 integrated) while the bar
+  // already left again (+0.41, +0.17). Shock windows at the lift-off
+  // happen on almost every rep, with vPre -0.05..+0.14 m/s, so a velocity
+  // threshold cannot separate them.
+  //   - Fix: after a suspended sample (candidate held or landing window)
+  //     stillness needs stillSamplesAfterSuspend (3) samples integrated
+  //     normally. With the bar really still it is confirmed 30 ms later.
+  //   - shockLandingMagMaxVPreMps -0.40 -> -0.30: with the change above a
+  //     soft landing of one set arrived at vPre just above -0.40 and was
+  //     missed (a rep lost); at -0.30, -0.25 and -0.20 it is caught.
+  //   - Replay of 30 logs: that rep 1.06 -> 1.27 m/s, 0.39 -> 0.54 m;
+  //     another set's rep 2 1.31 -> 1.45 m/s, 0.46 -> 0.54 m (a false
+  //     stillness at its lift-off too); the other 28 logs identical.
+  //     Rejected: no stillness above a gyroscope threshold or with the
+  //     unfiltered acceleration out of band (about 20 logs change, some
+  //     reps worse, a rep lost), a vPre threshold (covers about a third of
+  //     the lift-offs), the held increment in the flat-guard velocity
+  //     (no effect).
   // ============================================================================
 
   // --- Sampling ---
@@ -2084,7 +2112,12 @@ namespace {
   bool shockCandPeakSeen = false;
   float shockCandGyroMax = 0;
   float shockVPre = 0;            // live velocity when the candidate opened
-  float shockHeldIncrement = 0;   // held integral of the candidate's samples
+  float shockHeldIncrement = 0;
+  // v3.12.14: shockEngineStep() suspended the integration on this sample
+  // (candidate held or landing window: 0 integrated), and the samples
+  // integrated normally since the last suspension - see stepPhaseEngine().
+  bool shockSuspendedNow = false;
+  uint8_t samplesSinceSuspend = 255;   // held integral of the candidate's samples
   // Log-only: the "shock" column of the "S," row (0 none, 1 window or
   // candidate open, not a landing, 2 landing window, 3 the landing impulse
   // was applied on this sample; 4, from relevelAppliedNow, is printed
@@ -2124,6 +2157,7 @@ namespace {
 
   void resetShockEngine() {
     shockCandidate = false; shockLanding = false;
+    shockSuspendedNow = false; samplesSinceSuspend = 255;
     shockCandSamples = 0; shockCandBigSamples = 0; shockCandPeakSeen = false;
     shockCandGyroMax = 0; shockVPre = 0; shockHeldIncrement = 0;
     shockLogState = 0;
@@ -2377,6 +2411,7 @@ namespace {
   float shockEngineStep(float dt, float integrationAccZDirected) {
     const RuntimeConfig& c = activeConfig;
     shockLogState = 0;
+    shockSuspendedNow = false;
     if (!c.shockHandlingEnabled) return integrationAccZDirected;
     if (shockJerkNow > c.shockJerkOpenMps3 && !shockCandidate && !shockLanding) {
       shockCandidate = true;
@@ -2424,6 +2459,7 @@ namespace {
         shockCandidate = false; shockLanding = true;
         shockLogState = 3;
         relevelArm();
+        shockSuspendedNow = true;
         return 0.0f;
       }
       shockHeldIncrement += integrationAccZDirected * dt;
@@ -2434,10 +2470,11 @@ namespace {
         velZ += shockHeldIncrement;
         shockCandidate = false;
       }
+      shockSuspendedNow = true;
       return 0.0f;
     }
     if (shockLanding) {
-      if (shockWindowOpen) { shockLogState = 2; return 0.0f; }
+      if (shockWindowOpen) { shockLogState = 2; shockSuspendedNow = true; return 0.0f; }
       shockLanding = false;
     }
     if (shockWindowOpen || shockOpenedNow) shockLogState = 1;
@@ -2464,6 +2501,8 @@ namespace {
     // v3.12.6: landing candidate / landing impulse (may change velZ and
     // replace this sample's integration input) - see shockEngineStep().
     integrationAccZDirected = shockEngineStep(dt, integrationAccZDirected);
+    if (shockSuspendedNow) samplesSinceSuspend = 0;
+    else if (samplesSinceSuspend < 255) samplesSinceSuspend++;
 
     float incrZ = trapezoidPrimedZ ? (integrationAccZDirected + prevAccZDirected) * 0.5f * dt : integrationAccZDirected * dt;
     velZ += incrZ;
@@ -2533,6 +2572,11 @@ namespace {
     bool velIsFlatNow = excursionFlat(velLiveRing, ringFill, ringHead, FLAT_RING_CAPACITY, velWindow, activeConfig.velocityFlatBandMps);
     bool accelFlatNow = absoluteFlat(accZRing, ringFill, ringHead, FLAT_RING_CAPACITY, accWindow, activeConfig.accelerationFlatBandMps2);
     bool flatCombined = velIsFlatNow && accelFlatNow;
+    // v3.12.14: a suspended integration (shock candidate held, landing
+    // window) freezes velZ, and a frozen velocity looks flat: stillness
+    // needs stillSamplesAfterSuspend samples integrated normally since the
+    // last suspension - see the version note at the top of the file.
+    if (samplesSinceSuspend < activeConfig.stillSamplesAfterSuspend) flatCombined = false;
     debugStateVar.flatGuardOverrideFired = aboveCeiling && flatCombined;
     bool risingEdge = flatCombined && !wasFlatCombined;
     wasFlatCombined = flatCombined;
