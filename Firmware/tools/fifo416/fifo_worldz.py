@@ -25,10 +25,13 @@ build ("H," lines), compared with the 10ms poll means the engine integrates.
    reading is lost between two polls, so the accSampleCount readings of one
    poll mean are consecutive FIFO sets; the logged accRawX/Y/Z (mean x
    accelScaleG, 4 decimals) must equal the mean of such a run to the printed
-   digit. Each row is matched against every run of its length; a unique
-   match consistent with the order of the others fixes the index of the
-   row's last reading. Rows without a match get the index from a straight
-   line fitted to the matched rows of the segment (reported as "fitted").
+   digit. Each row is matched against every run of its length; the rows
+   with a unique match fix a straight line from row time to reading index
+   (fitted robustly, a match at rest can be a coincidence), a row with
+   several matches takes the one nearest the line (both "matched"), and
+   rows without a match get the index from the line ("fitted"). A segment
+   with a single unique match gets no line; an index that would go
+   backwards is dropped.
 3. For every row, the readings after the previous row's last reading up to
    its own last one are the readings of that period. Each is projected on
    the vertical with the row's quaternion, accelScaleG and accZBias:

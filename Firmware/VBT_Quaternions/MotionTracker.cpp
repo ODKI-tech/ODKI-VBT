@@ -1264,7 +1264,7 @@ namespace {
 
   // v3.12.10 (diagnostic build): log-only copy of the complete 416Hz
   // accelerometer + gyroscope stream, read from the LSM6DS3 FIFO and
-  // printed as "H," lines (format in DOCUMENTATION.md, "Serial debug log").
+  // printed as "H," lines (format in DOCUMENTATION.md, "Lab data capture (serial log)").
   // The engine never reads it: its input is still FastSampleAccumulator's
   // mean of the output-register readings. Active only while recording with
   // the USB log open (started in setTrackingActive()), so BLE-only use does
