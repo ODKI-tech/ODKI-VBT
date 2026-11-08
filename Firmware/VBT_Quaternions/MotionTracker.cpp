@@ -978,6 +978,19 @@ namespace {
   // Not verified on hardware: the rotation at the landing is inferred from
   // the data, not measured; touch-and-go pulls without stillness on the
   // floor are not re-levelled.
+  //
+  // v3.12.8: the accepted range of velocityOverrideFlatWindowSamples (the
+  // fixed flatness window used above flatGuardMaxVelocityMps, v3.11.27) is
+  // now 10-40 samples (was 30-64, with the app offering 30-60); the default
+  // stays 30, so the engine is unchanged unless the app writes another
+  // value. Replayed on 23 real logs: a window of 10-25 samples mistakes the
+  // constant-velocity stretch of slow reps for stillness (squat sets gain
+  // or lose up to 2 reps at 10-15; at 20 two squat sets change count and a
+  // slow deadlift rep drops from 0.47 to 0.22 m/s with 0.00 m displacement;
+  // at 25 the squats hold but that slow rep still reads 0.20 m/s), while
+  // 40 only shifts the per-bracket drift slightly. Hence a wider range for
+  // experiments, not a new default. BLE Config packet unchanged (uint8,
+  // same offset); only the clamp in setConfig() changes.
   // ============================================================================
 
   // --- Sampling ---
@@ -1043,6 +1056,10 @@ namespace {
   // sim_v2_drift.py) - well beyond the default configurable maximum (30),
   // clamped in MotionTracker::setConfig().
   const uint8_t FLAT_RING_CAPACITY = 64;
+  // v3.12.8: accepted range of RuntimeConfig::velocityOverrideFlatWindowSamples
+  // (was 30..FLAT_RING_CAPACITY), enforced in setConfig().
+  const uint8_t VELOCITY_OVERRIDE_WINDOW_MIN = 10;
+  const uint8_t VELOCITY_OVERRIDE_WINDOW_MAX = 40;
 
   // --- Orientation calibration (CALIBRATE command, see calibrateOrientation()) ---
   const uint16_t CALIBRATION_SAMPLES = 200;
@@ -2353,7 +2370,8 @@ namespace {
     // correction estimate that's drifted past the point where a small
     // window could be trusted - both tests switch to a wider, FIXED
     // window instead: still velZLive/worldAccZ (not raw IMU noise), just
-    // over enough samples (velocityOverrideFlatWindowSamples, 30-60) that
+    // over enough samples (velocityOverrideFlatWindowSamples, 10-40 since
+    // v3.12.8, default 30) that
     // a genuine pause (holds flat for hundreds of ms) can't be mistaken
     // for the few-millisecond acceleration-crosses-zero instant at the
     // PEAK of a fast rep - see stepPhaseEngine()'s call sites below and
@@ -2966,13 +2984,13 @@ void MotionTracker::setConfig(const RuntimeConfig& config) {
   if (activeConfig.maxVelocityFlatWindowSamples > FLAT_RING_CAPACITY) activeConfig.maxVelocityFlatWindowSamples = FLAT_RING_CAPACITY;
   if (activeConfig.maxAccelerationFlatWindowSamples > FLAT_RING_CAPACITY) activeConfig.maxAccelerationFlatWindowSamples = FLAT_RING_CAPACITY;
   // v3.11.27: same protection for the above-ceiling fixed window - also
-  // indexes into FLAT_RING_CAPACITY (see stepPhaseEngine()). 30 is the
-  // documented minimum of its configurable 30-60 range; clamping the low
-  // end too keeps an out-of-range BLE value from shrinking it back down
-  // to something the peak-velocity ambiguity it exists to prevent could
-  // exploit.
-  if (activeConfig.velocityOverrideFlatWindowSamples > FLAT_RING_CAPACITY) activeConfig.velocityOverrideFlatWindowSamples = FLAT_RING_CAPACITY;
-  if (activeConfig.velocityOverrideFlatWindowSamples < 30) activeConfig.velocityOverrideFlatWindowSamples = 30;
+  // indexes into FLAT_RING_CAPACITY (see stepPhaseEngine()). v3.12.8: the
+  // accepted range is 10-40 samples (was 30-64); the default stays 30.
+  // Clamping the low end too keeps an out-of-range BLE value from
+  // shrinking it below the documented minimum (see the v3.12.8 version
+  // note for why windows under 30 are allowed but not the default).
+  if (activeConfig.velocityOverrideFlatWindowSamples > VELOCITY_OVERRIDE_WINDOW_MAX) activeConfig.velocityOverrideFlatWindowSamples = VELOCITY_OVERRIDE_WINDOW_MAX;
+  if (activeConfig.velocityOverrideFlatWindowSamples < VELOCITY_OVERRIDE_WINDOW_MIN) activeConfig.velocityOverrideFlatWindowSamples = VELOCITY_OVERRIDE_WINDOW_MIN;
   if (activeConfig.minVelocityFlatWindowSamples < 1) activeConfig.minVelocityFlatWindowSamples = 1;
   if (activeConfig.minAccelerationFlatWindowSamples < 1) activeConfig.minAccelerationFlatWindowSamples = 1;
   if (activeConfig.minVelocityFlatWindowSamples > activeConfig.maxVelocityFlatWindowSamples)

@@ -241,8 +241,9 @@ struct RuntimeConfig {
   // acceleration-crosses-zero instant that occurs at the PEAK of any
   // sufficiently fast rep by simple calculus (dv/dt=0 there too) - which
   // is exactly why the ceiling above exists for the normal dynamic-window
-  // path and can't simply be dropped there. Configurable 30-60 samples
-  // (300-600ms) from the app.
+  // path and can't simply be dropped there. v3.12.8: accepted range
+  // 10-40 samples (100-400ms, clamped in MotionTracker::setConfig(); was
+  // 30-64); default unchanged at 30 - see the v3.12.8 version note.
   uint8_t velocityOverrideFlatWindowSamples = 30;
   // Excursion band (m/s) on the recent velocity window for it to be
   // considered "flat".
