@@ -328,6 +328,10 @@ struct RuntimeConfig {
   uint8_t shockLandingSustainSamples = 2;
   float shockLandingGyroDegS = 100.0f;
   float shockLandingMaxVPreMps = 0.10f;
+  // v3.12.12: below this vPre (bar clearly coming down) the peak and
+  // sustained tests also accept the 10ms mean's 3D deviation from gravity,
+  // | |a| - accelScaleG |, not only |world Z|.
+  float shockLandingMagMaxVPreMps = -0.40f;
 
   // --- Re-level after a landing (v3.12.7) ---
   // Same status as the shock fields above: firmware-only, not in the BLE
