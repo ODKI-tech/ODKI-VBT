@@ -285,6 +285,15 @@ struct RuntimeConfig {
   // FIRMWARE-ONLY since v3.12.4: ignored when written over BLE, the
   // compiled default always applies (BleServer.cpp, lockFirmwareOnlyFields()).
   float minCrossingDurationS = 0.3f;
+  // v3.12.15: minimum descent (m) of the live velocity (velZLive, the
+  // negative part integrated) since the last cycle boundary for a
+  // crossing to count as one. A dip of the bar at the top of a pull
+  // crosses zero too, with a few millimetres of descent: counted as a
+  // boundary it split the rep into two half cycles whose net
+  // displacement is the full range of motion, not drift. NOT in the BLE
+  // Config packet (its 38-byte layout is unchanged): packetToConfig()
+  // starts from RuntimeConfig{}, so it always keeps this default.
+  float minCrossingDescentM = 0.05f;
 
   // --- Shock handling: landing impulse + orientation hold (v3.12.6) ---
   // FIRMWARE-ONLY, and NOT carried by the BLE Config packet at all (its

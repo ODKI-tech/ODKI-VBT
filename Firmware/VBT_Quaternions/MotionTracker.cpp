@@ -1145,6 +1145,40 @@ namespace {
   //     reps worse, a rep lost), a vPre threshold (covers about a third of
   //     the lift-offs), the held increment in the flat-guard velocity
   //     (no effect).
+  //
+  // v3.12.15 (test build, not a release): fixes from the 3.12.14 deadlift,
+  // hip thrust and squat logs.
+  //   - REP-CYCLE BOUNDARIES. In the sets with merged or miscounted reps
+  //     velZLive was 0.3-1.9 m/s (p95) away from velZ. Replay with every
+  //     regression point logged: the bad points come in pairs, about +0.3
+  //     then -0.3 m/s, from half cycles. A dip of the bar at the top of a
+  //     pull (from a few mm/s to -0.3 m/s for 0.1 s) passes the -0.03 m/s
+  //     excursion test, so the crossing after it splits the rep: each half
+  //     (bottom to top, top to bottom) has the full range of motion as net
+  //     displacement, which the regression reads as drift. In one set the
+  //     second point gave a rate of 0.138 m/s per s and moved velZLive by
+  //     -0.41 m/s with the bar still. Fix: a crossing is a cycle boundary
+  //     only if the live velocity has also come down by
+  //     minCrossingDescentM (0.05 m) since the last one. At the crossings
+  //     of the recorded logs the descent is below 0.03 m (top dips) or
+  //     above 0.10 m (real eccentrics, hip thrust included); the result is
+  //     the same from 0.04 to 0.15 m. Replay: one set 9 -> 12 reps (12
+  //     pulls in the signal, 11 counted by the lifter), two sets 10 -> 11
+  //     and 8 -> 10 (true 11 and 10), one set with the put-down no longer
+  //     counted as a rep and a merged rep separated (the reps now line up
+  //     with the pulls in the signal); velZLive p95 1.87 -> 0.11,
+  //     1.27 -> 0.39, 0.49 -> 0.02. Older recorded logs identical or
+  //     within 0.006, except one squat set's rep 3 (0.94 -> 1.00 m/s,
+  //     0.59 -> 0.87 m, in a set whose first reps already read 1.3-1.5 m).
+  //     Rejected: 3 points before the slope is used (a capture 14 -> 17
+  //     reps), dropping points above 0.15 m/s (a squat set with a real fast
+  //     drift 10 -> 4 reps: no point accepted, no stillness, the drift kept
+  //     growing), dropping cycles that contain a stillness (20 logs change,
+  //     no gain), the descent measured on the raw velocity (a top dip reads
+  //     as a descent through the drift). Not this cause: a hip thrust set
+  //     (10 of 12 reps, p95 1.15) gets its offset from the EMA, seeded by a
+  //     0.2 s bracket at the start (0.47 m/s per s); seeding it by duration
+  //     fixes that set and breaks another (12 -> 9), so it is unchanged.
   // ============================================================================
 
   // --- Sampling ---
@@ -1526,6 +1560,9 @@ namespace {
   float lastCrossingT = -1; // <0 = none yet (None in Python)
   float lastCrossingRawPos = 0;
   float sinceCrossingMin = 0;
+  // v3.12.15: descent of the live velocity (integral of -velZLive while it
+  // is negative, m) since the last cycle boundary - see checkZeroCrossing().
+  float sinceCrossingDescentM = 0;
   uint16_t repCalibCount = 0;
   float repCalibSumT = 0, repCalibSumY = 0, repCalibSumTT = 0, repCalibSumTY = 0;
   float repCalibRate = 0, repCalibIntercept = 0;
@@ -1900,7 +1937,10 @@ namespace {
     // see shiftVelocityFrame(). sinceCrossingMin is in the same frame.
     float vAbs = velZ + velZFrameOffset, prevAbs = prevVelZ + velZFrameOffset;
     if (vAbs < sinceCrossingMin) sinceCrossingMin = vAbs;
-    if (prevAbs < 0.0f && vAbs >= 0.0f && sinceCrossingMin < activeConfig.minCrossingExcursionMps) {
+    // v3.12.15: the bar must also have come down by minCrossingDescentM
+    // (live velocity) since the last boundary - see the version note.
+    if (prevAbs < 0.0f && vAbs >= 0.0f && sinceCrossingMin < activeConfig.minCrossingExcursionMps &&
+        sinceCrossingDescentM >= activeConfig.minCrossingDescentM) {
       if (lastCrossingT >= 0.0f) {
         float duration = sessionT - lastCrossingT;
         if (duration >= activeConfig.minCrossingDurationS) {
@@ -1941,6 +1981,7 @@ namespace {
       lastCrossingT = sessionT;
       lastCrossingRawPos = rawPosCumulative;
       sinceCrossingMin = 0.0f;
+      sinceCrossingDescentM = 0.0f;
     }
   }
 
@@ -2542,6 +2583,9 @@ namespace {
     else if (velZLive < -activeConfig.maxPlausibleVelocityMps) { velZLive = -activeConfig.maxPlausibleVelocityMps; clamped = true; }
     debugStateVar.velocityClampedToMax = clamped;
     debugStateVar.velZLive = velZLive;
+    // v3.12.15: descent since the last rep-cycle boundary, read by the next
+    // checkZeroCrossing() - velZLive is invariant under shiftVelocityFrame().
+    if (velZLive < 0.0f) sinceCrossingDescentM -= velZLive * dt;
 
     velLiveRing[ringHead] = velZLive;
     accZRing[ringHead] = worldAccZDirected;
@@ -2719,7 +2763,7 @@ namespace {
 
     emaRate = 0; emaInitialized = false; baselineRawVel = 0;
 
-    lastCrossingT = -1; lastCrossingRawPos = 0; sinceCrossingMin = 0;
+    lastCrossingT = -1; lastCrossingRawPos = 0; sinceCrossingMin = 0; sinceCrossingDescentM = 0;
     repCalibCount = 0; repCalibSumT = repCalibSumY = repCalibSumTT = repCalibSumTY = 0;
     repCalibRate = 0; repCalibIntercept = 0;
 
