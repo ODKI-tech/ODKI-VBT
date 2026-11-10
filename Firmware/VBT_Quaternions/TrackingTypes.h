@@ -345,6 +345,12 @@ struct RuntimeConfig {
   // landing window) needed after a suspension before stillness can be
   // confirmed - a frozen velocity looks flat.
   uint8_t stillSamplesAfterSuspend = 3;
+  // v3.12.15: after a landing, while the re-level is armed, a sample whose
+  // median world-Z acceleration differs from the median | |a| - accelScaleG |
+  // deviation (signed) by more than this (m/s^2) is integrated as 0: for a
+  // bar moving vertically the two agree whatever the attitude error is
+  // not, so a large mismatch is the attitude, not motion.
+  float postLandingAccMismatchMps2 = 4.0f;
 
   // --- Re-level after a landing (v3.12.7) ---
   // Same status as the shock fields above: firmware-only, not in the BLE

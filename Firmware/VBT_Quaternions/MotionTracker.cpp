@@ -1205,6 +1205,24 @@ namespace {
   //     landing leaves velZ at -0.01). Setting velZ to 0 at the landing
   //     instead (vPre from the raw velocity, already rejected in 3.12.13)
   //     adds a 0.09 m/s rep to one set: rejected again.
+  //   - AFTER THE LANDING. With the bracket closed at the landing the
+  //     post-impact error no longer reaches the reps, but it is still
+  //     integrated (-2.65 m/s live with the bar on the floor, until the
+  //     re-level). After the landing window, while the re-level is armed,
+  //     a sample whose median world-Z acceleration differs from the signed
+  //     median | |a| - accelScaleG | by more than
+  //     postLandingAccMismatchMps2 (4 m/s^2) is integrated as 0: for a bar
+  //     moving vertically the two agree whatever the attitude (within about
+  //     0.4 m/s^2 on a lift right after a landing), there they read about
+  //     -9 and 0 for 0.28 s. It counts as a suspended sample for the
+  //     stillness rule of 3.12.14 (shock column 5); the orientation is not
+  //     held, the re-level still corrects it. Replay: that put-down -2.65
+  //     -> 0.00 m/s, largest drift of the set 2.65 -> 0.33; elsewhere single
+  //     samples right after a landing window, no value changes by more than
+  //     0.007. Rejected: 2 m/s^2 (cuts a pull that starts right after a
+  //     landing, 1.26 -> 1.02 m/s), suspending until the re-level whatever
+  //     the acceleration (needs a 0.3-0.4 s hold, long enough to cut a
+  //     touch-and-go pull).
   // ============================================================================
 
   // --- Sampling ---
@@ -1487,6 +1505,9 @@ namespace {
   // v3.11.32: log-only - the body-frame accelerometer BEFORE the median
   // (axRaw/ayRaw/azRaw in updateOrientationAndAcceleration(), m/s^2).
   float lastAccRawX = 0, lastAccRawY = 0, lastAccRawZ = 0;
+  // v3.12.15: |a| of the median-filtered accelerometer (m/s^2), for the
+  // post-landing attitude check in shockEngineStep().
+  float lastAccMagMedian = 0;
 
   const RuntimeConfig DEFAULT_CONFIG;
   RuntimeConfig activeConfig;
@@ -2191,7 +2212,8 @@ namespace {
   // Log-only: the "shock" column of the "S," row (0 none, 1 window or
   // candidate open, not a landing, 2 landing window, 3 the landing impulse
   // was applied on this sample; 4, from relevelAppliedNow, is printed
-  // instead when the orientation was re-levelled on this sample).
+  // instead when the orientation was re-levelled on this sample; v3.12.15:
+  // 5, 0 integrated after a landing because world Z disagrees with |a|).
   uint8_t shockLogState = 0;
 
   // v3.12.7: re-level after a landing (see relevelStep() and the version
@@ -2478,7 +2500,7 @@ namespace {
   // the integration input of this sample (directed). Returns the value to
   // integrate (0 while a candidate is held or a landing window is open);
   // may change velZ (release of the held increment, landing impulse).
-  float shockEngineStep(float dt, float integrationAccZDirected) {
+  float shockEngineStep(float dt, float worldAccZDirected, float integrationAccZDirected) {
     const RuntimeConfig& c = activeConfig;
     shockLogState = 0;
     shockSuspendedNow = false;
@@ -2556,6 +2578,16 @@ namespace {
       if (shockWindowOpen) { shockLogState = 2; shockSuspendedNow = true; return 0.0f; }
       shockLanding = false;
     }
+    // v3.12.15: after the landing window, until the re-level has run (or
+    // timed out), a world-Z acceleration that disagrees with the magnitude
+    // is the attitude left wrong by the impact, not motion: 0 is
+    // integrated - see the version note. Both values are median-filtered.
+    if (relevelPending && c.relevelEnabled) {
+      float worldZ = worldAccZDirected * (float)repDirectionSign;
+      if (fabs(worldZ - (lastAccMagMedian - accelScaleG)) > c.postLandingAccMismatchMps2) {
+        shockLogState = 5; shockSuspendedNow = true; return 0.0f;
+      }
+    }
     if (shockWindowOpen || shockOpenedNow) shockLogState = 1;
     return integrationAccZDirected;
   }
@@ -2579,7 +2611,7 @@ namespace {
 
     // v3.12.6: landing candidate / landing impulse (may change velZ and
     // replace this sample's integration input) - see shockEngineStep().
-    integrationAccZDirected = shockEngineStep(dt, integrationAccZDirected);
+    integrationAccZDirected = shockEngineStep(dt, worldAccZDirected, integrationAccZDirected);
     if (shockSuspendedNow) samplesSinceSuspend = 0;
     else if (samplesSinceSuspend < 255) samplesSinceSuspend++;
 
@@ -2843,6 +2875,7 @@ namespace {
     float gz = (gzFiltered - gyroBiasZ) * DEG_TO_RAD;
 
     float accMag = sqrt(ax * ax + ay * ay + az * az);
+    lastAccMagMedian = accMag;
     // v3.12.6: shock window - the orientation is held (Fusion not updated)
     // while it is open, see shockDetectorStep() and the version note.
     bool holdOrientation = shockDetectorStep(axRaw, ayRaw, azRaw, dt);
