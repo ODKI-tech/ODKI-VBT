@@ -136,6 +136,14 @@ def state_from_log(d, scale=None):
     return init, lines, info
 
 
+def with_logged_config(d, settings):
+    """settings plus the log's CONFIG line as cfg.<field> (an explicit
+    --set cfg.<field> wins)."""
+    out = {"cfg." + k: v for k, v in d.get("config", {}).items()}
+    out.update(settings)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("logfile")
@@ -165,7 +173,7 @@ def main():
             with quiet():
                 dk = R.load_log(args.logfile, k)
             init, lines, info = state_from_log(dk, args.scale)
-            outs.append(run_raw(binary, init, lines, settings))
+            outs.append(run_raw(binary, init, lines, with_logged_config(dk, settings)))
             reps = final_reps(outs[-1])
             print(f"session {k + 1}/{n}: {len(dk['s'])} samples, {len(reps)} reps; {info['start_state']}")
         if out_dir:
@@ -178,7 +186,7 @@ def main():
     with quiet():
         d = R.load_log(args.logfile, args.session)
     init, lines, info = state_from_log(d, args.scale)
-    out = run_raw(binary, init, lines, settings)
+    out = run_raw(binary, init, lines, with_logged_config(d, settings))
     print(f"layout {d['layout']}, session {d['session_index'] + 1}/{d['n_sessions']}, {len(d['s'])} samples")
     print(f"accelerometer: {info['acc_source']}; gyroscope: {info['gyro_source']}")
     print(f"accelScaleG {info['scale']:.4f} ({info['scale_source']}); accBiasVec: {info['accbias_source']}")

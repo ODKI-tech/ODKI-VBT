@@ -313,6 +313,7 @@ void loop() {
   if (BleServer::takeConfigUpdate(newConfig)) {
     MotionTracker::setConfig(newConfig);
     Serial.println("MotionTracker: new configuration applied via BLE.");
+    MotionTracker::printConfigLine();
   }
 
   // --- Battery status, every 30 seconds (independent of tracking) ---

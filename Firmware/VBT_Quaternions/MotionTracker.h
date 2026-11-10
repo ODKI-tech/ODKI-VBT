@@ -71,6 +71,8 @@ namespace MotionTracker {
   // the filter update and of a whole sample since the last reset - printed
   // just before REC_STOP).
   void printInfoLine();
+  // v3.12.16: "CONFIG," line - the BLE-writable RuntimeConfig fields (see the .cpp).
+  void printConfigLine();
   void printTimingLine();
   void resetLoopTiming();
 

@@ -182,7 +182,21 @@ def load_log(path, session=None):
             if m:
                 scale = float(m.group(1))
     d["logged_scale"] = scale
+    d["config"] = logged_config(d["lines"])
     return d
+
+
+def logged_config(lines):
+    """The "CONFIG," line the firmware prints after INFO at REC_START (since
+    the 3.12.16 test build): the Config fields a client can write over BLE,
+    as {field: value string} - passed to harness.cpp as cfg.<field>=value.
+    The first one of the block only (a configuration applied in the middle
+    of a session prints another one, which the replay does not apply). {}
+    for older logs (the defaults apply)."""
+    for line in lines:
+        if line.startswith("CONFIG,"):
+            return dict(kv.split("=", 1) for kv in line.strip()[7:].split(",") if "=" in kv)
+    return {}
 
 
 MEDIAN_PRIME = 4   # samples whose 5-tap median window reaches back before the first logged row
@@ -359,7 +373,9 @@ def joined_state(d, scale):
     Not in the log: the zero-crossing reference (assumed none) and the
     re-level / shock state (assumed idle)."""
     lines = d["lines"]
-    if any(l.startswith("START") or l.strip() == "REC_START" for l in lines):
+    # a block that starts at REC_START has the INFO line (printed after the
+    # headers since 3.12.0) and, on the device, the START echo
+    if any(l.startswith(("START", "INFO,")) or l.strip() == "REC_START" for l in lines):
         return None
     s = d["s"]
     r0 = s.iloc[0]

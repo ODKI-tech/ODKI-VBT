@@ -3366,6 +3366,7 @@ void MotionTracker::setTrackingActive(bool active) {
       // v3.11.33: firmware identity and orientation filter, once per
       // recording.
       printInfoLine();
+      printConfigLine();
     } else if (wasActive) {
       printTimingLine();
       Serial.println("REC_STOP");
@@ -3380,6 +3381,32 @@ void MotionTracker::printInfoLine() {
   Serial.print(",filter="); Serial.print(orientationFilterName());
   Serial.print(",calibrated="); Serial.print(calibrated ? 1 : 0);
   Serial.print(",accelScaleG="); Serial.println(accelScaleG, 5);
+}
+
+// v3.12.16: the Config fields a client can write over BLE (the ones that
+// are not firmware-only), as key=value with the RuntimeConfig field names.
+// Printed after INFO at every REC_START and whenever a new configuration is
+// applied, so an offline replay (tools/full_replay) runs with the same
+// values: a recorded squat set had been run with two flat windows the app
+// had changed, which nothing in the log showed.
+void MotionTracker::printConfigLine() {
+  const RuntimeConfig& c = activeConfig;
+  Serial.print("CONFIG,repDirection="); Serial.print(c.repDirection == RepDirection::Down ? 1 : 0);
+  Serial.print(",maxPlausibleVelocityMps="); Serial.print(c.maxPlausibleVelocityMps, 3);
+  Serial.print(",flatGuardMaxVelocityMps="); Serial.print(c.flatGuardMaxVelocityMps, 3);
+  Serial.print(",velocityOverrideFlatWindowSamples="); Serial.print(c.velocityOverrideFlatWindowSamples);
+  Serial.print(",velocityFlatBandMps="); Serial.print(c.velocityFlatBandMps, 3);
+  Serial.print(",maxVelocityFlatWindowSamples="); Serial.print(c.maxVelocityFlatWindowSamples);
+  Serial.print(",minVelocityFlatWindowSamples="); Serial.print(c.minVelocityFlatWindowSamples);
+  Serial.print(",accelerationFlatBandMps2="); Serial.print(c.accelerationFlatBandMps2, 3);
+  Serial.print(",maxAccelerationFlatWindowSamples="); Serial.print(c.maxAccelerationFlatWindowSamples);
+  Serial.print(",minAccelerationFlatWindowSamples="); Serial.print(c.minAccelerationFlatWindowSamples);
+  Serial.print(",windowSaturationPeakVelocityMps="); Serial.print(c.windowSaturationPeakVelocityMps, 3);
+  Serial.print(",phaseStartVelocityMps="); Serial.print(c.phaseStartVelocityMps, 3);
+  Serial.print(",minPhaseDurationS="); Serial.print(c.minPhaseDurationS, 3);
+  Serial.print(",maxPhaseDurationS="); Serial.print(c.maxPhaseDurationS, 3);
+  Serial.print(",phaseLookbackSamples="); Serial.print(c.phaseLookbackSamples);
+  Serial.print(",reversalConfirmSamples="); Serial.println(c.reversalConfirmSamples);
 }
 
 void MotionTracker::printTimingLine() {

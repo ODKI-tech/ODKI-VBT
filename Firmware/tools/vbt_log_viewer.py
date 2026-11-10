@@ -264,10 +264,12 @@ def parse_session_info(lines):
     key -> value strings ({} when the firmware does not print them).
     v3.12.10 diagnostic build: also the "HSTAT," line (FIFO stream
     statistics) under "hstat"; the 416Hz "H," lines themselves are ignored
-    here (tools/fifo416/fifo_worldz.py reads them)."""
-    out = {"info": {}, "timing": {}, "hstat": {}}
+    here (tools/fifo416/fifo_worldz.py reads them).
+    3.12.16 test build: the "CONFIG," line after INFO (the BLE-writable
+    RuntimeConfig fields) under "config"."""
+    out = {"info": {}, "timing": {}, "hstat": {}, "config": {}}
     for line in lines:
-        for prefix, key in (("INFO,", "info"), ("TIMING,", "timing"), ("HSTAT,", "hstat")):
+        for prefix, key in (("INFO,", "info"), ("TIMING,", "timing"), ("HSTAT,", "hstat"), ("CONFIG,", "config")):
             if line.startswith(prefix):
                 out[key] = dict(kv.split("=", 1) for kv in line[len(prefix):].split(",") if "=" in kv)
     return out
