@@ -140,7 +140,7 @@ def parse_session(lines):
         for i, c in enumerate(EXTRA_V6):
             s_df[c] = pd.to_numeric(pd.Series([e[i] if len(e) > i else "nan" for e in ex]), errors="coerce")
     s_df = v.reconstruct_corrected(s_df, b_df)
-    return {"s": s_df, "r": r_df, "b": b_df, "p": parse_p(lines)}
+    return {"s": s_df, "r": r_df, "b": b_df, "p": parse_p(lines), "y": v.parse_y_rows(lines)}
 
 
 def r_all_rows(lines):

@@ -1293,6 +1293,18 @@ namespace {
   //     while still. It is live, not retroactively corrected (velZLive, not
   //     the bracket correction). RepSummary.displacementM (concentric only,
   //     >= 0, from the corrected curve) is unchanged.
+  //
+  // v3.12.17 (test build, not a release): the live position worldPosZ is
+  // no longer reset at every stillness. It integrates velZLive through
+  // pauses and is reset only when a rep cycle is complete: the first
+  // reported phase of the session sets the type that starts a cycle
+  // (eccentric for a squat, concentric for a deadlift from the floor); the
+  // next reported phase of the other type after one of that type ends it.
+  // The position at its last kept sample (stored per sample in bracketBuf)
+  // is the cycle's integration error: logged as a "Y," row and subtracted.
+  // The position gate keeps its own position (reset at every accepted
+  // stillness), so reps and values are identical to 3.12.16 (replay of
+  // every recorded log); only worldPosZ and the Y rows change.
   // ============================================================================
 
   // --- Sampling ---
@@ -1628,6 +1640,16 @@ namespace {
   // previous velZLive (trapezoid) and the current run of flat samples -
   // the position gate in stepPhaseEngine().
   float stillGatePosM = 0;
+  // v3.12.17: live position (worldPosZ): integrated from velZLive through
+  // pauses, reset only when a rep cycle is complete - see closePhaseFn().
+  // cycleStartType: the type (+1/-1) of the first reported phase of the
+  // session, which starts every cycle; cycleHasStart: a phase of that type
+  // has been reported since the last reset, at cycleStartT.
+  float livePosM = 0;
+  float livePrevVelLive = 0;
+  int8_t cycleStartType = 0;
+  bool cycleHasStart = false;
+  float cycleStartT = 0;
   float stillGateTurnM = 0;
   float stillGatePrevVelLive = 0;
   uint16_t stillGateFlatRun = 0;
@@ -1654,7 +1676,8 @@ namespace {
   uint8_t currentRepNumberEngine = 1;
   uint16_t nextPhaseId = 0;
 
-  struct BracketSample { float t; float dt; float velZ; float accZ; };
+  // v3.12.17: pos = the live position (livePosM) at this sample, for the rep-cycle reset.
+  struct BracketSample { float t; float dt; float velZ; float accZ; float pos; };
   BracketSample bracketBuf[BRACKET_BUFFER_CAPACITY];
   uint16_t bracketCount = 0;
   float bracketStartT = 0;
@@ -2172,6 +2195,32 @@ namespace {
     }
 
     if (reported) {
+      // v3.12.17: rep cycle. The first reported phase of the session sets
+      // the type that starts a cycle (eccentric for a squat, concentric for
+      // a deadlift from the floor); a reported phase of the other type after
+      // one of that type completes it: the bar is back where the cycle
+      // started, so the position at that phase's last kept sample is the
+      // cycle's integration error. It is logged ("Y," row) and subtracted
+      // from the live position (and from the buffered samples after it).
+      {
+        uint16_t endKept = (cutoff >= 0) ? (uint16_t)(startIdx + cutoff) : startIdx;
+        if (cycleStartType == 0) cycleStartType = phaseType;
+        if (phaseType == cycleStartType) {
+          if (!cycleHasStart) { cycleHasStart = true; cycleStartT = bracketBuf[startIdx].t; }
+        } else if (cycleHasStart) {
+          float residual = bracketBuf[endKept].pos;
+          if (serialLogActive()) {
+            Serial.print("Y,"); Serial.print(phaseRepNumber); Serial.print(',');
+            Serial.print(residual, 4); Serial.print(',');
+            Serial.print(bracketBuf[endKept].t - cycleStartT, 3); Serial.print(',');
+            Serial.print(cycleStartType); Serial.print(',');
+            Serial.println(bracketSampleMillis(endKept, idxInBracket));
+          }
+          livePosM -= residual;
+          for (uint16_t k = endKept; k < bracketCount; k++) bracketBuf[k].pos -= residual;
+          cycleHasStart = false;
+        }
+      }
       if (closedPhaseCount < MAX_CLOSED_PHASES_PER_BRACKET) {
         ClosedPhaseInfo& cp = closedPhases[closedPhaseCount++];
         cp.id = phaseId; cp.repNumber = phaseRepNumber; cp.phaseType = phaseType;
@@ -2777,6 +2826,9 @@ namespace {
     // note and RuntimeConfig::stillGateFromStartM.
     stillGatePosM += (velZLive + stillGatePrevVelLive) * 0.5f * dt;
     stillGatePrevVelLive = velZLive;
+    // v3.12.17: the live position keeps integrating through pauses.
+    livePosM += (velZLive + livePrevVelLive) * 0.5f * dt;
+    livePrevVelLive = velZLive;
     if (fabs(stillGatePosM) > fabs(stillGateTurnM)) stillGateTurnM = stillGatePosM;
     if (flatCombined) {
       if (stillGateFlatRun < 0xFFFF) stillGateFlatRun++;
@@ -2808,7 +2860,7 @@ namespace {
     }
     uint16_t idx = bracketCount;
     BracketSample& bs = bracketBuf[idx];
-    bs.t = sessionT; bs.dt = dt; bs.velZ = velZ; bs.accZ = worldAccZDirected;
+    bs.t = sessionT; bs.dt = dt; bs.velZ = velZ; bs.accZ = worldAccZDirected; bs.pos = livePosM;
     bracketCount++;
 
     bool oppositeAndSignificant = isOppositeDirectionForType(phaseType, velZLive) &&
@@ -2923,6 +2975,7 @@ namespace {
     for (uint8_t i = 0; i < FLAT_RING_CAPACITY; i++) { velLiveRing[i] = 0; accZRing[i] = 0; }
     wasFlatCombined = false;
     stillGatePosM = 0; stillGateTurnM = 0; stillGatePrevVelLive = 0; stillGateFlatRun = 0;
+    livePosM = 0; livePrevVelLive = 0; cycleStartType = 0; cycleHasStart = false; cycleStartT = 0;
 
     phaseOpen = false; phaseType = 0; phaseId = 0; phaseRepNumber = 1;
     phaseStartIdxInBracket = 0; phaseLastSameDirIdx = -1;
@@ -3218,7 +3271,7 @@ namespace {
     // (negative while the bar is below that point), 0 while still. Up to
     // 3.12.15 it integrated refVelZ, only while it was positive, and was
     // cut to 0 at every reversal. See the version note.
-    livePosZ = stillGatePosM;
+    livePosZ = livePosM;
 
     if (serialLogActive()) {
       logSampleCsv(dt);
@@ -3363,6 +3416,8 @@ void MotionTracker::setTrackingActive(bool active) {
       // v3.11.32: t_start_ms,t_end_ms appended (see closePhaseFn()).
       Serial.println("P,phaseId,repNumber,phaseType,closeReason,durationS,sampleCount,discarded,reported,"
                       "t_start_ms,t_end_ms");
+      // v3.12.17: one row per completed rep cycle (see closePhaseFn()).
+      Serial.println("Y,repNumber,residualM,cycleDurationS,cycleStartType,t_end_ms");
       // v3.11.33: firmware identity and orientation filter, once per
       // recording.
       printInfoLine();

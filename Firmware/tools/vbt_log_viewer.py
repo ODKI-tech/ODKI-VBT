@@ -293,6 +293,19 @@ def parse_p_rows(lines):
     return p_df.dropna(subset=P_COLUMNS).reset_index(drop=True)
 
 
+Y_COLUMNS = ["repNumber", "residualM", "cycleDurationS", "cycleStartType", "t_end_ms"]
+
+
+def parse_y_rows(lines):
+    """3.12.17 test build: one "Y," row per completed rep cycle - the live
+    position (worldPosZ) at the end of the cycle, i.e. its integration error,
+    just before worldPosZ is reset (see Firmware/DOCUMENTATION.md, Live
+    position). Empty frame for older logs."""
+    rows = [l.strip().split(",")[1:] for l in lines if l.startswith("Y,") and l[2:3].isdigit()]
+    rows = [r for r in rows if len(r) == len(Y_COLUMNS)]
+    return pd.DataFrame(rows, columns=Y_COLUMNS).apply(pd.to_numeric, errors="coerce")
+
+
 def reconstruct_corrected(s_df, b_df):
     """Offline reconstruction of the curve the app receives retroactively
     after each bracket closes. NaN where the bracket hasn't closed yet
