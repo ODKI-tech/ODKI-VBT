@@ -294,6 +294,27 @@ struct RuntimeConfig {
   // Config packet (its 38-byte layout is unchanged): packetToConfig()
   // starts from RuntimeConfig{}, so it always keeps this default.
   float minCrossingDescentM = 0.05f;
+  // v3.12.16: the first bracket's rate seeds the EMA unweighted; its
+  // magnitude is limited to this (m/s per s). The first bracket usually
+  // lasts 0.02-0.2 s, so its "rate" is mostly noise or motion at START; on
+  // brackets of 1 s or more the recorded logs show |rate| p50 0.03, p90
+  // 0.16. NOT in the BLE Config packet (same as the field above).
+  float emaSeedMaxRateMps2 = 0.20f;
+
+  // --- Position gate on stillness (v3.12.16) ---
+  // A flat-guard stillness (phase close and bracket close) is refused while
+  // the bar is mid-range and still moving: the position since the last
+  // accepted stillness (integrated from velZLive) is more than
+  // stillGateFromStartM from where the excursion started AND more than
+  // stillGateFromTurnM from its turnaround (the extreme reached since
+  // then), AND |velZLive| is above stillGateMovingMps. A squat sticking
+  // point is flat in velocity and acceleration, but mid-range and at
+  // 0.3-0.5 m/s. Accepted anyway after stillGateValveSamples consecutive
+  // flat samples (a real pause mid-range). NOT in the BLE Config packet.
+  float stillGateFromStartM = 0.15f;
+  float stillGateFromTurnM = 0.10f;
+  float stillGateMovingMps = 0.20f;
+  uint8_t stillGateValveSamples = 30;
 
   // --- Shock handling: landing impulse + orientation hold (v3.12.6) ---
   // FIRMWARE-ONLY, and NOT carried by the BLE Config packet at all (its

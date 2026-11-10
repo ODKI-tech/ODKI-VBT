@@ -1223,6 +1223,47 @@ namespace {
   //     landing, 1.26 -> 1.02 m/s), suspending until the re-level whatever
   //     the acceleration (needs a 0.3-0.4 s hold, long enough to cut a
   //     touch-and-go pull).
+  //
+  // v3.12.16 (test build, not a release). Validated with the replay started
+  // from the sensor's state (tools/full_replay, which now reproduces the
+  // 3.12.14 logs to the last printed digit): before this the replay changed
+  // the start of some sets by itself.
+  //   - EMA SEED. The first bracket's rate seeds emaRate unweighted (later
+  //     brackets are weighted by duration, v3.11.26). That bracket usually
+  //     lasts 0.02-0.2 s; on a hip thrust set the bar was still moving at
+  //     START, the 0.2 s bracket measured +0.47 m/s per s and the live
+  //     prediction drifted to 1.15 m/s within 2.5 s (a rep lost). Fix: the
+  //     seed is limited to +-emaSeedMaxRateMps2 (0.2; on brackets of 1 s or
+  //     more the recorded logs show |rate| p50 0.03, p90 0.16, p99 0.37).
+  //     Replay: that set 10 -> 11 reps (velZLive p95 1.15 -> 0.27; the 12th
+  //     was in progress at START); a squat set's first three reps change by
+  //     up to 0.07 m/s; every other log identical. Same result from 0.1 to
+  //     0.2. Rejected: weighting the seed by duration, or no seed from a
+  //     bracket under 0.3-1 s (a deadlift set 12 -> 9 reps: its 0.02 s seed
+  //     of -0.04 is close to the real drift), limiting every bracket's rate
+  //     (real fast drifts after shocks, a shock-test capture 4 -> 3 reps),
+  //     limiting only brackets under 1 s (every log changes).
+  //   - POSITION GATE ON STILLNESS (the CEO's idea). At a squat sticking
+  //     point the bar rises at a constant 0.3-0.5 m/s: zero acceleration and
+  //     a flat velocity, which the flat-guard took for stillness - a bracket
+  //     closed with the bar moving and the rep was split (squat sets 11, 11
+  //     and 12 reps for 10). A flat-guard stillness (phase and bracket
+  //     close) is now refused while the bar is mid-range and moving: the
+  //     position since the last accepted stillness or landing (integrated
+  //     from velZLive) is more than stillGateFromStartM (0.15 m) from where
+  //     the excursion started AND more than stillGateFromTurnM (0.10 m)
+  //     from its turnaround, AND |velZLive| > stillGateMovingMps (0.20).
+  //     Two references because deadlifts and hip thrusts pause both at the
+  //     bottom and at the top. Valve: accepted after stillGateValveSamples
+  //     (30) flat samples, a real pause mid-range. Replay: the three squat
+  //     sets 10/10/10 (reps 0.63-0.92 m/s, 0.44-0.75 m, the partial reps
+  //     gone); 0.10 m at the turnaround also catches a sticking point
+  //     0.13 m above the bottom (that rep 0.48 m/s / 0.15 m -> 0.72 / 0.46;
+  //     with 0.15 it is accepted); no rejection on the recorded logs lasted
+  //     to the valve. Elsewhere same rep counts: a deadlift set's rep 8
+  //     1.46 -> 1.38 m/s (a flat moment while descending at 0.25 m/s, now
+  //     refused), another rep -0.02, and in one capture a 0.04 m/s spurious
+  //     rep moves from 13th to 14th place.
   // ============================================================================
 
   // --- Sampling ---
@@ -1553,6 +1594,14 @@ namespace {
   uint8_t ringFill = 0;
   uint8_t ringHead = 0;
   bool wasFlatCombined = false;
+  // v3.12.16: position since the last accepted stillness (or landing),
+  // integrated from velZLive (m, directed), the extreme it reached, the
+  // previous velZLive (trapezoid) and the current run of flat samples -
+  // the position gate in stepPhaseEngine().
+  float stillGatePosM = 0;
+  float stillGateTurnM = 0;
+  float stillGatePrevVelLive = 0;
+  uint16_t stillGateFlatRun = 0;
 
   // Current phase (open or none) - unlike sim_v2_drift.py (which keeps
   // an explicit list of sample_idxs/included per phase), here a phase's
@@ -2350,7 +2399,9 @@ namespace {
     float basisTotal = t1 - t0;
     float rate = (basisTotal > 1e-6f) ? (drift / basisTotal) : 0.0f;
     if (!emaInitialized) {
-      emaRate = rate;
+      // v3.12.16: the seed is limited - see the version note.
+      float seedMax = activeConfig.emaSeedMaxRateMps2;
+      emaRate = (rate > seedMax) ? seedMax : (rate < -seedMax ? -seedMax : rate);
       emaInitialized = true;
     } else {
       // v3.11.26 (fix B, see the version note below): a bracket's rate is
@@ -2612,6 +2663,8 @@ namespace {
     // v3.12.6: landing candidate / landing impulse (may change velZ and
     // replace this sample's integration input) - see shockEngineStep().
     integrationAccZDirected = shockEngineStep(dt, worldAccZDirected, integrationAccZDirected);
+    // v3.12.16: a landing (bar on the floor) is a position reference too.
+    if (shockClosedBracketNow) { stillGatePosM = 0; stillGateTurnM = 0; }
     if (shockSuspendedNow) samplesSinceSuspend = 0;
     else if (samplesSinceSuspend < 255) samplesSinceSuspend++;
 
@@ -2691,6 +2744,21 @@ namespace {
     // needs stillSamplesAfterSuspend samples integrated normally since the
     // last suspension - see the version note at the top of the file.
     if (samplesSinceSuspend < activeConfig.stillSamplesAfterSuspend) flatCombined = false;
+    // v3.12.16: position gate - a flat-guard stillness mid-range with the
+    // bar still moving (a squat sticking point) is refused; see the version
+    // note and RuntimeConfig::stillGateFromStartM.
+    stillGatePosM += (velZLive + stillGatePrevVelLive) * 0.5f * dt;
+    stillGatePrevVelLive = velZLive;
+    if (fabs(stillGatePosM) > fabs(stillGateTurnM)) stillGateTurnM = stillGatePosM;
+    if (flatCombined) {
+      if (stillGateFlatRun < 0xFFFF) stillGateFlatRun++;
+      bool midRange = fabs(stillGatePosM) > activeConfig.stillGateFromStartM &&
+                      fabs(stillGatePosM - stillGateTurnM) > activeConfig.stillGateFromTurnM;
+      bool moving = fabs(velZLive) > activeConfig.stillGateMovingMps;
+      if (midRange && moving && stillGateFlatRun < activeConfig.stillGateValveSamples) flatCombined = false;
+    } else {
+      stillGateFlatRun = 0;
+    }
     debugStateVar.flatGuardOverrideFired = aboveCeiling && flatCombined;
     bool risingEdge = flatCombined && !wasFlatCombined;
     wasFlatCombined = flatCombined;
@@ -2751,6 +2819,8 @@ namespace {
     // if this block ran first in the same call, the anchor would already
     // have been overwritten and the measured drift would always be 0.
     debugStateVar.confirmedStillNow = flatCombined;
+    // v3.12.16: an accepted stillness is the new position reference.
+    if (flatCombined) { stillGatePosM = 0; stillGateTurnM = 0; }
     if (flatCombined) {
       baselineRawVel = velZ;
       bracketStartT = sessionT;
@@ -2815,6 +2885,7 @@ namespace {
     ringFill = 0; ringHead = 0;
     for (uint8_t i = 0; i < FLAT_RING_CAPACITY; i++) { velLiveRing[i] = 0; accZRing[i] = 0; }
     wasFlatCombined = false;
+    stillGatePosM = 0; stillGateTurnM = 0; stillGatePrevVelLive = 0; stillGateFlatRun = 0;
 
     phaseOpen = false; phaseType = 0; phaseId = 0; phaseRepNumber = 1;
     phaseStartIdxInBracket = 0; phaseLastSameDirIdx = -1;
