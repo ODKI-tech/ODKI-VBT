@@ -1264,6 +1264,26 @@ namespace {
   //     1.46 -> 1.38 m/s (a flat moment while descending at 0.25 m/s, now
   //     refused), another rep -0.02, and in one capture a 0.04 m/s spurious
   //     rep moves from 13th to 14th place.
+  //   - CONSTANT-SPEED DESCENT. A squat set read reps of 1.80 and 1.05 m:
+  //     the flat-guard confirmed stillness while the bar descended at a
+  //     constant 0.4 m/s (zero acceleration, flat velocity), and the frame
+  //     shift set velZ to 0 with the bar moving, so the raw velocity read
+  //     0.4 m/s too high until the next real stillness (bracket drifts in
+  //     pairs, -0.40 / +0.50 and -0.47 / +0.46). Not the orientation: with
+  //     an attitude integrated from the gyroscope alone the same brackets
+  //     give the same integral (+0.487 against +0.500), the accelerometer
+  //     bias projection changes by less than 0.05 m/s over them. The gate
+  //     let it through because in a monotonic motion the position IS its
+  //     extreme ("at the turnaround"), or within 0.15 m of the start. Fix:
+  //     while velZLive points away from the start at more than
+  //     stillGateTurnSlowFraction (0.6) of the phase peak and refVelZ agrees
+  //     in sign above stillGateRawMovingMps (0.3), the stillness is refused.
+  //     The raw test keeps the cases where velZLive alone is wrong (a pause
+  //     at the top read at -0.4 m/s live, +0.1 raw). Replay: that set's reps
+  //     0.68-0.82 m/s, 0.44-0.58 m (largest drift 0.50 -> 0.30); another
+  //     squat set's rep 1 0.75 -> 0.63 m; older logs: same reps, two
+  //     captures within 0.04 m/s. Narrow margin: 0.5 merges reps of an old
+  //     deadlift set (8 -> 6), above 0.62 the second squat set is missed.
   //   - LIVE POSITION. worldPosZ (the S row column and the BLE Stream field,
   //     same int16 /1000 m, signed) was the integral of refVelZ while it was
   //     positive, reset to 0 at every reversal: only the rising part of a
@@ -2760,8 +2780,17 @@ namespace {
     if (fabs(stillGatePosM) > fabs(stillGateTurnM)) stillGateTurnM = stillGatePosM;
     if (flatCombined) {
       if (stillGateFlatRun < 0xFFFF) stillGateFlatRun++;
-      bool midRange = fabs(stillGatePosM) > activeConfig.stillGateFromStartM &&
-                      fabs(stillGatePosM - stillGateTurnM) > activeConfig.stillGateFromTurnM;
+      bool atTurn = fabs(stillGatePosM - stillGateTurnM) <= activeConfig.stillGateFromTurnM;
+      bool nearStart = fabs(stillGatePosM) <= activeConfig.stillGateFromStartM;
+      // Monotonic motion: velZLive still points away from the start, has not
+      // slowed below stillGateTurnSlowFraction of the phase peak, and the raw
+      // velocity since the last stillness agrees - the bar is passing
+      // through (a descent at constant speed), whatever the position says.
+      float rawRel = velZ - baselineRawVel;   // refVelZ
+      bool monotonic = phaseOpen && velZLive * stillGatePosM > 0.0f &&
+                       fabs(velZLive) > activeConfig.stillGateTurnSlowFraction * phasePeakVelocity &&
+                       rawRel * velZLive > 0.0f && fabs(rawRel) > activeConfig.stillGateRawMovingMps;
+      bool midRange = monotonic || (!nearStart && !atTurn);
       bool moving = fabs(velZLive) > activeConfig.stillGateMovingMps;
       if (midRange && moving && stillGateFlatRun < activeConfig.stillGateValveSamples) flatCombined = false;
     } else {

@@ -318,6 +318,14 @@ struct RuntimeConfig {
   float stillGateFromTurnM = 0.10f;
   float stillGateMovingMps = 0.20f;
   uint8_t stillGateValveSamples = 30;
+  // v3.12.16: monotonic motion. While velZLive points away from the start
+  // at more than stillGateTurnSlowFraction of the phase's peak AND the raw
+  // velocity since the last stillness (refVelZ) agrees in sign and exceeds
+  // stillGateRawMovingMps, the bar is passing through (a descent at
+  // constant speed): the stillness is refused even near the start or at
+  // the extreme (which, in a monotonic motion, is the current position).
+  float stillGateTurnSlowFraction = 0.6f;
+  float stillGateRawMovingMps = 0.30f;
 
   // --- Shock handling: landing impulse + orientation hold (v3.12.6) ---
   // FIRMWARE-ONLY, and NOT carried by the BLE Config packet at all (its
