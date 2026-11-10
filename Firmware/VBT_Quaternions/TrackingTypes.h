@@ -66,8 +66,11 @@ enum class PhaseState : uint8_t {
 // is also shifted to 0 while confirmed still, but the anchor and the
 // buffered bracket samples move with it, so the bracket correction math
 // (drift = velZ - baseline) and this value are unchanged.
-// worldPosZ is a live integration of the same quantity (so with the same
-// behavior), for the graph only - the authoritative data for each
+// worldPosZ (v3.12.16) is the live vertical position, signed, since the
+// last accepted stillness or landing (0 while still), integrated from
+// velZLive (the engine's live-corrected velocity, not refVelZ) - the same
+// position the position gate on stillness reads. For the graph only: it is
+// not retroactively corrected, and the authoritative data for each
 // completed rep comes from peekCompletedRep().
 struct MotionSample {
   float linAccX = 0, linAccY = 0, linAccZ = 0;

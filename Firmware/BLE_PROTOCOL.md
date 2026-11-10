@@ -67,7 +67,7 @@ Live telemetry, sent only while tracking is active, decimated to 20Hz (`Config::
 | 20 | 2 | `refVelZ` | int16 | ÷1000 | m/s — **raw**, live-re-anchored vertical velocity; never the retroactively-corrected value (see `CorrectedCurve` below) |
 | 22 | 2 | `worldPosX` | int16 | ÷1000 | m |
 | 24 | 2 | `worldPosY` | int16 | ÷1000 | m |
-| 26 | 2 | `worldPosZ` | int16 | ÷1000 | m |
+| 26 | 2 | `worldPosZ` | int16 | ÷1000 | m — live vertical position, **signed**, since the last confirmed stillness (or landing); see below |
 | 28 | 2 | `quatW` | int16 | ÷10000 | dimensionless, [-1, 1] |
 | 30 | 2 | `quatX` | int16 | ÷10000 | dimensionless, [-1, 1] |
 | 32 | 2 | `quatY` | int16 | ÷10000 | dimensionless, [-1, 1] |
@@ -75,6 +75,8 @@ Live telemetry, sent only while tracking is active, decimated to 20Hz (`Config::
 | 36 | 1 | `phaseState` | uint8 | direct | `0`=Idle, `1`=Eccentric, `2`=Concentric |
 
 Python decode: `struct.unpack("<I16hB", data)` — field order matches the table above.
+
+`worldPosZ` is integrated from the firmware's live-corrected vertical velocity (`velZLive`, the one the engine decides phases with — not `refVelZ` and not the retroactive `CorrectedCurve`), starting from 0 at the last confirmed stillness or confirmed landing and held at 0 while the sensor is still. It is signed in the rep-direction frame: positive above that point, negative below it, so a squat reads negative during the descent and returns to about 0 when the bar is back where it started; a deadlift that pauses at the top reads 0 there and negative on the way down. Being live, it is not corrected afterwards: its error is the live velocity's (a few centimetres per rep on the recorded sets). Up to firmware 3.12.15 the same field was the integral of `refVelZ` while it was positive, reset to 0 at every reversal (never negative) — same layout, same scale; the range of int16 ÷1000 (±32.767 m) is far beyond a rep. For the displacement of a rep use `RepSummary.displacementM` (concentric only, ≥ 0, from the corrected curve), which does not change.
 
 ---
 

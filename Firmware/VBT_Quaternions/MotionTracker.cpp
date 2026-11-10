@@ -1264,6 +1264,15 @@ namespace {
   //     1.46 -> 1.38 m/s (a flat moment while descending at 0.25 m/s, now
   //     refused), another rep -0.02, and in one capture a 0.04 m/s spurious
   //     rep moves from 13th to 14th place.
+  //   - LIVE POSITION. worldPosZ (the S row column and the BLE Stream field,
+  //     same int16 /1000 m, signed) was the integral of refVelZ while it was
+  //     positive, reset to 0 at every reversal: only the rising part of a
+  //     rep, never the descent, never back to 0 at the end of a rep. It is
+  //     now the position gate's position: integrated (trapezoid) from
+  //     velZLive since the last accepted stillness or landing, signed, 0
+  //     while still. It is live, not retroactively corrected (velZLive, not
+  //     the bracket correction). RepSummary.displacementM (concentric only,
+  //     >= 0, from the corrected curve) is unchanged.
   // ============================================================================
 
   // --- Sampling ---
@@ -1694,7 +1703,6 @@ namespace {
   float refVelZ = 0;
   PhaseState livePhaseState = PhaseState::Idle;
   float livePosZ = 0;
-  float prevDirVelForLivePos = 0;
 
   // --- X/Y: streaming/debug only, no role in phases/reps ---
   bool trapezoidPrimed = false;
@@ -2914,7 +2922,6 @@ namespace {
     refVelZ = 0;
     livePhaseState = PhaseState::Idle;
     livePosZ = 0;
-    prevDirVelForLivePos = 0;
 
     resetQuietRings();
     pendingCount = 0;
@@ -3177,13 +3184,12 @@ namespace {
       livePhaseState = PhaseState::Eccentric;
     }
 
-    if (dirVel <= 0.0f) {
-      livePosZ = 0.0f;
-    } else {
-      livePosZ += (dirVel + prevDirVelForLivePos) * 0.5f * dt;
-      if (livePosZ < 0.0f) livePosZ = 0.0f;
-    }
-    prevDirVelForLivePos = dirVel;
+    // v3.12.16: the live position is the position gate's one - integrated
+    // from velZLive since the last accepted stillness or landing, signed
+    // (negative while the bar is below that point), 0 while still. Up to
+    // 3.12.15 it integrated refVelZ, only while it was positive, and was
+    // cut to 0 at every reversal. See the version note.
+    livePosZ = stillGatePosM;
 
     if (serialLogActive()) {
       logSampleCsv(dt);
