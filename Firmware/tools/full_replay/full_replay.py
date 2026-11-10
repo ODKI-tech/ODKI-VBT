@@ -128,6 +128,10 @@ def state_from_log(d, scale=None):
         raise SystemExit("This log records no accelerometer scale: pass it with --scale (e.g. --scale 9.80665).")
     init, lines, rinfo = R.build_inputs(d, scale)
     info.update(rinfo)
+    joined = R.joined_state(d, scale)
+    if joined:
+        init += "\n" + joined
+        info["start_state"] += "; joins a running session (engine state recovered from the log)"
     info["accbias_source"] = "logged (S row)" if s["accBiasX"].notna().all() else "projection of accZBias only"
     return init, lines, info
 
@@ -136,27 +140,49 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("logfile")
     ap.add_argument("--session", type=int, default=None, help="REC_START block (0-based; default: the longest)")
+    ap.add_argument("--all-sessions", action="store_true",
+                    help="replay every REC_START block in order; with --out, one replayed log for the whole file")
     ap.add_argument("--scale", type=float, default=None, help="accelScaleG, for logs that do not record it")
     ap.add_argument("--out", default=None, help="folder for the replayed log (outside git)")
     ap.add_argument("--config", choices=["pre3.11.30"], default=None,
                     help="replay with the RuntimeConfig defaults of v3.11.28/3.11.29")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                     help="Fusion setting override (gain, gyroRange, accRej, timeout, skipStartup, bias, biasThr, "
-                         "biasPeriod) - for experiments; the firmware uses the defaults")
+                         "biasPeriod) - for experiments; the firmware uses the defaults - or cfg.<field>=value, a "
+                         "Config-packet field the app may have written (e.g. cfg.maxVelocityFlatWindowSamples=30)")
     args = ap.parse_args()
     out_dir = args.out
     bindir = os.path.join(out_dir or HERE, "bin")
     binary = build(bindir)
-    with quiet():
-        d = R.load_log(args.logfile, args.session)
-    init, lines, info = state_from_log(d, args.scale)
     settings = dict(x.split("=", 1) for x in args.set)
     if args.config:
         settings["config"] = args.config
+    if args.all_sessions:
+        with quiet():
+            n = len(R.viewer().split_sessions(args.logfile))
+        outs = []
+        for k in range(n):
+            with quiet():
+                dk = R.load_log(args.logfile, k)
+            init, lines, info = state_from_log(dk, args.scale)
+            outs.append(run_raw(binary, init, lines, settings))
+            reps = final_reps(outs[-1])
+            print(f"session {k + 1}/{n}: {len(dk['s'])} samples, {len(reps)} reps; {info['start_state']}")
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+            p = os.path.join(out_dir, os.path.splitext(os.path.basename(args.logfile))[0] + "_replay.log")
+            with open(p, "w") as f:
+                f.write("\n".join(l for o in outs for l in o.split("\n") if not l.startswith("F,")))
+            print(f"replayed log: {p}")
+        return
+    with quiet():
+        d = R.load_log(args.logfile, args.session)
+    init, lines, info = state_from_log(d, args.scale)
     out = run_raw(binary, init, lines, settings)
     print(f"layout {d['layout']}, session {d['session_index'] + 1}/{d['n_sessions']}, {len(d['s'])} samples")
     print(f"accelerometer: {info['acc_source']}; gyroscope: {info['gyro_source']}")
     print(f"accelScaleG {info['scale']:.4f} ({info['scale_source']}); accBiasVec: {info['accbias_source']}")
+    print(f"start state: {info['start_state']}")
     logged = {int(r["rep"]): r for _, r in d["r"].iterrows()} if len(d["r"]) else {}
     replay = final_reps(out)
     print(f"\n{'rep':>3}  {'logged PV / MV / disp':>26}  {'replay PV / MV / disp':>26}")

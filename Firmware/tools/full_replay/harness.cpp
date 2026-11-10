@@ -23,7 +23,13 @@
 // phase/bracket engine - all compiled unchanged from Firmware/VBT_Quaternions/.
 //
 // stdin, first line (initial state, as CALIBRATE would leave it):
-//   I,accelScaleG,gravX,gravY,gravZ,gyroBiasX,gyroBiasY,gyroBiasZ,accBiasX,accBiasY,accBiasZ
+//   I,accelScaleG,gravX,gravY,gravZ,gyroBiasX,gyroBiasY,gyroBiasZ,accBiasX,accBiasY,accBiasZ[,qw,qx,qy,qz]
+// (with the optional quaternion the filter starts from it instead of the
+// zero-yaw gravity seed), then optionally "T,<ms>" (the period of the first
+// sample, default 10) and, for a log that joins a running
+// session (no START in it, see joined_state() in reconstruct.py):
+//   J,sessionT,nextBracketId,nextPhaseId,repNumber,emaInitialized,emaRate,velZFrameOffset,
+//     repCalibIntercept,velZLive,worldAccZDirected,gyroMag,accMag,integrationAccZDirected,shockWz
 // then one line per sample:
 //   t_ms,accRawX,accRawY,accRawZ,gyroRawX,gyroRawY,gyroRawZ,ovAcc,medAx,medAy,medAz,ovGyro,medGx,medGy,medGz
 // accRaw* in m/s^2 (the firmware's axRaw = 10ms mean * accelScaleG), gyroRaw* in deg/s
@@ -31,6 +37,8 @@
 // output with med* (used when the log did not record the median's input).
 // argv: key=value Fusion settings (gain, gyroRange, accRej, timeout, skipStartup, bias,
 // biasThr, biasPeriod; defaults = FusionOrientationSettings, i.e. the firmware's) and
+// cfg.<field>=value (a Config-packet field the app may have written, e.g.
+// cfg.maxVelocityFlatWindowSamples=30; applied before START) and
 // config=pre3.11.30 (the RuntimeConfig defaults of v3.11.28/3.11.29, to check a re-run
 // against the R rows of a log recorded with them).
 // stdout: the firmware's own S/R/B/P log, plus one "F," row per sample:
@@ -52,6 +60,23 @@ static float g_med[6] = {0};
 
 #include "MotionTracker.cpp"   // same TU on purpose: access to the engine's internals
 
+// cfg.<field>=value: a RuntimeConfig field the app can write over BLE (the
+// Config packet), set before START - to replay a log recorded after the app
+// changed it. Returns false for an unknown field.
+static bool setConfigField(RuntimeConfig& c, const std::string& k, double v) {
+#define ODKI_CFG(f, T) if (k == #f) { c.f = (T)v; return true; }
+  if (k == "repDirection") { c.repDirection = v != 0 ? RepDirection::Down : RepDirection::Up; return true; }
+  ODKI_CFG(maxPlausibleVelocityMps, float) ODKI_CFG(flatGuardMaxVelocityMps, float)
+  ODKI_CFG(velocityOverrideFlatWindowSamples, uint8_t) ODKI_CFG(velocityFlatBandMps, float)
+  ODKI_CFG(maxVelocityFlatWindowSamples, uint8_t) ODKI_CFG(minVelocityFlatWindowSamples, uint8_t)
+  ODKI_CFG(accelerationFlatBandMps2, float) ODKI_CFG(maxAccelerationFlatWindowSamples, uint8_t)
+  ODKI_CFG(minAccelerationFlatWindowSamples, uint8_t) ODKI_CFG(windowSaturationPeakVelocityMps, float)
+  ODKI_CFG(phaseStartVelocityMps, float) ODKI_CFG(minPhaseDurationS, float) ODKI_CFG(maxPhaseDurationS, float)
+  ODKI_CFG(phaseLookbackSamples, uint8_t) ODKI_CFG(reversalConfirmSamples, uint8_t)
+#undef ODKI_CFG
+  return false;
+}
+
 SerialStub Serial;
 WireStub Wire;
 static unsigned long g_now = 0;
@@ -60,12 +85,21 @@ unsigned long millis() { return g_now; }
 int main(int argc, char** argv) {
   FusionOrientationSettings fs;
   bool legacyConfig = false;
+  RuntimeConfig appConfig = MotionTracker::defaultConfig();
+  bool appConfigSet = false;
   const bool dumpChunks = std::getenv("ODKI_DUMP_CHUNKS") != nullptr;
   for (int i = 1; i < argc; i++) {
     const char* eq = std::strchr(argv[i], '=');
     if (!eq) continue;
     std::string k(argv[i], eq - argv[i]);
     if (k == "config") { legacyConfig = std::strcmp(eq + 1, "pre3.11.30") == 0; continue; }
+    if (k.rfind("cfg.", 0) == 0) {
+      if (!setConfigField(appConfig, k.substr(4), std::atof(eq + 1))) {
+        std::fprintf(stderr, "unknown config field %s\n", k.c_str()); return 2;
+      }
+      appConfigSet = true;
+      continue;
+    }
     float v = (float)std::atof(eq + 1);
     if (k == "gain") fs.gain = v;
     else if (k == "gyroRange") fs.gyroscopeRangeDegS = v;
@@ -80,18 +114,36 @@ int main(int argc, char** argv) {
   ahrs.configure(fs);
   char line[512];
   if (!std::fgets(line, sizeof line, stdin)) return 1;
-  double sc, grx, gry, grz, gbx, gby, gbz, abx, aby, abz;
-  if (std::sscanf(line, "I,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf", &sc, &grx, &gry, &grz,
-                  &gbx, &gby, &gbz, &abx, &aby, &abz) != 10) return 1;
-  // what calibrateOrientation() leaves behind: alignToGravity(a) returns an
-  // attitude whose gravBody is a (since the v3.11.33 seed fix)
+  double sc, grx, gry, grz, gbx, gby, gbz, abx, aby, abz, qw, qx, qy, qz;
+  int nInit = std::sscanf(line, "I,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf", &sc, &grx, &gry,
+                          &grz, &gbx, &gby, &gbz, &abx, &aby, &abz, &qw, &qx, &qy, &qz);
+  if (nInit != 10 && nInit != 14) return 1;
   accelScaleG = (float)sc;
-  ahrs.alignToGravity((float)grx, (float)gry, (float)grz);
+  if (nInit == 14) {
+    // the attitude the filter had before the first logged sample (see
+    // seed_quaternion() in reconstruct.py), yaw included
+    ahrs.setQuaternion((float)qw, (float)qx, (float)qy, (float)qz);
+  } else {
+    // what calibrateOrientation() leaves behind: alignToGravity(a) returns an
+    // attitude whose gravBody is a (since the v3.11.33 seed fix)
+    ahrs.alignToGravity((float)grx, (float)gry, (float)grz);
+  }
   gyroBiasX = (float)gbx; gyroBiasY = (float)gby; gyroBiasZ = (float)gbz;
   calibrated = true;
 
   bool started = false;
+  // optional "J," line: the log joins a session already running (no START
+  // in it) - see joined_state() in reconstruct.py
+  bool joined = false;
+  double J[15] = {0};
+  unsigned long firstDtMs = 10;
   while (std::fgets(line, sizeof line, stdin)) {
+    if (line[0] == 'T' && line[1] == ',') { firstDtMs = std::strtoul(line + 2, nullptr, 10); continue; }
+    if (line[0] == 'J' && line[1] == ',') {
+      joined = std::sscanf(line + 2, "%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf", &J[0], &J[1], &J[2],
+                           &J[3], &J[4], &J[5], &J[6], &J[7], &J[8], &J[9], &J[10], &J[11], &J[12], &J[13]) == 14;
+      continue;
+    }
     double v[15];
     int n = std::sscanf(line, "%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf",
                         &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7], &v[8], &v[9],
@@ -99,16 +151,35 @@ int main(int argc, char** argv) {
     if (n != 15) continue;
     unsigned long t = (unsigned long)v[0];
     if (!started) {
-      g_now = t - 10; lastSampleTime = g_now;
+      g_now = t - firstDtMs; lastSampleTime = g_now;
       if (legacyConfig) {  // RuntimeConfig defaults before v3.11.30 (logs recorded with 3.11.28/3.11.29)
         RuntimeConfig c = MotionTracker::defaultConfig();
         c.maxVelocityFlatWindowSamples = 30; c.maxAccelerationFlatWindowSamples = 30;
         c.velocityOverrideFlatWindowSamples = 45;
         MotionTracker::setConfig(c);
       }
+      if (appConfigSet) MotionTracker::setConfig(appConfig);
       MotionTracker::setTrackingActive(true);   // resets the engine (not the biases), prints REC_START + headers
       // accBiasVec is NOT reset by START: the harness seeds it after the reset
       accBiasVec[0] = (float)abx; accBiasVec[1] = (float)aby; accBiasVec[2] = (float)abz;
+      if (joined) {
+        // the state START would not have left: the session had been running
+        // (still) for a while before the first logged row
+        sessionT = (float)J[0];
+        nextBracketId = (uint16_t)J[1]; nextPhaseId = (uint16_t)J[2];
+        currentRepNumberEngine = (uint8_t)J[3];
+        emaInitialized = J[4] != 0; emaRate = (float)J[5];
+        velZFrameOffset = (float)J[6]; repCalibIntercept = (float)J[7];
+        bracketStartT = sessionT; wasFlatCombined = true;
+        for (uint8_t i = 0; i < FLAT_RING_CAPACITY; i++) { velLiveRing[i] = (float)J[8]; accZRing[i] = (float)J[9]; }
+        ringFill = FLAT_RING_CAPACITY; ringHead = 0;
+        for (uint16_t i = 0; i < BIAS_QUIET_RING_CAPACITY; i++) {
+          gyroMagQuietRing[i] = (float)J[10]; accMagQuietRing[i] = (float)J[11];
+        }
+        quietRingFill = BIAS_QUIET_RING_CAPACITY; quietRingHead = 0;
+        prevAccZDirected = (float)J[12]; trapezoidPrimedZ = true;
+        shockPrevWz = (float)J[13]; shockPrevValid = true;
+      }
       started = true;
     }
     for (int k = 0; k < 3; k++) {
