@@ -1179,6 +1179,32 @@ namespace {
   //     (10 of 12 reps, p95 1.15) gets its offset from the EMA, seeded by a
   //     0.2 s bracket at the start (0.47 m/s per s); seeding it by duration
   //     fixes that set and breaks another (12 -> 9), so it is unchanged.
+  //   - THE LANDING AS AN ANCHOR. The bracket correction spreads an error
+  //     born in one instant over the whole bracket. In a touch-and-go set
+  //     (no stillness from rep 3 to the put-down) a 24.6 s bracket closed
+  //     after the put-down with -0.28 m/s of drift born there (0.3 s of
+  //     false acceleration after the impact, the attitude a few degrees
+  //     off): the corrected peaks of reps 3-10 rose 0.95 -> 1.07 m/s while
+  //     the raw ones stayed at 0.78-0.91. In another set the attitude was
+  //     about 90 deg off for 0.3 s after the put-down (worldAccZ about -9
+  //     m/s^2 with the bar still, until the re-level): raw -2.65 m/s, the
+  //     last rep corrected to 1.88 m/s (raw 0.82). Fix: a confirmed landing
+  //     closes the bracket on the landing sample, right after the impulse
+  //     (velZ = its value minus vPre, i.e. the live drift prediction): the
+  //     reps before it keep their own drift and whatever happens after the
+  //     impact goes to the next bracket. The new anchor puts velZLive at 0;
+  //     velZ keeps the frame offset until the next confirmed still sample,
+  //     as after any bracket close (B/S rows stay in the same frame).
+  //     Replay (with the change above): that last rep 1.88 -> 0.83 m/s,
+  //     drift of its bracket -2.64 -> +0.01; same rep counts everywhere,
+  //     values within 0.025 m/s except the first rep of a squat set with a
+  //     knock at the unracking (0.57 -> 0.64 m/s, 0.73 -> 0.93 m). Asked
+  //     for too: the landing taking vPre from the live velocity carried a
+  //     wrong live offset into velZ (+0.27 m/s left with the bar on the
+  //     floor); with the change above the live offset there is right (the
+  //     landing leaves velZ at -0.01). Setting velZ to 0 at the landing
+  //     instead (vPre from the raw velocity, already rejected in 3.12.13)
+  //     adds a 0.09 m/s rep to one set: rejected again.
   // ============================================================================
 
   // --- Sampling ---
@@ -2159,6 +2185,9 @@ namespace {
   // integrated normally since the last suspension - see stepPhaseEngine().
   bool shockSuspendedNow = false;
   uint8_t samplesSinceSuspend = 255;   // held integral of the candidate's samples
+  // v3.12.15: a confirmed landing closed the bracket on this sample (log-only,
+  // the bracketClosed column of the "S," row).
+  bool shockClosedBracketNow = false;
   // Log-only: the "shock" column of the "S," row (0 none, 1 window or
   // candidate open, not a landing, 2 landing window, 3 the landing impulse
   // was applied on this sample; 4, from relevelAppliedNow, is printed
@@ -2198,7 +2227,7 @@ namespace {
 
   void resetShockEngine() {
     shockCandidate = false; shockLanding = false;
-    shockSuspendedNow = false; samplesSinceSuspend = 255;
+    shockSuspendedNow = false; samplesSinceSuspend = 255; shockClosedBracketNow = false;
     shockCandSamples = 0; shockCandBigSamples = 0; shockCandPeakSeen = false;
     shockCandGyroMax = 0; shockVPre = 0; shockHeldIncrement = 0;
     shockLogState = 0;
@@ -2453,6 +2482,7 @@ namespace {
     const RuntimeConfig& c = activeConfig;
     shockLogState = 0;
     shockSuspendedNow = false;
+    shockClosedBracketNow = false;
     if (!c.shockHandlingEnabled) return integrationAccZDirected;
     if (shockJerkNow > c.shockJerkOpenMps3 && !shockCandidate && !shockLanding) {
       shockCandidate = true;
@@ -2500,6 +2530,14 @@ namespace {
         shockCandidate = false; shockLanding = true;
         shockLogState = 3;
         relevelArm();
+        // v3.12.15: the landing is an anchor - the bar is on the floor, its
+        // true velocity is 0. Close the bracket here, so whatever the
+        // integration does after the impact (orientation error, vibration)
+        // is measured by the next bracket instead of being spread linearly
+        // back over the reps before it; the new anchor (baselineRawVel =
+        // velZ) also puts velZLive at 0. See the version note.
+        closeBracketFn();
+        shockClosedBracketNow = true;
         shockSuspendedNow = true;
         return 0.0f;
       }
@@ -2655,7 +2693,7 @@ namespace {
       openPhase(idx, velZLive);
     }
 
-    debugStateVar.bracketClosed = false;
+    debugStateVar.bracketClosed = shockClosedBracketNow;
     if (risingEdge) {
       closeBracketFn();
       debugStateVar.bracketClosed = true;
