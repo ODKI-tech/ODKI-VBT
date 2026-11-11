@@ -874,7 +874,7 @@ namespace {
   // fields, which their UI does not expose, and would have pushed the old
   // 0.05 s back on every connection. No change to the tracking engine.
   //
-  // v3.12.6 (test build): landing impulse + orientation hold at mechanical
+  // v3.12.6: landing impulse + orientation hold at mechanical
   // shocks. Diagnosis, on a recorded deadlift set with the bar put down on
   // the floor 10 times (3.12.4 counted 4 reps, drift up to -12.8 m/s in
   // one bracket): (1) at each landing the integrated acceleration has the
@@ -924,7 +924,7 @@ namespace {
   // packet (unchanged). Log: "shock" column appended to the "S," row.
   // shockHandlingEnabled = false gives exactly the engine without it.
   //
-  // v3.12.7 (test build): re-level after a landing, and a shock with the
+  // v3.12.7: re-level after a landing, and a shock with the
   // bar still counts as a landing. Diagnosis, on a deadlift set recorded
   // with 3.12.6 (8 reps, then the bar put down; 3.12.6 counted 7, one
   // bracket drifted -1.20 m/s and, with the bar at rest at the end, the
@@ -992,7 +992,7 @@ namespace {
   // experiments, not a new default. BLE Config packet unchanged (uint8,
   // same offset); only the clamp in setConfig() changes.
   //
-  // v3.12.9 (test build): the IMU I2C bus really runs at 400 kHz. Up to
+  // v3.12.9: the IMU I2C bus really runs at 400 kHz. Up to
   // v3.12.8 MotionTracker::begin() called Wire.setClock(400000), but the
   // Seeed LSM6DS3 library uses Wire1 on the XIAO nRF52840 Sense (a #define
   // in LSM6DS3.cpp) and Wire (TWIM0) is never started, so setClock() was a
@@ -1042,7 +1042,7 @@ namespace {
   // HSTAT line (overruns, misaligned, droppedSets, maxLevelWords,
   // opMeanUs/opMaxUs - the real cost of a bus operation).
   //
-  // v3.12.11 (test build, not a release): softer landings, and the FIFO
+  // v3.12.11: softer landings, and the FIFO
   // log stall. Three deadlift sessions with floor impacts (8 reps each,
   // one sensor per session: 3.12.8, 3.12.9, 3.12.10) gave 8, 2 and 6 reps.
   //   - On the last two the landings reached only 18-51 m/s^2 on world Z
@@ -1072,7 +1072,7 @@ namespace {
   //     After a gap every set left in the buffer is checked, so the line
   //     is now printed without waiting for a status read.
   //
-  // v3.12.12 (test build, not a release): soft landings by 3D magnitude,
+  // v3.12.12: soft landings by 3D magnitude,
   // FIFO log removed. Two deadlift sessions on 3.12.11 (8 reps each,
   // sensors 2 and 3) gave 7 and 7: in each, one landing stayed under the
   // thresholds on the 10ms world-Z mean (13.6 and 17.4 m/s^2) while the
@@ -1094,7 +1094,7 @@ namespace {
   //     more landing in a shock test log (one PV 1.88 -> 1.83 m/s).
   //     Fitted on the same logs: to be confirmed on new recordings.
   //
-  // v3.12.13 (test build, not a release): the drift regression across
+  // v3.12.13: the drift regression across
   // landings. A deadlift set on 3.12.12 (8 reps, all counted) reported rep
   // 2 at 1.16 m/s / 0.38 m (raw integral 1.35). The live drift prediction
   // (livePredictedOffset(), the repCalib regression) assumes a drift
@@ -1118,7 +1118,7 @@ namespace {
   //     without dropping the interval (reps appear, PV up to 3.4), dropping
   //     the interval only (one rep 0.79 m).
   //
-  // v3.12.14 (test build, not a release): false stillness while the
+  // v3.12.14: false stillness while the
   // integration is suspended. A deadlift set on 3.12.13 reported rep 1 at
   // 1.06 m/s / 0.39 m (raw floor-to-top integral 1.27). At the lift-off
   // the plates rattled, a shock candidate held the integration (velZ
@@ -1146,7 +1146,7 @@ namespace {
   //     the lift-offs), the held increment in the flat-guard velocity
   //     (no effect).
   //
-  // v3.12.15 (test build, not a release): fixes from the 3.12.14 deadlift,
+  // v3.12.15: fixes from the 3.12.14 deadlift,
   // hip thrust and squat logs.
   //   - REP-CYCLE BOUNDARIES. In the sets with merged or miscounted reps
   //     velZLive was 0.3-1.9 m/s (p95) away from velZ. Replay with every
@@ -1224,7 +1224,7 @@ namespace {
   //     the acceleration (needs a 0.3-0.4 s hold, long enough to cut a
   //     touch-and-go pull).
   //
-  // v3.12.16 (test build, not a release). Validated with the replay started
+  // v3.12.16. Validated with the replay started
   // from the sensor's state (tools/full_replay, which now reproduces the
   // 3.12.14 logs to the last printed digit): before this the replay changed
   // the start of some sets by itself.
@@ -1294,7 +1294,7 @@ namespace {
   //     the bracket correction). RepSummary.displacementM (concentric only,
   //     >= 0, from the corrected curve) is unchanged.
   //
-  // v3.12.17 (test build, not a release): the live position worldPosZ is
+  // v3.12.17: the live position worldPosZ is
   // no longer reset at every stillness. It integrates velZLive through
   // pauses and is reset only when a rep cycle is complete: the first
   // reported phase of the session sets the type that starts a cycle
@@ -1446,7 +1446,7 @@ namespace {
   MedianFilter3 accMedianFilter;
   MedianFilter3 gyroMedianFilter;
 
-  // v3.12.5 (diagnostic build): saturation taps of the last 10ms window,
+  // v3.12.5: saturation taps of the last 10ms window,
   // log-only (end of the "S," row) - see FastSampleAccumulator.
   float lastAccPeakG = 0, lastGyroPeakDegS = 0;
   uint16_t lastAccClipCount = 0, lastAccSampleCount = 0, lastGyroClipCount = 0;
@@ -1456,7 +1456,7 @@ namespace {
     uint32_t countA = 0;
     float sumGx = 0, sumGy = 0, sumGz = 0;
     uint32_t countG = 0;
-    // v3.12.5 (diagnostic build): per-window saturation check on the raw
+    // v3.12.5: per-window saturation check on the raw
     // 416Hz readings - largest absolute raw value on any axis and how many
     // readings sat at full scale (int16 at or beyond +-32760).
     int32_t peakRawA = 0, peakRawG = 0;
@@ -3196,7 +3196,7 @@ namespace {
     Serial.print(accBiasVec[0], 5); Serial.print(',');
     Serial.print(accBiasVec[1], 5); Serial.print(',');
     Serial.print(accBiasVec[2], 5); Serial.print(',');
-    // v3.12.5 (diagnostic build): saturation taps, appended at the END.
+    // v3.12.5: saturation taps, appended at the END.
     Serial.print(lastAccPeakG, 3); Serial.print(',');
     Serial.print(lastAccClipCount); Serial.print(',');
     Serial.print(lastAccSampleCount); Serial.print(',');

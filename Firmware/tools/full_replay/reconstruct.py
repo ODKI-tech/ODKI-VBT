@@ -25,9 +25,10 @@ Log layouts accepted (fields after "S,"):
   48  firmware >= 3.11.33       + accelScaleG, accBiasX/Y/Z (state the replay needs)
   53  firmware 3.12.5 (diag.)   + accPeakG, accClipCount, accSampleCount, gyroPeakDegS,
                                 gyroClipCount (416Hz saturation taps, not used by the replay)
-  54  firmware 3.12.6 (test)    + shock (shock-handling state: 0 none, 1 window/candidate
+  54  firmware 3.12.6           + shock (shock-handling state: 0 none, 1 window/candidate
                                 open, 2 landing window, 3 landing impulse applied;
-                                4 orientation re-levelled, since the re-level test build)
+                                4 orientation re-levelled, since 3.12.7; 5 integrated as 0
+                                by the post-landing attitude check, since 3.12.15)
 
 The first 41 fields are parsed by vbt_log_viewer.py (imported, never copied);
 the trailing ones here.
@@ -188,7 +189,7 @@ def load_log(path, session=None):
 
 def logged_config(lines):
     """The "CONFIG," line the firmware prints after INFO at REC_START (since
-    the 3.12.16 test build): the Config fields a client can write over BLE,
+    3.12.16): the Config fields a client can write over BLE,
     as {field: value string} - passed to harness.cpp as cfg.<field>=value.
     The first one of the block only (a configuration applied in the middle
     of a session prints another one, which the replay does not apply). {}

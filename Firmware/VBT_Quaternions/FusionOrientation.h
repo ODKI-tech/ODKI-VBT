@@ -59,7 +59,7 @@ public:
   // quaternion (gravBody, the expression MotionTracker reads it with) equals
   // the normalised (ax, ay, az); yaw is set to zero. Then Fusion skips its
   // startup ramp if settings.skipStartup. Called by CALIBRATE and, since
-  // the v3.12.7 test build, by MotionTracker's re-level after a landing.
+  // v3.12.7, by MotionTracker's re-level after a landing.
   // v3.11.33 fix: up to v3.11.32 the seed had the tilt mirrored (see
   // gravitySeed() in FusionOrientation.cpp).
   void alignToGravity(float ax, float ay, float az);

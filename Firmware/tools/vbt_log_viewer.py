@@ -130,12 +130,13 @@ S_COLUMNS_V3 = S_COLUMNS_V2 + ["accRawX", "accRawY", "accRawZ"]
 # v3.11.33 appends the replay state: accelScaleG and the body-frame
 # accBiasVec. 48 fields; s_df always has these columns too.
 S_COLUMNS_V4 = S_COLUMNS_V3 + ["accelScaleG", "accBiasX", "accBiasY", "accBiasZ"]
-# v3.12.5 (diagnostic build) appended the 416Hz saturation taps.
+# v3.12.5 appended the 416Hz saturation taps.
 S_COLUMNS_V5 = S_COLUMNS_V4 + ["accPeakG", "accClipCount", "accSampleCount", "gyroPeakDegS", "gyroClipCount"]
-# v3.12.6 (test build) appended the shock-handling state: 0 none, 1 shock
+# v3.12.6 appended the shock-handling state: 0 none, 1 shock
 # window/candidate open (not a landing), 2 landing window, 3 landing impulse
-# applied on this sample; the re-level test build adds 4, orientation
-# re-levelled on this sample (after a landing). 54 fields; s_df always has
+# applied on this sample; since v3.12.7 also 4, orientation re-levelled on
+# this sample (after a landing), and since v3.12.15 5, sample integrated as 0
+# by the post-landing attitude check. 54 fields; s_df always has
 # this column too.
 S_COLUMNS_V6 = S_COLUMNS_V5 + ["shock"]
 
@@ -265,7 +266,7 @@ def parse_session_info(lines):
     v3.12.10 diagnostic build: also the "HSTAT," line (FIFO stream
     statistics) under "hstat"; the 416Hz "H," lines themselves are ignored
     here (tools/fifo416/fifo_worldz.py reads them).
-    3.12.16 test build: the "CONFIG," line after INFO (the BLE-writable
+    Since 3.12.16: the "CONFIG," line after INFO (the BLE-writable
     RuntimeConfig fields) under "config"."""
     out = {"info": {}, "timing": {}, "hstat": {}, "config": {}}
     for line in lines:
@@ -297,7 +298,7 @@ Y_COLUMNS = ["repNumber", "residualM", "cycleDurationS", "cycleStartType", "t_en
 
 
 def parse_y_rows(lines):
-    """3.12.17 test build: one "Y," row per completed rep cycle - the live
+    """Since 3.12.17: one "Y," row per completed rep cycle - the live
     position (worldPosZ) at the end of the cycle, i.e. its integration error,
     just before worldPosZ is reset (see Firmware/DOCUMENTATION.md, Live
     position). Empty frame for older logs."""
