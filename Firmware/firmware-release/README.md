@@ -1,9 +1,9 @@
 # Firmware release
 
-The live OTA update the companion app checks for and downloads (see `FirmwareUpdateService` in the app's source, and the BLEDfu/buttonless-DFU chapter in [`../DOCUMENTATION.md`](../DOCUMENTATION.md)) — this folder, not a GitHub Release, is the actual source of truth the app reads at runtime.
+The live OTA update the companion app checks for and downloads (see `FirmwareUpdateService` in the app's source, and the BLEDfu/buttonless-DFU chapter in [`../DOCUMENTATION.md`](../DOCUMENTATION.md)) — the app reads `manifest.json` from this folder at runtime and downloads the package it points to, which is attached to a [GitHub Release](https://github.com/ODKI-tech/ODKI-VBT/releases) (tag `fw-vX.Y.Z`).
 
-- **`manifest.json`** — a single static JSON file the app fetches over HTTPS (via `raw.githubusercontent.com`) on every launch to check for an update: `{"version": "MAJOR.MINOR.PATCH", "url": "<direct link to the matching .zip>", "notes": "<changelog shown to the tester>"}`. **Keep `notes` a plain string with no unescaped quotes** — an earlier release once broke the update check entirely this way (invalid JSON silently fails `jsonDecode`, which the app treats as "no update available", not an error).
-- **`vbt_firmware_X.Y.Z_OTA.zip`** — the actual Nordic Secure DFU package for that version. Only the *latest* one needs to stay here (older ones can be deleted once superseded — the app only ever looks at `manifest.json`'s current `url`, there's no version history to preserve in this folder specifically; the git history of this folder already preserves every past `.zip` if one is ever needed).
+- **`manifest.json`** — a single static JSON file the app fetches over HTTPS (via `raw.githubusercontent.com`) on every launch to check for an update: `{"version": "MAJOR.MINOR.PATCH", "url": "<download link of the .zip attached to the fw-vX.Y.Z release>", "notes": "<changelog shown to the tester>"}`. **Keep `notes` a plain string with no unescaped quotes** — an earlier release once broke the update check entirely this way (invalid JSON silently fails `jsonDecode`, which the app treats as "no update available", not an error).
+- **`vbt_firmware_X.Y.Z_OTA.zip`** — the actual Nordic Secure DFU package for that version, kept here for manual flashing; the app downloads the identical copy attached to the release. Only the *latest* one stays here: older ones are deleted once superseded, and the git history of this folder still holds every past `.zip` if one is ever needed.
 
 ## Licence of each binary
 
@@ -23,7 +23,12 @@ Updating from the app over Bluetooth needs the **OTAFIX** bootloader on the sens
 1. Bump `FirmwareVersion::PATCH` (or `MINOR`/`MAJOR`) in [`../VBT_Quaternions/Config.h`](../VBT_Quaternions/Config.h), matching the version note already added at the top of the changed file(s) (see `MotionTracker.cpp`'s convention).
 2. Compile for `Seeeduino:nrf52:xiaonRF52840Sense` — the Arduino/Adafruit nRF52 core produces a ready-to-use DFU package directly as part of the build (`<sketch>.ino.zip`, containing `.bin` + `.dat` + an internal `manifest.json` describing the device type/softdevice requirement — a different, unrelated file from this folder's own `manifest.json` above). No separate packaging step (`adafruit-nrfutil`) is needed on top of that.
 3. Rename it to `vbt_firmware_X.Y.Z_OTA.zip`, replace the previous one here, and delete the old `.zip`.
-4. Update this folder's `manifest.json`: new `version`, `url` pointing at the new filename, and `notes` describing the change for testers (validate it's well-formed JSON before committing — `python3 -m json.tool manifest.json`).
-5. Commit and push to `main` — the app reads directly from the raw file on the default branch, no separate publish step needed.
+4. Create the release with the `.zip` attached, **not** marked as latest (the Latest release is reserved for the Android app, whose download link depends on it):
+   ```
+   gh release create fw-vX.Y.Z vbt_firmware_X.Y.Z_OTA.zip --title "Firmware X.Y.Z" --notes-file notes.md --latest=false
+   ```
+   `notes.md` is the same short bullet list of changes that goes into `notes` in step 5.
+5. Update this folder's `manifest.json`: new `version`, `url` = `https://github.com/ODKI-tech/ODKI-VBT/releases/download/fw-vX.Y.Z/vbt_firmware_X.Y.Z_OTA.zip`, and `notes` describing the change for testers (validate it's well-formed JSON before committing — `python3 -m json.tool manifest.json`, and check the `url` downloads).
+6. Commit and push to `main` — the app reads `manifest.json` directly from the raw file on the default branch; pushing it makes the update live.
 
-The current version number lives only in `Config.h`, this folder (`manifest.json`, the `.zip` name) and the version notes in the source. Do not write it anywhere else (READMEs, documentation, website): those point to this folder instead, so a release never needs them updated.
+The current version number lives only in `Config.h`, this folder (`manifest.json`, the `.zip` name), the `fw-vX.Y.Z` GitHub Release and the version notes in the source. Do not write it anywhere else (READMEs, documentation, website): those point to this folder instead, so a release never needs them updated.

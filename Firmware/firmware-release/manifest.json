@@ -1,5 +1,5 @@
 {
   "version": "3.12.18",
-  "url": "https://raw.githubusercontent.com/ODKI-tech/ODKI-VBT/refs/heads/main/Firmware/firmware-release/vbt_firmware_3.12.18_OTA.zip",
+  "url": "https://github.com/ODKI-tech/ODKI-VBT/releases/download/fw-v3.12.18/vbt_firmware_3.12.18_OTA.zip",
   "notes": "- Faster charging: 100 mA instead of 50 mA (about half the time).\n- The battery no longer drains while the sensor is switched off: the motion sensor is now powered down in sleep.\n- Use companion app 1.0.7 or later.\n- Updating from the app requires the OTAFIX bootloader: https://github.com/ODKI-tech/ODKI-VBT/blob/main/Hardware/Instructions/BOOTLOADER.md\n- Known limitations: live velocity and position can be off at the start of some sets; the sensor samples at about 95 Hz."
 }
