@@ -1,12 +1,12 @@
 # Install the bootloader and the firmware
 
-This guide puts the software on a Seeed XIAO nRF52840 Sense. It works the same way on a bare board and on a finished, closed sensor, and it doesn't need the reset button. It takes about 10 minutes.
+This guide puts the software on a Seeed XIAO nRF52840 Sense. The steps are the same on a bare board and on a finished, closed sensor, and they don't need the reset button. It takes about 10 minutes.
 
 You will:
 1. replace the XIAO's bootloader with **OTAFIX**, over the USB cable;
 2. install the ODKI firmware from the companion app, over Bluetooth.
 
-ODKI ran these steps on 12 November 2026 on a factory-new XIAO nRF52840 Sense, on macOS, with the files and commands below. Windows and Linux use the same tools, but ODKI has not tested them there.
+ODKI ran these steps on 12 November 2026 on a factory-new XIAO nRF52840 Sense, on macOS, with the files and commands below. Not tested yet: Windows, Linux, and a sensor that already runs the ODKI firmware. They use the same tools.
 
 ## Why OTAFIX
 
@@ -51,24 +51,26 @@ If it prints anything else, delete the file and download it again. Don't continu
    pip3 install --user adafruit-nrfutil
    ```
 
-   If you already have the Arduino IDE with Seeed's nRF52 board package, the same tool is already there. On macOS it is at `~/Library/Arduino15/packages/Seeeduino/hardware/nrf52/<version>/tools/adafruit-nrfutil/macos/adafruit-nrfutil`. ODKI used that copy.
+   If you already have the Arduino IDE with Seeed's nRF52 board package, the same tool is already there. On macOS it is at `~/Library/Arduino15/packages/Seeeduino/hardware/nrf52/<version>/tools/adafruit-nrfutil/macos/adafruit-nrfutil`. ODKI used that copy; the `pip3` install above is not tested yet.
 
 2. Plug the board into the computer and list the serial ports:
    - macOS: `ls /dev/cu.usbmodem*`
    - Linux: `ls /dev/ttyACM*`
    - Windows: Device Manager → Ports (COM & LPT)
 
+   On a sensor that already runs the ODKI firmware, close the power switch first: with it open, the sensor sleeps and shows no port.
+
    Close any other program that might use the port (Arduino IDE, serial monitor, `vbt_live_monitor.py`). Below, `PORT` stands for the name you found, e.g. `/dev/cu.usbmodem101`.
 
 ## 3. Write the bootloader
 
-1. **Put the board in update mode.** This one-line command opens the port at 1200 baud and closes it, which is the standard signal for the board to restart into its bootloader:
+1. **Put the board in update mode.** This one-line command opens the port at 1200 baud and toggles its DTR line, the standard signal for the board to restart into its bootloader. Use it as it is: on the factory firmware, just opening and closing the port at 1200 baud did not work.
 
    ```sh
    python3 -c "import serial,time; s=serial.Serial(); s.port='PORT'; s.baudrate=1200; s.dtr=True; s.open(); time.sleep(0.5); s.dtr=False; time.sleep(0.5); s.close()"
    ```
 
-   Wait 5 seconds, then list the ports again. The port normally comes back with the same name; the board is now in its bootloader. With no port at all, see [If something goes wrong](#if-something-goes-wrong).
+   Wait 5 seconds, then list the ports again. A port comes back: the board is now in its bootloader. If its name changed, use the new one as `PORT` below. With no port at all, see [If something goes wrong](#if-something-goes-wrong).
 
 2. **Write OTAFIX** (about 20 seconds; don't touch the cable):
 
@@ -92,7 +94,7 @@ If the card doesn't appear, use Sensor settings (gear icon) → **FINISH INTERRU
 
 ## 5. Check it works
 
-**The firmware only stays awake when the power switch is closed.** It reads the switch on pin D6, and with no switch wired, D6 reads as "open": the board goes straight into deep sleep and seems dead. That is expected. On a bare board, wire the switch first ([assembly step 1](README.md#1-wire-the-power-switch)), or briefly join **D6** and **GND** with a wire.
+**The firmware only stays awake when the power switch is closed.** It reads the switch on pin D6, and with no switch wired, D6 reads as "open": the board goes straight into deep sleep and seems dead. That is expected. On a bare board, wire the switch first ([assembly step 1](README.md#1-wire-the-power-switch)), or join **D6** and **GND** with a wire for as long as you test.
 
 With the switch closed:
 - the status LED blinks red;
@@ -105,9 +107,9 @@ From now on, firmware updates come from the app.
 | What you see | What to do |
 |---|---|
 | `shasum` prints a different value | Delete the file and download it again from the link in step 1. Never use it. |
-| No port in step 2 | Try another cable (charge-only cables have no data) and another USB port, directly on the computer, not through a hub. |
+| No port in step 2 | On a sensor with the ODKI firmware, close the switch. Otherwise try another cable (charge-only cables have no data) and another USB port, directly on the computer, not through a hub. If the app lists **Sensor in update mode**, the board already has OTAFIX and no firmware: go to step 4. |
 | `adafruit-nrfutil` stops with "No ACK" or a timeout | Close any other program using the port, list the ports again and repeat step 3 from the beginning, with the new port name if it changed. |
-| In step 3.1 the port vanishes and doesn't come back | The board already runs OTAFIX with no firmware: go to step 4. |
+| In step 3.1 the port vanishes and doesn't come back | Nothing has been written yet. Unplug the cable, plug it back in and start again from step 2. |
 | A firmware update from the app stopped half-way | The sensor waits in update mode and doesn't connect normally. In the app: Bluetooth → **SCAN FOR DEVICES** → **FINISH UPDATE** on "Sensor in update mode". |
 | The board shows no sign of life, even with D6 joined to GND, and no "Sensor in update mode" appears | The bootloader write was interrupted. Recovery needs an SWD programmer (J-Link or a CMSIS-DAP probe) on the XIAO's SWD pads, with `xiao_nrf52840_ble_sense_bootloader-0.9.2-OTAFIX2.3-BP1.4_s140_7.3.0.hex` from the same release. On a glued sensor this means opening the case. |
 

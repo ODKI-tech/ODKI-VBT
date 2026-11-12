@@ -35,7 +35,7 @@ This is the exact pin the firmware calls `WAKE_PIN` (see `Config.h` / `Firmware/
 
 Follow [BOOTLOADER.md](BOOTLOADER.md), steps 1–5: it writes the OTAFIX bootloader over the USB cable, then the app installs the ODKI firmware over Bluetooth. Do it now, with the battery not yet connected: the board runs from the USB cable, and a battery soldered to it can't get shorted while you work.
 
-Then check the switch: closed, the status LED blinks red; open, the board goes quiet (deep sleep, see the PowerManager chapter in `Firmware/DOCUMENTATION.md`). Close it again before continuing.
+Then check the switch: closed, the status LED blinks red; open, the board goes quiet (deep sleep, see the PowerManager chapter in `Firmware/DOCUMENTATION.md`). Leave it open for the next step.
 
 ## 3. Connect the battery
 
@@ -78,7 +78,7 @@ With the case closed (provisionally) and the switch on, install the companion ap
 - [ ] **Live streaming** — start tracking in the app (LED goes solid blue) and move the device: live velocity data should appear and update in real time, not freeze or stay at zero.
 - [ ] **Data sanity** — velocity reads ~0 while the device is genuinely still, rises and falls smoothly and in the expected direction as you move it, and a rep gets detected and reported in the app when you perform one. No wild spikes, NaNs, or values stuck at a clamp.
 
-If **any** of these fail, open the case back up and check the two solder joints from steps 1–2 before assuming it's a firmware issue.
+If **any** of these fail, open the case back up and check the solder joints from steps 1 and 3 before assuming it's a firmware issue.
 
 ## 8. Permanent assembly
 
