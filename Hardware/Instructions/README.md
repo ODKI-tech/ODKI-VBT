@@ -4,7 +4,7 @@ Step-by-step guide to build one ODKI VBT unit from the parts in [`../BOM`](../BO
 
 ## ⚠️ Before you start
 
-This guide assumes you're already comfortable **soldering**, **handling a LiPo battery safely** (short-circuiting, puncturing, or reverse-wiring one can cause a fire), and **flashing firmware onto a bare development board** with the Arduino IDE. If any of that is unfamiliar, get help from someone who has done it before, or practice on scrap hardware first — this is not a beginner-friendly first electronics project.
+This guide assumes you're already comfortable **soldering** and **handling a LiPo battery safely** (short-circuiting, puncturing, or reverse-wiring one can cause a fire). Installing the software needs no programming: a few commands copied into a terminal, then the app ([BOOTLOADER.md](BOOTLOADER.md)). If soldering or LiPo batteries are unfamiliar, get help from someone who has done it before, or practice on scrap hardware first — this is not a beginner-friendly first electronics project.
 
 This design and these instructions are provided as-is, under the terms of [LICENSE-HARDWARE](../../LICENSE-HARDWARE) (the firmware: see [LICENSE](../../LICENSE)), with no warranty of any kind. Building and assembling a unit from them is entirely at your own risk — ODKI accepts no responsibility for any damage to your components, injury, fire, or other loss resulting from it.
 
@@ -14,8 +14,10 @@ This design and these instructions are provided as-is, under the terms of [LICEN
 - The two printed case bodies from [CAD](../CAD/): `case-top` and `case-bottom`.
 - A soldering iron + solder.
 - Cyanoacrylate (superglue) — a small amount for the magnets, a bit more for the final case closure.
-- A computer with the Arduino IDE, to flash the firmware (see step 3).
-- The ODKI VBT companion app (see [`../../Apps`](../../Apps/)), to run the functional test in step 7.
+- A computer with a USB port, a USB-C data cable and Python 3, to install the software (step 2, [BOOTLOADER.md](BOOTLOADER.md)). No Arduino IDE needed.
+- The ODKI VBT companion app (see [`../../Apps`](../../Apps/)), on a phone or tablet that is online: it installs the firmware (step 2) and runs the functional test (step 7).
+
+**Order matters:** the switch first (the firmware only stays awake with it closed), then the software over USB with **no battery attached**, and the battery last.
 
 ## 1. Wire the power switch
 
@@ -29,21 +31,21 @@ This is the exact pin the firmware calls `WAKE_PIN` (see `Config.h` / `Firmware/
 
 ![Switch and battery wired to the XIAO board](img/electronics-wiring.jpg)
 
-## 2. Connect the battery
+## 2. Install the bootloader and the firmware (USB only, no battery yet)
+
+Follow [BOOTLOADER.md](BOOTLOADER.md), steps 1–5: it writes the OTAFIX bootloader over the USB cable, then the app installs the ODKI firmware over Bluetooth. Do it now, with the battery not yet connected: the board runs from the USB cable, and a battery soldered to it can't get shorted while you work.
+
+Then check the switch: closed, the status LED blinks red; open, the board goes quiet (deep sleep, see the PowerManager chapter in `Firmware/DOCUMENTATION.md`). Close it again before continuing.
+
+## 3. Connect the battery
+
+**Unplug the USB cable and slide the switch open (off) first.**
 
 Solder the battery's two leads directly to the **B+ / B-** pads on the underside of the XIAO board.
 
-**Double-check polarity before soldering** — match the leads against the pads' silkscreen markings (or the official [Seeed XIAO nRF52840 Sense pinout diagram](https://wiki.seeedstudio.com/XIAO_BLE/) if the marking isn't clear). Reversed polarity on a LiPo connection can damage the board or the battery.
+**Double-check polarity before soldering:** match the leads against the pads' silkscreen markings (or the official [Seeed XIAO nRF52840 Sense pinout diagram](https://wiki.seeedstudio.com/XIAO_BLE/) if the marking isn't clear). Reversed polarity on a LiPo connection can damage the board or the battery. Keep the two bare leads apart until each is soldered, so they never touch each other.
 
-As soon as this connection is made, **the board powers on** — at this point nothing is managing sleep/wake yet (that's firmware behavior, step 3), so it will simply stay on, switch position or not, until it's flashed.
-
-## 3. First firmware flash
-
-Flash the ODKI VBT firmware now, following the Arduino IDE setup in the [main README](../../README.md#getting-started) (`Seeeduino:nrf52` board package, board `xiaonRF52840Sense`, `Seeed Arduino LSM6DS3` library) and `Firmware/DOCUMENTATION.md` for what each file does.
-
-**Bootloader.** For over-the-air updates from the app to work, the board also needs the OTAFIX bootloader: install it now, while the reset button is still reachable — see [BOOTLOADER.md](BOOTLOADER.md) (method A, a couple of minutes). A finished unit can still be converted later through its USB port (method B there).
-
-Once flashed, the switch actually does something: closed = powered on, open = deep sleep (see the PowerManager chapter in `Firmware/DOCUMENTATION.md`). Slide it open, confirm the board goes quiet, then close it again before continuing.
+With the switch open the board stays asleep; closing it powers the sensor from the battery.
 
 ## 4. Prepare `case-bottom`: magnets + battery
 
@@ -54,9 +56,9 @@ Once flashed, the switch actually does something: closed = powered on, open = de
 
 ## 5. Mount the electronics in `case-top`
 
-Slide the XIAO board (now wired to the switch and the battery) into `case-top` along its internal rail, in the direction that brings the board's USB-C connector up to the cutout in the short end wall — that's what lets the finished, glued unit be charged normally over USB without ever opening it again (re-flashing through the same port is also possible, but only as a fallback: normal firmware updates go over BLE instead). The **opposite** short end has its own dedicated recess for the switch, so it stays operable from outside once the case is closed.
+Slide the XIAO board (now wired to the switch and the battery) into `case-top` along its internal rail, in the direction that brings the board's USB-C connector up to the cutout in the short end wall — that's what lets the finished, glued unit be charged normally over USB without ever opening it again (the bootloader can also be rewritten through the same port, see [BOOTLOADER.md](BOOTLOADER.md); normal firmware updates go over BLE from the app). The **opposite** short end has its own dedicated recess for the switch, so it stays operable from outside once the case is closed.
 
-Don't force the board all the way in yet if you're about to plug in a USB cable (e.g. to double check the flash from step 3) — pushing a cable in can push the board back out of the rail. That's exactly what `case-bottom`'s post (step 4) is there to prevent, but only once the two halves are actually joined — see the next step.
+Don't force the board all the way in yet if you're about to plug in a USB cable (e.g. to charge it or to check the software from step 2) — pushing a cable in can push the board back out of the rail. That's exactly what `case-bottom`'s post (step 4) is there to prevent, but only once the two halves are actually joined — see the next step.
 
 | Battery lifted, board + switch seated in the case | Battery seated in place |
 |---|---|

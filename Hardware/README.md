@@ -4,6 +4,6 @@ This folder holds everything needed to build the ODKI VBT sensor's physical hard
 
 - **[BOM/](BOM/)** — bill of materials: every part needed to build one unit, with quantities and key specs (no sourcing links — where to buy each part is up to you, see the note in [BOM/README.md](BOM/README.md)).
 - **[CAD/](CAD/)** — the two-body enclosure design (source + print-ready files) and, if a custom PCB is ever designed instead of using the XIAO module directly, its schematic/layout sources.
-- **[Instructions/](Instructions/)** — step-by-step assembly instructions, from raw parts to a working, closed unit ready to flash.
+- **[Instructions/](Instructions/)** — step-by-step assembly instructions, from raw parts to a working, closed unit, including the software install ([Instructions/BOOTLOADER.md](Instructions/BOOTLOADER.md)).
 
 See [LICENSE-HARDWARE](../LICENSE-HARDWARE) at the project root for the license status of everything in this folder.

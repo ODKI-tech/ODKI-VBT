@@ -1,102 +1,131 @@
-# Bootloader: install OTAFIX for over-the-air updates
+# Install the bootloader and the firmware
 
-The companion app installs firmware updates over Bluetooth (OTA). That transfer is run by the **bootloader**, the small program that lives at the top of the XIAO's flash, below the SoftDevice and the firmware, and that the firmware hands over to when an update starts. ODKI sensors use a community variant of the Adafruit nRF52 bootloader, **OTAFIX**, instead of the one the XIAO nRF52840 Sense ships with. This page explains why, how to check which one a board has, and how to install it — on a board you can still reach (method A) and on a finished, glued unit whose reset button is inside the case (method B).
+This guide puts the software on a Seeed XIAO nRF52840 Sense. It works the same way on a bare board and on a finished, closed sensor, and it doesn't need the reset button. It takes about 10 minutes.
 
-Everything here applies to the **Seeed XIAO nRF52840 Sense**. A step marked **(to be verified)** has not yet been tested on hardware by ODKI with exactly these files and commands; follow it only if you accept that risk, and report what you see.
+You will:
+1. replace the XIAO's bootloader with **OTAFIX**, over the USB cable;
+2. install the ODKI firmware from the companion app, over Bluetooth.
 
-> **You are flashing the code that recovers every other mistake.** A bootloader update interrupted half way (cable pulled, battery flat) can leave the board needing a hardware programmer (SWD/J-Link) to recover. Use a charged battery *and* a USB cable you trust, keep the board still and plugged in until the end, and do not run anything else on that serial port while it works.
+ODKI ran these steps on 12 November 2026 on a factory-new XIAO nRF52840 Sense, on macOS, with the files and commands below. Windows and Linux use the same tools, but ODKI has not tested them there.
 
-## Why it is needed
+## Why OTAFIX
 
-- The XIAO nRF52840 Sense ships with Seeed's build of the Adafruit nRF52 bootloader (version 0.6.2, with Nordic's SoftDevice S140 7.3.0 — the version Seeed's Arduino board package 1.1.13 carries, and the one users report in `INFO_UF2.TXT`, see below; **to be verified** on each board). Over Bluetooth it speaks Nordic's *Legacy* DFU protocol and advertises as **`AdaDFU`**.
-- On ODKI's sensors with that bootloader, the app's OTA transfer stalled: the bootloader never acknowledged the data with *Packet Receipt Notifications* (the flow control a DFU client waits for), with 12 or with 1 packet per notification, and the same happened with Nordic's own nRF Connect app. (Adafruit's bootloader README asks for a PRN value of 8 or less for OTA; the stall happened below that too.)
-- With **OTAFIX** the same transfer completes, from the app and from nRF Connect, and the sensor reboots into the new firmware. In update mode it advertises as **`XIAO_DFU`**. The companion app is set up for it (PRN on, 10 packets).
+The bootloader is the small program that installs firmware on the board. The app's Bluetooth updates did not work with the bootloader the XIAO ships with: the transfer stalled, and it stalled in Nordic's own nRF Connect app too. They do work with **OTAFIX**, a community fix of the same Adafruit bootloader, which keeps the same Bluetooth stack (SoftDevice S140 7.3.0). After this guide, every firmware update comes from the app, with no cable needed.
 
-OTAFIX keeps the same SoftDevice (**S140 7.3.0**), so the firmware itself does not change: the same `vbt_firmware_X.Y.Z_OTA.zip` (built for SoftDevice ID `0x0123`) works on both bootloaders. Only the OTA transfer differs.
+## Before you start: safety
 
-## Where to get it
+- **Write the bootloader without the battery, or with a charged one.** Don't do it while the battery is running flat.
+- **Don't unplug the cable while step 3 runs (about 20 seconds).** A bootloader write that stops half-way can leave a board that only a hardware programmer can recover (see [If something goes wrong](#if-something-goes-wrong)).
+- **Use only the file named in step 1, and check its fingerprint.** A file built for another board can damage this one.
+- **On a closed sensor:** charge it first, and set it down where it won't move or get unplugged.
+
+## What you need
+
+- A computer with a USB port, and a USB-C **data** cable (some cables only charge).
+- Python 3 (built into macOS and Linux; on Windows, from [python.org](https://www.python.org/downloads/)).
+- The ODKI companion app on a phone or tablet that is online (see [`../../Apps/`](../../Apps/)).
+
+## 1. Download the bootloader file
+
+From the OTAFIX release [`0.9.2-OTAFIX2.3-BP1.4`](https://github.com/oltaco/Adafruit_nRF52_Bootloader_OTAFIX/releases/tag/0.9.2-OTAFIX2.3-BP1.4), download this one file. It is the one for the **Sense** board (`ble_sense`, not `ble`):
+
+`xiao_nrf52840_ble_sense_bootloader-0.9.2-OTAFIX2.3-BP1.4_s140_7.3.0.zip`
+
+Check its fingerprint in a terminal, from the folder you saved it to:
+
+```sh
+shasum -a 256 xiao_nrf52840_ble_sense_bootloader-0.9.2-OTAFIX2.3-BP1.4_s140_7.3.0.zip
+```
+
+(On Windows: `certutil -hashfile <file> SHA256`.) It must print exactly:
+
+`b64e055ac84247d95aadf977478cc4d7ac8f9730aa12e895deaf4ee17ef1e3ff`
+
+If it prints anything else, delete the file and download it again. Don't continue with it.
+
+## 2. Install the update tool and find the port
+
+1. Install Adafruit's update tool (it brings `pyserial` with it):
+
+   ```sh
+   pip3 install --user adafruit-nrfutil
+   ```
+
+   If you already have the Arduino IDE with Seeed's nRF52 board package, the same tool is already there. On macOS it is at `~/Library/Arduino15/packages/Seeeduino/hardware/nrf52/<version>/tools/adafruit-nrfutil/macos/adafruit-nrfutil`. ODKI used that copy.
+
+2. Plug the board into the computer and list the serial ports:
+   - macOS: `ls /dev/cu.usbmodem*`
+   - Linux: `ls /dev/ttyACM*`
+   - Windows: Device Manager → Ports (COM & LPT)
+
+   Close any other program that might use the port (Arduino IDE, serial monitor, `vbt_live_monitor.py`). Below, `PORT` stands for the name you found, e.g. `/dev/cu.usbmodem101`.
+
+## 3. Write the bootloader
+
+1. **Put the board in update mode.** This one-line command opens the port at 1200 baud and closes it, which is the standard signal for the board to restart into its bootloader:
+
+   ```sh
+   python3 -c "import serial,time; s=serial.Serial(); s.port='PORT'; s.baudrate=1200; s.dtr=True; s.open(); time.sleep(0.5); s.dtr=False; time.sleep(0.5); s.close()"
+   ```
+
+   Wait 5 seconds, then list the ports again. The port normally comes back with the same name; the board is now in its bootloader. With no port at all, see [If something goes wrong](#if-something-goes-wrong).
+
+2. **Write OTAFIX** (about 20 seconds; don't touch the cable):
+
+   ```sh
+   adafruit-nrfutil --verbose dfu serial \
+     --package xiao_nrf52840_ble_sense_bootloader-0.9.2-OTAFIX2.3-BP1.4_s140_7.3.0.zip \
+     -p PORT -b 115200 --singlebank
+   ```
+
+   It ends with `Device programmed.`
+
+3. **The board disappears from USB. This is normal.** This step erases the firmware, and OTAFIX with no firmware waits for one over Bluetooth, as **`XIAO_DFU`**. Leave the board plugged in: the cable now only powers it.
+
+## 4. Install the ODKI firmware from the app
+
+1. Keep the phone next to the board, online, with the app open.
+2. Bluetooth icon → **SCAN FOR DEVICES**. At the top of the list, an orange card says **Sensor in update mode**.
+3. Tap **FINISH UPDATE** and keep the screen open until it reaches 100 %. The app downloads the latest firmware from this repository by itself.
+
+If the card doesn't appear, use Sensor settings (gear icon) → **FINISH INTERRUPTED UPDATE**. As a last resort, use Nordic's *nRF Device Firmware Update* app with the `.zip` from [`Firmware/firmware-release/`](../../Firmware/firmware-release/), on target `XIAO_DFU`.
+
+## 5. Check it works
+
+**The firmware only stays awake when the power switch is closed.** It reads the switch on pin D6, and with no switch wired, D6 reads as "open": the board goes straight into deep sleep and seems dead. That is expected. On a bare board, wire the switch first ([assembly step 1](README.md#1-wire-the-power-switch)), or briefly join **D6** and **GND** with a wire.
+
+With the switch closed:
+- the status LED blinks red;
+- the app finds the sensor as `VBT-Sensor` and shows its firmware version in the Bluetooth menu.
+
+From now on, firmware updates come from the app.
+
+## If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| `shasum` prints a different value | Delete the file and download it again from the link in step 1. Never use it. |
+| No port in step 2 | Try another cable (charge-only cables have no data) and another USB port, directly on the computer, not through a hub. |
+| `adafruit-nrfutil` stops with "No ACK" or a timeout | Close any other program using the port, list the ports again and repeat step 3 from the beginning, with the new port name if it changed. |
+| In step 3.1 the port vanishes and doesn't come back | The board already runs OTAFIX with no firmware: go to step 4. |
+| A firmware update from the app stopped half-way | The sensor waits in update mode and doesn't connect normally. In the app: Bluetooth → **SCAN FOR DEVICES** → **FINISH UPDATE** on "Sensor in update mode". |
+| The board shows no sign of life, even with D6 joined to GND, and no "Sensor in update mode" appears | The bootloader write was interrupted. Recovery needs an SWD programmer (J-Link or a CMSIS-DAP probe) on the XIAO's SWD pads, with `xiao_nrf52840_ble_sense_bootloader-0.9.2-OTAFIX2.3-BP1.4_s140_7.3.0.hex` from the same release. On a glued sensor this means opening the case. |
+
+## Other way: the UF2 drive (reset button reachable)
+
+On a board whose reset button you can reach, OTAFIX's own README offers a way that replaces only the bootloader and keeps the firmware. ODKI has not tested it on a factory-new board.
+1. Double-press reset: a USB drive named **`XIAO-SENSE`** appears.
+2. Copy `update-xiao_nrf52840_ble_sense_bootloader-0.9.2-OTAFIX2.3-BP1.4_nosd.uf2` onto it. Its SHA-256 is `5aa99201f3adcc128e1ebdc7ea4b4ba8e370ededda13ad94942059da5a1617c4`. Wait 30 seconds without unplugging.
+3. Double-press reset again. `INFO_UF2.TXT` on the drive must read `UF2 Bootloader 0.9.2-OTAFIX2.3-BP1.4` and `Board-ID: nRF52840-SeeedXiaoSense-v1`.
+
+The same drive is how to check which bootloader a board has. The bootloader the XIAO ships with reads `0.6.2-…`, according to user reports.
+
+## About the files
 
 | | |
 |---|---|
-| Project | [oltaco/Adafruit_nRF52_Bootloader_OTAFIX](https://github.com/oltaco/Adafruit_nRF52_Bootloader_OTAFIX) — a fork of [adafruit/Adafruit_nRF52_Bootloader](https://github.com/adafruit/Adafruit_nRF52_Bootloader) |
-| License | MIT (Copyright (c) 2016 Adafruit Industries, see the project's `LICENSE`); the bundled SoftDevice is under Nordic Semiconductor's own license (`lib/softdevice/s140_nrf52_7.3.0/s140_nrf52_7.3.0_license-agreement.txt` there: redistribution in binary form must keep Nordic's notice, use only with Nordic chips, no reverse engineering) |
-| Release used by ODKI | [`0.9.2-OTAFIX2.3-BP1.4`](https://github.com/oltaco/Adafruit_nRF52_Bootloader_OTAFIX/releases/tag/0.9.2-OTAFIX2.3-BP1.4) (19 August 2026) — `INFO_UF2.TXT` reads `UF2 Bootloader 0.9.2-OTAFIX2.3-BP1.4`, `Board-ID: nRF52840-SeeedXiaoSense-v1`, `SoftDevice: S140 7.3.0` |
+| Project | [oltaco/Adafruit_nRF52_Bootloader_OTAFIX](https://github.com/oltaco/Adafruit_nRF52_Bootloader_OTAFIX), a fork of [adafruit/Adafruit_nRF52_Bootloader](https://github.com/adafruit/Adafruit_nRF52_Bootloader) |
+| License | MIT (Copyright (c) 2016 Adafruit Industries). The bundled SoftDevice is under Nordic Semiconductor's own license (`lib/softdevice/s140_nrf52_7.3.0/s140_nrf52_7.3.0_license-agreement.txt` in that project): redistribution in binary form must keep Nordic's notice, use only with Nordic chips, no reverse engineering. |
+| Checksums | The ones GitHub publishes for the release assets. ODKI downloaded the files on 2 and 12 November 2026 and got the same values. |
 
-Download the two files for the **Sense** board (`..._ble_sense_...`, not `..._ble_...`) from that release and check them before use (`shasum -a 256 FILE` on macOS/Linux, `certutil -hashfile FILE SHA256` on Windows). The checksums below are the ones GitHub publishes for the release assets; ODKI downloaded the files on 2 November 2026 and got the same values.
-
-| File | Used by | SHA-256 |
-|---|---|---|
-| `update-xiao_nrf52840_ble_sense_bootloader-0.9.2-OTAFIX2.3-BP1.4_nosd.uf2` | method A — bootloader only | `5aa99201f3adcc128e1ebdc7ea4b4ba8e370ededda13ad94942059da5a1617c4` |
-| `xiao_nrf52840_ble_sense_bootloader-0.9.2-OTAFIX2.3-BP1.4_s140_7.3.0.zip` | method B and recovery — SoftDevice + bootloader | `b64e055ac84247d95aadf977478cc4d7ac8f9730aa12e895deaf4ee17ef1e3ff` |
-
-ODKI links to the upstream release instead of copying the binaries into this repository. Both licenses would allow a copy with the notices kept, but a link credits the maintainer, always points at files whose provenance anyone can check, and keeps third-party binaries (and their license conditions) out of this repository.
-
-## 1. Check which bootloader a board has
-
-**`INFO_UF2.TXT` (the reliable way).** Put the board in UF2 mode (below): a USB drive named **`XIAO-SENSE`** appears. Open `INFO_UF2.TXT` on it.
-
-- OTAFIX: first line `UF2 Bootloader 0.9.2-OTAFIX2.3-BP1.4 …`, `Board-ID: nRF52840-SeeedXiaoSense-v1`.
-- As shipped (reported by users, **to be verified** on your board): `UF2 Bootloader 0.6.2-12-g459adc9-dirty …`, `Model: Seeed XIAO nRF52840`, `Board-ID: Seeed_XIAO_nRF52840_Sense`, `SoftDevice: S140 7.3.0`.
-
-Leave UF2 mode by pressing reset once, or by copying a firmware `.uf2` onto the drive (the board installs it and restarts).
-
-How to get to UF2 mode:
-- **Reset button reachable:** press the tiny reset button twice within half a second.
-- **Closed unit:** UF2 mode cannot be reached without the button. A firmware command to open the drive without the button was tried and does not work with OTAFIX 2.3 (the board restarts straight back into the firmware), so on a closed unit check the bootloader by Bluetooth name (below) and install OTAFIX with method B.
-
-**By Bluetooth name (no cable).** Start a firmware update from the app and watch a BLE scanner (e.g. nRF Connect): the sensor reappears as `XIAO_DFU` with OTAFIX, `AdaDFU` with the stock bootloader. Only do this when you mean to finish an update: a bootloader in OTA update mode keeps waiting for one (it advertises with no timeout) until an update completes or the board is reset.
-
-## 2. Method A — board accessible (reset button reachable)
-
-The method OTAFIX's own README recommends. Only the bootloader is replaced: SoftDevice and firmware stay.
-
-1. Charge the battery, plug the board into the computer.
-2. Double-press reset: the `XIAO-SENSE` drive appears. Open `INFO_UF2.TXT` and note the first and `Board-ID` lines.
-3. Copy `update-xiao_nrf52840_ble_sense_bootloader-0.9.2-OTAFIX2.3-BP1.4_nosd.uf2` onto the drive. The drive disappears after a few seconds while the bootloader replaces itself; do not unplug for at least 30 seconds.
-4. Double-press reset again and check `INFO_UF2.TXT`: it must now read `0.9.2-OTAFIX2.3-BP1.4` and `Board-ID: nRF52840-SeeedXiaoSense-v1`. Press reset once (or copy the firmware `.uf2`) to go back to the firmware.
-
-If the drive refuses the file (it reappears unchanged and `INFO_UF2.TXT` still shows the old version), the running bootloader rejected the update — a UF2 bootloader update is only accepted when its USB identity matches the installed bootloader's. Do not try other boards' files; use method B instead. (**To be verified:** whether the stock Seeed bootloader accepts this file.)
-
-## 3. Method B — closed unit, no reset button
-
-The finished unit has its USB-C port at the end of the case, so everything below goes through the cable.
-
-**SoftDevice + bootloader over USB serial (erases the firmware) — to be verified.** The `XIAO-SENSE` drive is not reachable without the button (a firmware command to open it was tried and does not work with OTAFIX 2.3), so a closed unit goes through the bootloader's serial update mode, which the running firmware enters on the 1200-baud touch below.
-
-The command Adafruit's own bootloader build uses to upgrade a board over serial (`flash-dfu` target of the bootloader's `Makefile`; Seeed's Arduino package uses the same command for *Burn Bootloader* with the "Bootloader DFU for Bluefruit nRF52" programmer):
-
-```sh
-"$HOME/Library/Arduino15/packages/Seeeduino/hardware/nrf52/1.1.13/tools/adafruit-nrfutil/macos/adafruit-nrfutil" \
-  --verbose dfu serial --package xiao_nrf52840_ble_sense_bootloader-0.9.2-OTAFIX2.3-BP1.4_s140_7.3.0.zip \
-  -p /dev/cu.usbmodemXXXX -b 115200 --singlebank --touch 1200
-```
-
-List the ports first (`ls /dev/cu.usbmodem*` on macOS) and close any other program using the sensor's port. `--touch 1200` opens the port at 1200 baud for a moment: the running firmware (the Adafruit nRF52 core's USB stack) takes that as the signal to restart into the bootloader's serial update mode, so no button is needed. On Linux/Windows install the tool with `pip3 install --user adafruit-nrfutil` and use the port name your system shows (`/dev/ttyACM0`, `COM5`, …).
-
-What to expect, from the bootloader's source:
-- It works from the firmware currently running (any ODKI firmware, which has the core's 1200-baud touch), whatever Adafruit-based bootloader is installed: the *current* bootloader receives the package and replaces SoftDevice and bootloader. Stock and OTAFIX both use S140 7.3.0, so the SoftDevice is rewritten with the same version.
-- **The firmware is erased:** in single-bank mode the package is received into the application area. When the new bootloader starts it finds no valid firmware and, since OTAFIX 2.1, waits in **Bluetooth update mode** (`XIAO_DFU`) — no USB drive, no serial port.
-- Reinstall the firmware **over Bluetooth**: the companion app cannot see a sensor in this state, so use Nordic's *nRF Device Firmware Update* app (Android/iOS) with the `vbt_firmware_X.Y.Z_OTA.zip` currently in [`Firmware/firmware-release/`](../../Firmware/firmware-release/) copied to the phone, target `XIAO_DFU`, settings as recommended in OTAFIX's README (PRN on). On a board whose reset button is reachable, a double reset gives the USB drive instead.
-
-## 4. After the bootloader update
-
-1. Install or confirm the firmware (the app shows the firmware version in its Bluetooth menu; over serial, `VERSION`).
-2. Test an OTA update from the app once: the update should run to 100 % and the sensor should come back as `VBT-Sensor` with the new version.
-
-## 5. If something goes wrong
-
-| Symptom | What it means | What to do |
-|---|---|---|
-| No USB drive and no serial port, sensor advertises `XIAO_DFU` | OTAFIX in Bluetooth update mode: no valid firmware (after method B, or an interrupted OTA) | After an interrupted OTA: open the companion app, search for sensors in the Bluetooth menu and tap **FINISH UPDATE** on "Sensor in update mode" (or Sensor settings → **FINISH INTERRUPTED UPDATE**). Otherwise install the firmware OTA with nRF Device Firmware Update (method B, last step), or double reset if reachable |
-| The `.uf2` copy fails or the drive reappears unchanged | The bootloader refused the file (wrong board file, or identity mismatch) | Check you used the `ble_sense` file; otherwise use method B |
-| `adafruit-nrfutil` stops with a timeout or "No ACK" | Wrong port, another program holding it, or the port name changed after the 1200-baud restart | Close other serial programs, list the ports again, re-run with the new name (and without `--touch 1200` if the board is already in serial update mode) |
-| Board shows no sign of life after a bootloader update | Bootloader damaged (interrupted while it was being replaced) | Needs SWD: an nRF52 programmer (J-Link, or a CMSIS-DAP probe) on the XIAO's SWD pads, then flash `xiao_nrf52840_ble_sense_bootloader-0.9.2-OTAFIX2.3-BP1.4_s140_7.3.0.hex` from the same release; on a glued unit this means opening the case |
-| The app never offers an update | The phone or tablet is offline (the app checks GitHub each time it connects), or the sensor already runs the latest version | Connect the phone to the internet, then disconnect and reconnect the sensor in the app |
-| An OTA update from the app stalls on a board you converted | Still the old bootloader, or a phone BLE quirk | Check `INFO_UF2.TXT`; retry the update (OTAFIX's README lists DFU settings that help on some Android phones) |
-
-## 6. Risks, in short
-
-- Do not unplug the cable or let the battery run flat while a bootloader is being written. Method A replaces only the bootloader (a few seconds); method B rewrites SoftDevice and bootloader (about 20–30 seconds).
-- Use only the **Sense** files of the release named above, checked against the SHA-256 values.
-- A board stuck in Bluetooth update mode keeps advertising until it receives an update; on a closed unit the battery cannot be disconnected, so finish the update rather than leaving it.
-- These are third-party binaries, provided by their authors "as is"; ODKI does not modify or support them beyond this guide.
+ODKI links to the upstream release instead of copying the binaries into this repository. A link credits the maintainer, points at files whose origin anyone can check, and keeps third-party binaries and their license conditions out of this repository. They are provided by their authors "as is"; ODKI does not modify or support them beyond this guide.
