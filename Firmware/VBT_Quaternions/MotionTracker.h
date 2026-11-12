@@ -61,6 +61,9 @@ struct MotionDebugState {
 
 namespace MotionTracker {
   bool begin();
+  // Cuts the IMU's power before deep sleep (see PowerManager::goToSleep()).
+  // Safe to call whether or not begin() ran.
+  void powerDown();
 
   // v3.12.0: "FUSION", the only orientation filter (INFO/TIMING lines, the
   // read-only FILTER serial command).

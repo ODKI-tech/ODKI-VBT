@@ -562,7 +562,7 @@ If the watchdog fires, it forces a full reset — equivalent to a power cycle bu
 ### Deep sleep (System OFF)
 
 `goToSleep()`:
-1. Turns off the status LED and flushes a log message.
+1. Turns off the status LED, cuts the IMU's power (`MotionTracker::powerDown()`: stops the IMU's I2C bus, releases its pins so the nRF's pull-ups can't feed the IMU through them, then drives `PIN_LSM6DS3TR_C_POWER` LOW) and flushes a log message. The nRF52840 keeps GPIO outputs in System OFF, so up to v3.12.17, when nothing switched it off, the IMU kept sampling while the sensor was "off" (about 1 mA, estimated from the datasheet, not measured) and emptied the battery in a few weeks.
 2. Reconfigures `WAKE_PIN` as a GPIO **sense input** (`nrf_gpio_cfg_sense_input`, pull-up, sense LOW) — this is what lets the chip wake from System OFF when the switch is closed again.
 3. Calls `sd_power_system_off()` — **not** a direct write to `NRF_POWER->SYSTEMOFF`. With the BLE SoftDevice active, direct writes to that register are silently blocked/ignored in a non-deterministic way (the SoftDevice guards it), so `sd_power_system_off()` is the only correct, SoftDevice-safe entry point. This requires `Bluefruit.begin()` to have already run before `goToSleep()` is called.
 4. Never returns; the trailing `while(1)` is unreachable and only there for the compiler.
@@ -579,7 +579,7 @@ Because the sense/DETECT wake mechanism only works for waking from a true System
 **Responsibility.** Reads the LiPo battery voltage on the Seeed XIAO nRF52840 Sense and converts it to a 0–100% charge estimate. It also exposes whether the battery is currently charging, and runs a background self-calibration routine that improves reading accuracy over time without any manual tuning per board.
 
 **Public interface** (`BatteryMonitor.h`)
-- `void begin()` — configures the ADC (12-bit, 3.0V internal reference, 40µs sample time), sets up the `VBAT_ENABLE` pin and the charge-status pin, and loads any previously saved calibration factor from flash. Call once during setup.
+- `void begin()` — configures the ADC (12-bit, 3.0V internal reference, 40µs sample time), sets up the `VBAT_ENABLE` pin and the charge-status pin, sets the charge current to 100 mA (`PIN_CHARGING_CURRENT` = P0.13 driven LOW; the Seeed core leaves it as an input, which means 50 mA; the setting holds in System OFF too, so it applies while the sensor charges with its switch open), and loads any previously saved calibration factor from flash. Call once during setup.
 - `float readVoltage()` — returns the current battery voltage in volts, already oversampled, time-smoothed, and calibrated. Also drives the auto-calibration logic as a side effect (call it periodically, e.g. every ~30s, not per-loop-iteration).
 - `float voltageToPercent(float volts)` — converts a voltage reading to an estimated 0–100 charge percentage. Pure function, no state.
 - `bool isCharging()` — true while the BQ25100 charge IC reports charging in progress. Diagnostic only; no other logic in the module depends on it besides auto-calibration.

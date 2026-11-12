@@ -179,6 +179,17 @@ namespace {
 void BatteryMonitor::begin() {
   pinMode(VBAT_ENABLE, OUTPUT);
   digitalWrite(VBAT_ENABLE, HIGH); // divider disconnected until a reading is needed
+
+  // v3.12.18: charge at 100 mA instead of 50 mA. The board's charger
+  // (BQ25100) takes its charge current from P0.13 (PIN_CHARGING_CURRENT):
+  // LOW = 100 mA, left as input = 50 mA, which is what the Seeed core's
+  // initVariant() sets. At 50 mA the 400 mAh reference cell needed about
+  // 8 hours or more to fill. 100 mA is 0.25 C for that cell, well within a
+  // LiPo's standard charge rate. The nRF52840 keeps GPIO outputs in
+  // System OFF, so the faster rate also applies while the sensor sleeps
+  // with its switch open, which is how it is normally charged.
+  pinMode(PIN_CHARGING_CURRENT, OUTPUT);
+  digitalWrite(PIN_CHARGING_CURRENT, LOW);
   analogReference(AR_INTERNAL_3_0);
   analogReadResolution(12);
 

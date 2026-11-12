@@ -14,6 +14,7 @@
 #include "PowerManager.h"
 #include "StatusLED.h"
 #include "Config.h"
+#include "MotionTracker.h"
 #include "nrf_gpio.h"
 #include <bluefruit.h> // for sd_power_system_off()
 
@@ -106,6 +107,7 @@ bool PowerManager::wakeSwitchClosed() {
 
 void PowerManager::goToSleep() {
   StatusLED::off();
+  MotionTracker::powerDown(); // otherwise the IMU keeps drawing ~1 mA while "off"
 
   Serial.println("Switch open: entering deep sleep...");
   Serial.flush();

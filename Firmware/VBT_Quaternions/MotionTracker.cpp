@@ -18,6 +18,7 @@
 #include "FusionOrientation.h"
 #include "LSM6DS3.h"
 #include "Wire.h"
+#include "nrf_gpio.h"
 
 namespace {
   // ============================================================================
@@ -3301,6 +3302,25 @@ bool MotionTracker::begin() {
   Wire.setClock(400000);
 #endif
   return ok;
+}
+
+// v3.12.18: up to v3.12.17 the IMU stayed powered and sampling in deep
+// sleep, because nothing switched PIN_LSM6DS3TR_C_POWER off before System
+// OFF (the nRF52840 keeps GPIO outputs in that state). At roughly 1 mA it
+// emptied the 400 mAh battery of a switched-off sensor in a few weeks.
+// The I2C pins are released first: Wire begin() enables the nRF's internal
+// pull-ups on them, which would otherwise feed the unpowered IMU through its
+// I/O pins.
+void MotionTracker::powerDown() {
+#if defined(TARGET_SEEED_XIAO_NRF52840_SENSE) || defined(TARGET_SEEED_XIAO_NRF52840_SENSE_PLUS)
+  Wire1.end();
+  nrf_gpio_cfg_default(g_ADigitalPinMap[PIN_WIRE1_SDA]);
+  nrf_gpio_cfg_default(g_ADigitalPinMap[PIN_WIRE1_SCL]);
+#else
+  Wire.end();
+#endif
+  pinMode(PIN_LSM6DS3TR_C_POWER, OUTPUT);
+  digitalWrite(PIN_LSM6DS3TR_C_POWER, LOW);
 }
 
 void MotionTracker::calibrateOrientation() {
