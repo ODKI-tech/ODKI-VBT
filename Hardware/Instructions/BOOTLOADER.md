@@ -87,7 +87,7 @@ What to expect, from the bootloader's source:
 
 | Symptom | What it means | What to do |
 |---|---|---|
-| No USB drive and no serial port, sensor advertises `XIAO_DFU` | OTAFIX in Bluetooth update mode: no valid firmware (after method B, or an interrupted OTA) | Install the firmware OTA with nRF Device Firmware Update (method B, last step), or double reset if reachable |
+| No USB drive and no serial port, sensor advertises `XIAO_DFU` | OTAFIX in Bluetooth update mode: no valid firmware (after method B, or an interrupted OTA) | After an interrupted OTA: open the companion app, search for sensors in the Bluetooth menu and tap **FINISH UPDATE** on "Sensor in update mode" (or Sensor settings → **FINISH INTERRUPTED UPDATE**). Otherwise install the firmware OTA with nRF Device Firmware Update (method B, last step), or double reset if reachable |
 | The `.uf2` copy fails or the drive reappears unchanged | The bootloader refused the file (wrong board file, or identity mismatch) | Check you used the `ble_sense` file; otherwise use method B |
 | `adafruit-nrfutil` stops with a timeout or "No ACK" | Wrong port, another program holding it, or the port name changed after the 1200-baud restart | Close other serial programs, list the ports again, re-run with the new name (and without `--touch 1200` if the board is already in serial update mode) |
 | Board shows no sign of life after a bootloader update | Bootloader damaged (interrupted while it was being replaced) | Needs SWD: an nRF52 programmer (J-Link, or a CMSIS-DAP probe) on the XIAO's SWD pads, then flash `xiao_nrf52840_ble_sense_bootloader-0.9.2-OTAFIX2.3-BP1.4_s140_7.3.0.hex` from the same release; on a glued unit this means opening the case |
