@@ -120,6 +120,10 @@ def pair_set(log_path, aligned_path, set_row, align_info=None):
     base = {"set_id": set_row["set_id"], "physical_set_id": set_row["physical_set_id"],
             "unit_id": set_row["unit_id"]}
     flagged = bool(align_info and align_info.get("flagged"))
+    # sets.csv equipment_failure: a documented failure, logged before the
+    # analysis is run (PROTOCOL.md section 7); empty when there is none
+    ef = set_row.get("equipment_failure", "")
+    failure = isinstance(ef, str) and ef.strip() != ""
     rows = []
     paired_r, paired_o = set(), set()
     for i, k, v in pairs:
@@ -137,7 +141,8 @@ def pair_set(log_path, aligned_path, set_row, align_info=None):
         if k not in paired_o:
             rows.append({**base, "match": "FP", **odki_fields(k)})
     for r in rows:
-        r["exclude_reason"] = "alignment_flagged" if flagged else ""
+        r["exclude_reason"] = ("alignment_flagged" if flagged else
+                               "equipment_failure" if failure else "")
         key = r.get("ref_rep_idx") if r["match"] != "FP" else f"x{r['odki_rep_number']}"
         r["rep_uid"] = f"{set_row['set_id']}-{key}"
     return rows
