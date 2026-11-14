@@ -157,7 +157,7 @@ The bootstrap seed is fixed, so the published dataset always gives the published
 - **Deadlift:** an amendment, published before its data is collected.
 - **Phase end at lockout:** after the study, its slow-lockout reps are used to evaluate ending the concentric at the highest bar position; any change is a new firmware version, outside this study.
 - **Laboratory phase:** a university laboratory with a laboratory transducer or 3D motion capture, under its ethics approval.
-- **Every firmware release:** the dataset logs are replayed through `host_replay` against the new engine.
+- **Every firmware release:** ODKI replays the dataset logs through the new engine.
 
 ## 14. Deviations and history
 

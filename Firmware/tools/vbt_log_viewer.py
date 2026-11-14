@@ -265,7 +265,7 @@ def parse_session_info(lines):
     key -> value strings ({} when the firmware does not print them).
     v3.12.10 diagnostic build: also the "HSTAT," line (FIFO stream
     statistics) under "hstat"; the 416Hz "H," lines themselves are ignored
-    here (tools/fifo416/fifo_worldz.py reads them).
+    here (an internal tool reads them).
     Since 3.12.16: the "CONFIG," line after INFO (the BLE-writable
     RuntimeConfig fields) under "config"."""
     out = {"info": {}, "timing": {}, "hstat": {}, "config": {}}

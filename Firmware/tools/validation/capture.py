@@ -22,7 +22,7 @@ converted afterwards with import_ref.py. For a physical set <set> and sensor
 unit <unit> this writes:
 
   raw/odki/<set>_<unit>.log          the ODKI log, BYTE-FOR-BYTE as received
-                                     (vbt_log_viewer.py and host_replay read it as-is)
+                                     (vbt_log_viewer.py reads it as-is)
   raw/odki/<set>_<unit>.sidecar.csv  line_no,host_ns,kind - arrival time of every
                                      ODKI line on the PC's monotonic clock
 

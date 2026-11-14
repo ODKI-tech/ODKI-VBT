@@ -51,7 +51,7 @@ Open an issue first for anything non-trivial (a new `RuntimeConfig` field, a cha
 
 - Keep pull requests focused: one logical change per PR, not a bundle of unrelated fixes. Small and reviewable beats large and comprehensive.
 - Explain the *why* in the PR description, not just the *what* — especially for anything touching `MotionTracker`, where the reasoning behind a threshold or a gate is usually more important than the line that changes.
-- If your change affects rep detection or drift correction, validate it against a real hardware capture (or several) with `vbt_log_viewer.py` — and, to compare an engine change on a capture without re-flashing, replay it through the real engine with `Firmware/tools/host_replay/` — and mention what you checked. The automated checks are `Firmware/tools/full_replay/regression.py` (the whole chain — orientation filter and engine — on committed synthetic data; a change that is meant to alter the output must say so and update the golden file with `--update`), `Firmware/tools/calibration_seed/run.py` and `Firmware/tools/validation/tests/test_pipeline.py`; they do not replace a check on real captures.
+- If your change affects rep detection or drift correction, validate it against a real hardware capture (or several) with `vbt_log_viewer.py`, and mention what you checked. The maintainers also replay recorded logs through the new engine with internal tools before merging.
 - Update [`Firmware/DOCUMENTATION.md`](Firmware/DOCUMENTATION.md) in the same PR if the change affects behavior it describes (a `RuntimeConfig` default, a wire-format field, a module's responsibility). Undocumented behavior changes are the main way this repo would drift out of date again.
 
 ## Code style

@@ -12,7 +12,7 @@ I have read the ODKI VBT CLA version 1.0 and I agree to it.
 
 ## Checklist
 
-- [ ] If this changes rep-detection, drift-correction or orientation behaviour, I validated it against real hardware captures with `vbt_log_viewer.py` / `tools/full_replay/` and ran `tools/full_replay/regression.py` (describe below).
+- [ ] If this changes rep-detection, drift-correction or orientation behaviour, I validated it against real hardware captures with `vbt_log_viewer.py` (describe below).
 - [ ] If this changes behaviour described in `Firmware/DOCUMENTATION.md` or `Firmware/BLE_PROTOCOL.md`, I updated the relevant section in the same PR.
 - [ ] New source files carry the license header of their area (see CONTRIBUTING.md's Code style section); third-party code, if any, is identified with its license.
 

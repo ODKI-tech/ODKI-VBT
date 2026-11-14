@@ -335,7 +335,7 @@ struct RuntimeConfig {
   // FIRMWARE-ONLY, and NOT carried by the BLE Config packet at all (its
   // 38-byte layout is unchanged): packetToConfig() in BleServer.cpp starts
   // from RuntimeConfig{}, so these always keep the compiled defaults.
-  // Tuned offline on recorded deadlift/squat sets (tools/full_replay/) -
+  // Tuned offline on recorded deadlift/squat sets (offline replay) -
   // see the v3.12.6 version note in MotionTracker.cpp and the "Mechanical
   // shocks" section of DOCUMENTATION.md.
   // false = no shock window, no orientation hold, no landing impulse

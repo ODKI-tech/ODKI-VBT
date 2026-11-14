@@ -25,7 +25,7 @@
 // recommended values (README of v1.3.3), at the firmware's 100Hz rate and
 // with the LSM6DS3 gyroscope range MotionTracker::begin() configures
 // (500 deg/s) - see the FusionOrientation chapter of DOCUMENTATION.md.
-// Plain struct so the offline harness (tools/full_replay/) can vary it.
+// Plain struct so the offline harness (offline replay) can vary it.
 struct FusionOrientationSettings {
   float gain = 0.5f;                     // Fusion "gain" (dimensionless, ~1/time constant in s)
   float gyroscopeRangeDegS = 500.0f;     // overrange restart above 98% of this; 0 = off
@@ -69,7 +69,7 @@ public:
   void setQuaternion(float q0, float q1, float q2, float q3);
 
   // The quaternion alignToGravity() seeds, without touching the filter
-  // (exposed for the host tests in tools/calibration_seed/).
+  // (exposed for the host tests in the seed host test).
   static void gravitySeed(float ax, float ay, float az, float q[4]);
 
   // gx/gy/gz in rad/s (bias already subtracted by MotionTracker), ax/ay/az in

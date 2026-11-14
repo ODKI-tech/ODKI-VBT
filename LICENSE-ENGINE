@@ -6,10 +6,7 @@ Required Notice: Copyright (c) 2026 Lodovico Cortelazzo (ODKI)
 This file covers the ODKI VBT tracking engine:
 
   - Firmware/VBT_Quaternions/MotionTracker.cpp and MotionTracker.h, and
-  - every other file whose header says it is under this license — today
-    Firmware/tools/host_replay/replay.cpp and
-    Firmware/tools/full_replay/harness.cpp, which compile the engine into
-    an offline replay tool by #including MotionTracker.cpp.
+  - every other file whose header says it is under this license.
 
 The engine is source-available — not open source — under the PolyForm
 Noncommercial License 1.0.0, reproduced in full at the end of this file

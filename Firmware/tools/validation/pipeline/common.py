@@ -122,7 +122,7 @@ _viewer = None
 
 
 def load_viewer():
-    """Imports ../vbt_log_viewer.py (same mechanism as host_replay/replay.py)."""
+    """Imports ../vbt_log_viewer.py (imported, never copied)."""
     global _viewer
     if _viewer is None:
         spec = importlib.util.spec_from_file_location("vbt_log_viewer", os.path.join(TOOLS, "vbt_log_viewer.py"))

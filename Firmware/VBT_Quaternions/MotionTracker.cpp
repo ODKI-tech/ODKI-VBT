@@ -708,7 +708,7 @@ namespace {
   // velZ was left at -0.50, -0.70, -1.19, -1.52 m/s (cumulative) with the bar
   // at rest, while integrating the unfiltered signal brought it back to
   // +0.02..+0.04 m/s after every landing (replayed through THIS engine with
-  // tools/host_replay/, which matched the firmware log to 0.0001 m/s). The
+  // the offline replay, which matched the firmware log to 0.0001 m/s). The
   // old behaviour also handed the bracket correction a large step to spread
   // linearly over the whole bracket, inflating the concentric phase before
   // the impact. The median is a non-linear filter: on a bipolar burst (a
@@ -757,7 +757,7 @@ namespace {
   // updateOrientationAndAcceleration() an offline replay cannot rebuild from
   // the other columns (accZBias is only accBiasVec projected on gravity, and
   // accelScaleG is printed only by CALIBRATE), so with them a log replays
-  // the orientation filter from the first sample (tools/full_replay/ reads
+  // the orientation filter from the first sample (the offline replay reads
   // them when present). Logged on
   // every row, not once at REC_START, so a log cut anywhere still has them.
   //
@@ -766,7 +766,7 @@ namespace {
   //   - CALIBRATE seed fixed: MadgwickAHRS::alignToGravity() used to seed the
   //     tilt mirrored (off by 2x the tilt, ~17 s to recover at 72 deg, never at
   //     90 deg). update() is bit-identical; only the seed changes (see
-  //     MadgwickAHRS.cpp and tools/calibration_seed/).
+  //     MadgwickAHRS.cpp and the seed host test).
   //   - the fw-rawacc-log columns above are part of this build;
   //   - run-time orientation filter selection (ODKI_FILTER_RUNTIME_SELECT):
   //     Madgwick at boot, "FILTER FUSION"/"FILTER MADGWICK" over serial while
@@ -798,7 +798,7 @@ namespace {
   // startup ramp skipped after CALIBRATE, FusionBias off. The CALIBRATE seed
   // (v3.11.33 fix) now lives in FusionOrientation::gravitySeed(), unchanged.
   // Behaviour identical to the 3.11.33 development build with FILTER FUSION:
-  // tools/full_replay/ replays 5 recorded squat sets through both and the
+  // the offline replay replays 5 recorded squat sets through both and the
   // S/R/B/P output is byte-identical. "INFO," and "TIMING," lines kept
   // (INFO without the build/runtimeSelect fields); the FILTER serial command
   // is read-only (always FUSION). No change to the BLE packets; the Device
@@ -824,7 +824,7 @@ namespace {
   // scoring is unchanged; a rep can differ only through openPhase()'s
   // look-back (phaseLookbackSamples), which could reach still samples
   // before t0 and now stops at t0. Per-rep output identical on the 5
-  // recorded squat sets of tools/full_replay/ (see DOCUMENTATION.md). Side effect: a long pause no longer fills bracketBuf
+  // recorded squat sets of the offline replay (see DOCUMENTATION.md). Side effect: a long pause no longer fills bracketBuf
   // (before, 30 s of stillness forced a bracket close via the capacity
   // safety net). No change to the BLE packets or the log format.
   //
@@ -913,7 +913,7 @@ namespace {
   //     are dropped and 0 is integrated until the window closes. Otherwise
   //     the held increment is added back unchanged after 6 samples (or as
   //     soon as the window has closed with at least 2 samples held).
-  // Replayed with tools/full_replay/ (Fusion + engine): that set gives
+  // Replayed with the offline replay (Fusion + engine): that set gives
   // 10/10 reps, max |drift| per bracket 0.13 m/s, displacement 0.53-0.59 m
   // on reps 2-10 (rep 1: 0.42 m, not verified). Identical on 11 of the 22
   // recorded logs (six squat sets, four deadlift sets without a detected
@@ -960,7 +960,7 @@ namespace {
   //   - LANDING THRESHOLD: shockLandingMaxVPreMps (was
   //     shockLandingMinDescentMps = -0.05) is +0.10 m/s: a strong, sustained
   //     shock while the bar is not rising is the bar on the floor.
-  // Replayed with tools/full_replay/: that set 7 -> 8 reps, max |drift| per
+  // Replayed with the offline replay: that set 7 -> 8 reps, max |drift| per
   // bracket 1.20 -> 0.20 m/s, live velocity at rest at the end -2.07 ->
   // 0.00, 8 re-levels (0.7-10.7 deg). The deadlift set of the v3.12.6 note
   // keeps its 10 reps (9 re-levels of 0.7-2.9 deg, values within 0.001);
@@ -1089,7 +1089,7 @@ namespace {
   //     shockLandingMagMaxVPreMps (-0.40 m/s, bar clearly coming down)
   //     the |acceleration| of the peak/sustained tests is the larger of
   //     |world Z| and | |a| - accelScaleG | (3D mean, body frame). Replay
-  //     (tools/full_replay): both sessions 7 -> 8 reps; every other
+  //     (offline replay): both sessions 7 -> 8 reps; every other
   //     recorded log identical to 3.12.11. With the 3D test at any vPre
   //     a knock with the bar still just before a pull was confirmed as a
   //     landing and cut the pull (one rep 1.39 -> 0.71 m/s); at -0.25 one
@@ -1227,7 +1227,7 @@ namespace {
   //     touch-and-go pull).
   //
   // v3.12.16. Validated with the replay started
-  // from the sensor's state (tools/full_replay, which now reproduces the
+  // from the sensor's state (the offline replay, which now reproduces the
   // 3.12.14 logs to the last printed digit): before this the replay changed
   // the start of some sets by itself.
   //   - EMA SEED. The first bracket's rate seeds emaRate unweighted (later
@@ -3041,7 +3041,7 @@ namespace {
     float gxFiltered, gyFiltered, gzFiltered;
     gyroMedianFilter.filter(gxAvg, gyAvg, gzAvg, gxFiltered, gyFiltered, gzFiltered);
 #ifdef ODKI_HOST_MEDIAN_OVERRIDE
-    // Offline harness only (tools/full_replay/), never defined in a
+    // Offline harness only (offline replay), never defined in a
     // firmware build: lets a replay substitute the post-median values a log
     // recorded (when the pre-median accelerometer was not logged) while
     // axRaw/ayRaw/azRaw keep the reconstructed pre-median input.
@@ -3478,7 +3478,7 @@ void MotionTracker::printInfoLine() {
 // v3.12.16: the Config fields a client can write over BLE (the ones that
 // are not firmware-only), as key=value with the RuntimeConfig field names.
 // Printed after INFO at every REC_START and whenever a new configuration is
-// applied, so an offline replay (tools/full_replay) runs with the same
+// applied, so an offline replay (offline replay) runs with the same
 // values: a recorded squat set had been run with two flat windows the app
 // had changed, which nothing in the log showed.
 void MotionTracker::printConfigLine() {

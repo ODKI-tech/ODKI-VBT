@@ -15,7 +15,7 @@ firmware (wrapped by FusionOrientation.h/.cpp, which are ODKI's own files).
 
 Arduino compiles everything under the sketch's src/ folder recursively, so no
 build setting is needed. To update: replace the files with those of a newer
-release, update this note, and re-run tools/full_replay/regression.py (and the
+release, update this note, and re-run the offline regression (and the
 private real-log regression) - a changed output must be explained in a
 MotionTracker.cpp version note and the golden file updated deliberately.
 

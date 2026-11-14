@@ -14,8 +14,6 @@ Which file is under which license
 - Tracking engine — PolyForm Noncommercial 1.0.0 with additional
   permissions, see LICENSE-ENGINE. Source-available, NOT open source.
     Firmware/VBT_Quaternions/MotionTracker.cpp, MotionTracker.h
-    Firmware/tools/host_replay/replay.cpp, Firmware/tools/full_replay/harness.cpp
-      (offline tools that compile the engine in)
     Firmware/DOCUMENTATION.md and the figures in Firmware/img/
   Free for personal, hobby and study use, for research for the benefit
   of public knowledge, and for universities, public research
@@ -32,9 +30,8 @@ Which file is under which license
     Firmware/VBT_Quaternions/ except the engine and src/Fusion/
       (VBT_Quaternions.ino, Config.h, TrackingTypes.h, BleServer,
       BatteryMonitor, PowerManager, StatusLED, FusionOrientation)
-    Firmware/tools/ except the two files named above (log viewer, live
-      monitor, host_replay and full_replay scripts, the regression and
-      calibration tests, the validation pipeline and its PROTOCOL.md)
+    Firmware/tools/ (log viewer, live monitor, the validation pipeline
+      and its PROTOCOL.md)
     Firmware/firmware-release/README.md, README.md, CONTRIBUTING.md,
       TRADEMARKS.md and the other repository documents, unless they say
       otherwise
