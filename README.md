@@ -45,10 +45,6 @@ The sensor fuses its onboard accelerometer and gyroscope into a stable orientati
 4. **Install the app.** See [Apps/](Apps/) for your platform — currently an Android APK is available to download; iOS and Windows are not yet published.
 5. **Calibrate and lift.** Power on, connect over Bluetooth, calibrate the sensor while it's still, then start tracking a set.
 
-## Known limitations
-
-- **Sample rate about 95 Hz instead of 100 Hz.** The sampler restarts its 10 ms interval from the current time at each sample, so real periods are 10–12 ms. Each sample integrates its true `dt`, so velocities are not biased by it, but windows counted in samples last about 5 % longer than nominal. A fix is planned for a later release — details in [`Firmware/DOCUMENTATION.md`](Firmware/DOCUMENTATION.md#known-limitations).
-
 ## Validation
 
 **Not yet validated: the protocol is published before the data.** The study compares the sensor with a verified reference encoder on the same bar (the cable position encoder of a resistance machine, not a laboratory instrument). Its protocol, acceptance thresholds and analysis code are fixed in advance in [`Firmware/tools/validation/PROTOCOL.md`](Firmware/tools/validation/PROTOCOL.md), and the raw paired data will be published whatever it shows. Until then, no accuracy figures are claimed.
