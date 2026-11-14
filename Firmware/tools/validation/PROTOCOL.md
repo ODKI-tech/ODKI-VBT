@@ -138,7 +138,7 @@ Published on Zenodo with a DOI under CC BY 4.0.
 **Before results:** "Not yet validated. Validation is in progress: protocol published [link]."
 
 **After results**, only with tier B or better and only with the context in the same block:
-- "Validated against a cable encoder: mean velocity bias X m/s, 95% limits of agreement L1 to L2 m/s, ICC Y [tier name, e.g. comparable to high-end linear encoders]. 4 lifters (1 beginner), N reps, back squat and bench press with a free barbell, 0.5–1.2 m/s. Firmware x.y.z. In-house study by ODKI; the reference is not a laboratory instrument. Protocol and raw data: [DOI]."
+- "Validated against a cable encoder: mean velocity bias X m/s, 95% limits of agreement L1 to L2 m/s, ICC Y [tier name, e.g. comparable to high-end linear encoders]. 4 lifters (1 beginner), N reps, back squat and bench press with a free barbell, 0.5 m/s to [highest MV tested] m/s. Firmware x.y.z. In-house study by ODKI; the reference is not a laboratory instrument. Protocol and raw data: [DOI]."
 - Never "validated" alone, "lab-grade", "research-grade", "gold standard" or "independent".
 - Results apply only to the exercises, velocity range and firmware tested; below 0.5 m/s, the deadlift and other exercises are "not tested".
 - No comparison with a named commercial device, because none was measured in this study.
