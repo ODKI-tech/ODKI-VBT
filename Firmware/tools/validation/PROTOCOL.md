@@ -1,220 +1,186 @@
 # ODKI-VBT validation protocol (pre-registered)
 
-**Status: not yet validated.** This protocol, the analysis code and the acceptance thresholds are published **before any data is collected**. The git commit that adds this file is its timestamp. Any later change is listed in section 14, *Deviations*, with its date and the reason for it. The results will be published whatever they show.
+**Status: not yet validated.** This protocol, the analysis code and the acceptance thresholds are published **before any study data is collected**. The git commit that adds this version is its timestamp. Every later change is listed in section 14 with its date and reason. The results will be published whatever they show.
 
 | | |
 |---|---|
-| Version | 1.0 (draft for sign-off, see section 15). Revised on 26/10/2026, before any data was collected: the reference instrument changed to a linear encoder. Revised on 03/11/2026, before the pilot and before any data was collected: the firmware under test fixed at 3.12.0. Revised on 05/11/2026, before the pilot and before any data was collected: the firmware under test changed to 3.12.1 (the drift-corrected curve no longer changes the pauses between reps). Revised on 06/11/2026, before the pilot and before any data was collected: the firmware under test changed to 3.12.4 (the accelerometer bias is no longer learned during motion; bias and drift parameters can no longer be changed over Bluetooth) |
+| Version | 2.0, 14/11/2026. Replaces version 1.0 before any study data was collected (section 14) |
 | Device | ODKI-VBT sensor (Seeed XIAO nRF52840 Sense, LSM6DS3TR-C IMU) |
-| Firmware under test | **3.12.4** (Fusion orientation filter; 3.12.0 decided on 03/11/2026, changed to 3.12.1 on 05/11/2026 and to 3.12.4 on 06/11/2026, all before any data was collected) |
-| Reference | a linear encoder (linear position transducer), verified as in section 4 |
+| Firmware under test | **3.12.19**, default settings. The exact commit is recorded for every session |
+| Reference | the built-in cable position encoder of a commercial cable resistance machine (brand and model not disclosed), its cables attached to the ends of a free barbell, verified as in section 4. It is **not** a laboratory instrument |
 | Study type | in-house engineering study by ODKI. Not independent, and not a laboratory study |
-| Code | this folder: `capture.py`, `import_ref.py`, `align.py`, `pair_reps.py`, `analyze.py` |
-| Data licence | **CC BY 4.0** (dataset); the code is under the Apache License 2.0 (`LICENSE-APACHE`; firmware v3.11.31 and earlier: the licence it was released with) |
+| Code | this folder: `capture.py`, `import_ref.py`, `analyze.py` (and `pipeline/`) |
+| Licences | dataset **CC BY 4.0**; code Apache License 2.0 (`LICENSE-APACHE`) |
 
-## 1. Question
+## 1. Questions
 
-How closely do the per-rep values that the ODKI-VBT sensor reports agree with a verified linear encoder attached to the same bar? This covers mean concentric velocity (primary), peak velocity, mean propulsive velocity, range of motion and rep detection, for the back squat and the bench press over 20–90% of an estimated 1RM. A second question is how repeatable the sensor's readings are between two units and between two days.
+1. **Agreement (primary).** How closely do the per-rep values reported by the sensor agree with a cable encoder on the same bar? Mean concentric velocity (primary), peak velocity, range of motion, phase timing and rep detection, for the back squat and the bench press, from 0.5 to above 1.0 m/s.
+2. **Repeatability.** How repeatable are the readings between two days?
+3. **Lifter experience.** Does agreement hold for a beginner as well as for trained lifters?
 
-The study measures **agreement with a linear encoder**. A validation against 3D motion capture (the gold standard in Wannouch et al. 2025) is a later, separate phase run with a university laboratory (section 13).
-
-## 2. Design: reduced Phase 3 (about 7 h of operator time)
-
-The reduced design was approved on 26/10/2026 in place of the full design (10 lifters, three exercises, 12–15 h).
+## 2. Design
 
 | Item | Plan |
 |---|---|
-| Phases | **P (pilot):** the operator only, squat and bench, 2 units, encoder + video. It checks the reference and the pipeline; its numbers are **not** published. **Phase 3:** the study below |
-| Lifters | **6** adults (≥ 18), training with a free barbell for ≥ 1 year, volunteers, unpaid. Each completes the non-medical self-screening and signs the written consent before the first session. Minors are excluded |
-| Exercises | back squat (free barbell) and flat bench press. Deadlift, Smith machine, jumps and throws are **out of scope** (jumps and throws may be shorter than the firmware's 0.35 s minimum phase duration) |
-| Loads | 20, 40, 60, 80 and 90% of an **estimated** 1RM (from the lifter's training history or a load–velocity profile; **no maximal test**). **Option, TBD:** if no insurance cover is confirmed for third-party participants, loads are capped at **80% 1RM**. The > 90% band and part of the < 0.5 m/s band are then not tested, and this is declared in the results |
-| Reps per set | 20–60%: 3 reps; 80%: 2; 90%: 1–2. 2 sets per load, 2–3 min rest, maximal intended concentric speed. Loads only go up |
-| Days | 2 sessions per lifter, 48–72 h apart, at the same time of day with the same warm-up and load order (test–retest) |
-| Scheduling | 2 lifters per session on alternating sets, so 6 sessions of about 70 min each, about 7 h in total |
-| Units | **2 sensors** side by side on the same sleeve side; positions swapped on day 2 |
-| Placement | on the shaft, inside the collar. The encoder is attached on the same side, within 5 cm of the sensors |
-| Expected size | 6 lifters × 2 exercises × about 25 reps × 2 days ≈ **600 reps**, so about 300 per exercise and about 1200 sensor–reference pairs with 2 units |
-| Safety | rack with safety bars, a spotter always present and free of other tasks above 80% 1RM, standardised warm-up, immediate-stop criteria (pain, dizziness, failing technique, the participant's request) |
+| Phases | **Pilot:** the operator only; reference verification (section 4) and a dry run of the analysis. Not published. **Familiarisation:** the beginner learns both lifts with a coach; nothing recorded. **Study:** below |
+| Lifters | **4** adult volunteers, unpaid: **3 trained** (free barbell ≥ 1 year) and **1 beginner** (< 6 months). One of them is the operator (2.1). Each completes a non-medical self-screening and signs a written consent first |
+| Exercises | **back squat** and **flat bench press**, free barbell and plates, in a rack with safety bars. Both bar ends are attached to the machine's cables; the machine only keeps them taut with a constant 3 kg per side (6 kg, counted in the load). **Deadlift** comes later as an amendment |
+| Loads | by **velocity band**, so no maximal test is needed. The band is chosen from the reference MV of a warm-up rep: **V1** > 1.0 m/s, **V2** 0.75–1.0, **V3** 0.5–0.75. Below 0.5 m/s (roughly above 80% 1RM) is **not tested**. Loads only go up within a session |
+| Primary sets | per lifter, exercise and day: V1 2 × 4 reps, V2 2 × 4, V3 3 × 3. Maximal intended concentric speed, controlled eccentric, the usual short pause at lockout, 2–3 min rest, no set to failure |
+| Exploratory sets | day 2 only, at V2, reported apart and **never** counted in the tiers: **E1** touch-and-go, 6 reps; **E2** 2 s pause at the bottom, 4 reps; **E3** 3 s eccentric, 4 reps; **E4** one deliberate half rep and one bar adjustment without a rep; **E5** cable-free set over Bluetooth with the app (rep count and final values only) |
+| Days | 2 sessions per lifter, 48–72 h apart, same time of day, warm-up and order |
+| Unit and placement | 1 sensor for the whole study, on the bar end next to the hook of the reference cable (≤ 5 cm). The difference between the two cables is recorded as bar tilt |
+| Expected size | 4 lifters × 25 reps × 2 days ≈ **200 reps per exercise**, about **400** in total; exploratory about 80 per exercise |
+| Safety | safety bars set for every lift; a spotter for every bench set and for squat at V3; the machine's stop within reach; immediate stop on pain, dizziness, failing technique or the lifter's request |
 
-**Sample size.** The 95% CI half-width of a Bland–Altman limit of agreement is about 1.96·√(3s²/n) ≈ 3.39·s/√n, where s is the SD of the differences. n ≥ 128 pairs per exercise keeps it within 0.3·s, and about 300 per exercise gives about 0.2·s. For the ICC (Bonett 2002; expected ICC 0.90, two methods, CI width 0.10) about 61 subjects are needed. The test–retest units here are lifter × load = 30 per exercise, so the test–retest CIs will be wider than that target, and this is declared. For rep detection, about 600 reps estimate a 98% detection rate within about ±1.1%. The velocity bands at the extremes will hold fewer reps; a band with fewer than 30 pairs is reported descriptively only.
+**2.1 Operator also lifting.** When the operator lifts, the capture starts after a fixed delay and another participant spots. During primary sets no lifter sees velocity feedback, except the warm-up reading used to choose the band. Declared in the results.
+
+**2.2 Sample size.** The 95% CI half-width of a Bland–Altman limit of agreement is about 3.39·s/√n (s = SD of the differences): about 0.24·s with 200 pairs per exercise, 0.17·s with 400 pooled. With four lifters the between-lifter uncertainty is poorly estimated, so results are also given per lifter and nothing is generalised to a population; one beginner shows whether a beginner's technique breaks agreement, not how beginners behave in general. Test–retest has 12 lifter × band units per exercise and is **descriptive only**.
 
 ## 3. What is measured
 
 | Source | Content | Rate |
 |---|---|---|
-| ODKI USB serial log (`S,` `R,` `B,` `P,` rows, see `Firmware/DOCUMENTATION.md`, "Lab data capture") | per sample: raw velocity, drift-correction brackets, raw accelerations; per rep: every reported value, first and final; per phase: close reason, plus start and end time from firmware 3.11.32 | 100 Hz |
-| Linear encoder, recorded by its own software | the raw position-vs-time (or velocity-vs-time) export, on the encoder's own clock, converted with `import_ref.py` to `t_s, position_m`. Per-rep values computed by the encoder's software are not used | the encoder's own rate, recorded in the dataset (**TBD**, section 15) |
-| Capture sidecar | PC arrival time of every ODKI line, relative to the start of the capture. Diagnostics only, not used for alignment | per line |
-| Video (240 fps, **TBD**) | pilot, plus a subset of Phase 3, used only to verify the reference (section 4, step 4). **Never part of the dataset** | — |
+| ODKI USB serial log (`S,` `R,` `B,` `P,` rows, `Firmware/DOCUMENTATION.md`, "Lab data capture") | per sample: velocities, drift-correction brackets, accelerations; per rep: every reported value, first and final; per phase: start, end and close reason | 100 Hz |
+| Reference | position of the reference cable (and of the second cable, for tilt), converted to `t_s, position_m` | 50 Hz (measured in the pilot) |
 
-The BLE output reproduces the same values as the `R,` rows (same engine), but it carries no timestamps. One or two cable-free control sets are recorded over BLE to confirm that the serial cable does not change the reps.
+No video is recorded.
 
 ## 4. Reference instrument
 
-The reference is a linear encoder (linear position transducer) owned by ODKI, recorded with its own software. Only its raw position-vs-time (or velocity-vs-time) export is used, so every reference value in section 6 is computed by the same code from the same kind of signal. The encoder is used only after it passes this verification, with the limits fixed in advance:
+The reference is a position transducer on the cable of a commercial machine, not a laboratory instrument, and its internal processing is not documented. Its **raw position** is the reference signal; the machine's own velocity output is used only as a check, because it is filtered. The reference velocity is position change over time times the scale (metres per count), so a scale error of x% gives x% on every velocity. The reference is used only after these checks:
 
-1. **Static scale**: 10 displacements of 1000 mm against a rigid rule or tape measure, CV < 0.3%. The mean of rule length / encoder reading is the scale factor (`ref_scale`) the analysis applies to the reference position. If it differs from 1 by more than 1%, this is reported.
-2. **Free fall**, if the encoder's attachment allows it: the acceleration fitted to the position trace of a freely falling 5–10 kg mass (10 trials) is within 1% of the expected value (g, less any retraction force of the encoder divided by the mass). Skipped and declared otherwise.
-3. **Sampling**: the export's sampling rate and position resolution are recorded. Within a set, no gap may exceed two sample intervals, otherwise the set is flagged.
-4. **240 fps video**: 20 reps compared encoder vs Kinovea marker tracking (4th-order zero-phase Butterworth, 8 Hz), reported as bias and LoA. Skipped and declared if the phone cannot record at 240 fps (**TBD**).
+1. **Static scale:** 10 cable pulls of 1000 mm against a rigid rule, held still at both ends. CV < 0.3%. The mean rule length / reading is the scale factor applied to the reference; a difference from nominal above 1% is reported.
+2. **Machine velocity:** derivative of the scaled position vs the machine's own velocity over the pilot sets; a slope more than 2% from 1 is reported.
+3. **Sampling:** rate and resolution recorded; a set with a gap above two sample intervals is flagged.
+4. **Two cables:** the two cables against each other over the pilot sets (bias and LoA of MV), to size the tilt error.
 
-Error budget at about 1 m/s: the resolution and rate of the export, stated in the results (a position resolution of 0.1 mm at ≥ 100 Hz contributes < 0.01 m/s per sample, negligible on a mean); scale ≤ 0.3% after the static check; cosine error < 0.1% if the measured line is within 2.5° of vertical; clock difference handled by alignment (section 5). Bar tilt between the two ends is avoided by putting the sensor and the encoder's attachment on the same side, within 5 cm of each other.
+Free-fall and video checks are not possible here (the machine resists the cable; no 240 fps camera) and are declared as not done. At 50 Hz and 1 mm resolution a single velocity sample is quantised to 0.05 m/s, but a concentric mean over 0.4–1.5 s is limited to about 1 mm / duration, below 0.003 m/s. Peak velocity is the most affected by the 50 Hz rate.
 
-## 5. Synchronisation, capture and pairing
+## 5. Capture, alignment and pairing
 
-**5.1 Capture.** One laptop reads every ODKI unit over USB serial (`capture.py`). The ODKI log is saved byte for byte, so it stays readable by `vbt_log_viewer.py` and `host_replay`. Each line's arrival time is saved separately, relative to the start of the capture: the files contain no date and no time of day. The linear encoder is recorded at the same time by its own software, on its own clock; its export is converted with `import_ref.py` to `raw/ref/<physical_set_id>.csv` (section 9). Per set: `CALIBRATE` with the bar still (at the start of each session and after any position change), start the encoder recording, `START`, **sync event**, set, 2 s still, `STOP`, stop the encoder recording. One file per set and device. The `RuntimeConfig` is the default and the same for the whole study.
+**5.1 Capture.** For each set: `CALIBRATE` with the bar still (at the start of each session), start both recordings, **sync event** (with the bar still for 2 s, lift it sharply by a few cm and set it back; wait 2 s), the set, 2 s still, stop. `capture.py` saves the ODKI log byte for byte. The reference is recorded by its own reader and saved as `raw/ref/<set>.csv` (`t_s, position_m`); `import_ref.py` converts other encoders' exports to the same file. The machine reader itself is not published, because it would identify the machine.
 
-**Sync event.** Before the first rep, lift the bar a few cm off the hooks and let it drop back onto them.
+**5.2 Alignment** (`pipeline/align.py`), from the signals alone: coarse full-range cross-correlation of the ODKI drift-corrected velocity with the reference velocity on a 100 Hz grid; fine search ±300 ms in 1 ms steps with parabolic refinement; clock drift on sets ≥ 25 s. A set is **flagged and excluded** if the sync event in the ODKI acceleration and in the reference differ by more than **±20 ms** (one reference sample) or the velocity correlation is below 0.90. The number of flagged sets is reported.
 
-**5.2 Alignment** (`align.py`).
-The two recordings share no clock (they come from different programs), so the alignment uses the signals only.
-1. *Coarse:* full-range cross-correlation of the ODKI drift-corrected velocity with the reference velocity on a common 100 Hz grid.
-2. *Fine:* the same correlation, with the reference velocity as the displacement over a centred 10 ms window (interpolated from the export), searched ±300 ms around the coarse estimate in 1 ms steps, with parabolic refinement. The encoder's sign convention is detected automatically.
-3. *Clock drift:* the same search on each half of the set gives the drift in ppm, corrected linearly. It is estimated only on sets ≥ 25 s. On shorter sets a quartz drift is below 1 ms and is not estimated.
-4. *Check:* the peak of the ODKI raw vertical acceleration at the sync drop and the peak of the encoder acceleration must coincide within **±10 ms**, and the velocity correlation must exceed 0.90. A set that fails either check is **flagged and excluded** from the agreement statistics, and the number of such sets is reported.
-
-**5.3 Rep segmentation and pairing** (`pair_reps.py`).
-- *Reference rep:* a maximal run of encoder velocity > 0, with runs closer than 50 ms merged, kept if it rises ≥ 10 cm.
-- *ODKI rep:* every rep with an `R,` row. Its concentric interval comes from the `P,` row's start and end time (firmware ≥ 3.11.32) or, on older logs, is rebuilt from the `S,` rows.
-- *Pairing:* one-to-one, greedy on temporal intersection-over-union ≥ 0.5. Paired = true positive (TP); ODKI only = false rep (FP); reference only = missed rep (FN).
+**5.3 Pairing** (`pipeline/pair_reps.py`). Reference rep: a run of reference velocity > 0 rising ≥ 10 cm (runs < 50 ms apart merged). ODKI rep: every rep with an `R,` row, its interval from the `P,` row. One-to-one pairing on time overlap (IoU ≥ 0.5): paired = TP, ODKI only = false rep (FP), reference only = missed rep (FN).
 
 ## 6. Endpoints
 
 | Endpoint | ODKI | Reference |
 |---|---|---|
-| **Primary: mean concentric velocity (MV)**, final value | `meanVelocity` of the last `R,` row of the rep | MV of the reference over the **ODKI phase window**: the samples between the start and end times of the rep's `P,` row (firmware ≥ 3.11.32) that the firmware itself averages (those its signal puts in the phase's direction), as `common.mv_same_window()`. Both devices are averaged over the same samples, which isolates measurement error from definition error |
-| MV, standard definition | same | mean of all samples with v > 0 (usual LPT definition), so definition and measurement error together |
-| MV, first reported value | first `R,` row (what the athlete sees first) | as the two rows above (phase window and standard definition) |
-| Peak velocity (PV) | `peakVelocity`, first and final | max v |
-| Mean propulsive velocity (MPV) | computed offline from the drift-corrected curve, labelled "ODKI offline" (the firmware does not report it) | from the start to where acceleration first falls below −g after peak velocity (Sánchez-Medina et al. 2010) |
+| **Primary: mean concentric velocity (MV)**, final value | `meanVelocity` of the last `R,` row | mean over the **same samples** the firmware averages: those of the ODKI phase window (`P,` row start and end) that its signal puts in the phase's direction (`mv_same_window`). Isolates measurement error from definition error |
+| MV, standard definition | same | mean of all samples with v > 0 over the reference's own rep: definition and measurement error together |
+| MV, first reported value | first `R,` row (what the athlete sees first) | as the primary endpoint |
+| Peak velocity | `peakVelocity`, first and final | max v (50 Hz caveat) |
 | Range of motion | `displacementM` | integral of v over the concentric |
+| Phase timing | `P,` row start and end | start and end of the reference rep |
+| Mean propulsive velocity (descriptive) | offline, from the drift-corrected curve | Sánchez-Medina et al. 2010; descriptive only (acceleration from a 50 Hz position is noisy) |
 | Rep detection | TP / FN / FP | — |
 
-Where each device puts the start and end of the concentric is measured by the standard-definition endpoint and by the phase timing, not by the primary endpoint. A rep whose `P,` row has no times (firmware < 3.11.32) has no primary value. In the synthetic self-test the primary reference value matches the built-in value within 0.01 m/s on ≥ 97% of reps.
+**Known definition difference at lockout.** The firmware ends a concentric when its stillness test fires. A very slow finish of the lockout (a few mm at about 0.03–0.05 m/s) can fall inside the stillness band: the firmware leaves it out, the standard definition keeps it and gets a lower mean. A second small push at lockout is the opposite case. Both affect only the standard-definition endpoint, not the primary one, and are reported per rep with the phase timing.
 
-## 7. Statistics (`analyze.py`, deterministic)
+## 7. Statistics (`pipeline/stats.py`, deterministic)
 
-- **Validity**, per endpoint and value (first or final):
-  - bias and 95% limits of agreement, from a plain Bland–Altman and from a Bland–Altman for repeated measures (Bland & Altman 2007; reps nested in lifters);
-  - proportional bias: slope of the difference on the mean;
-  - **ICC(2,1)**, absolute agreement;
-  - **SEM** (typical error, SD of the differences / √2) and MDC95;
-  - **CV%**, as the log-transformed typical error (Hopkins);
-  - **MAE**, RMSE, **Pearson r**, SEE and standardised bias (bias / SD of the reference).
-- **Rep detection:** confusion matrix, recall, precision, F1 and false-rep rate, with Wilson 95% CIs.
-- **Between units:** ICC(2,1), SEM and CV% of the two units on the same reps.
-- **Test–retest** (per lifter × exercise × load, mean of the day): **ICC(3,1)** (consistency, and the absolute-agreement form), SEM, MDC95 and SWC = 0.2 × the between-lifter SD. The same statistics are computed on the reference, which separates biological variation from device error.
-- **Strata:**
-  - exercise;
-  - velocity band of the reference MV (standard definition, `ref_mv_std`): < 0.5, 0.5–1.0 and > 1.0 m/s;
-  - final correction status;
-  - unit;
-  - phase close reason.
-- **`quality1`:** Spearman ρ with |MV error|, and ROC AUC for detecting |error| > 0.10 m/s. Only if this shows a useful relation may `quality1` be described as more than a "signal-consistency score".
-- **CIs:** percentile bootstrap resampling lifters (2000 resamples, fixed seed).
-- **Exclusions:** only the pre-registered ones: flagged alignment (section 5.2) or sampling (section 4), and sets with a documented equipment failure, logged *before* the analysis is run. Every exclusion is listed in the results. No outlier removal.
+- **Agreement**, per endpoint and value (first, final): bias and 95% limits of agreement (plain and for repeated measures, Bland & Altman 2007); proportional bias; ICC(2,1) absolute agreement; SEM and MDC95; CV% (Hopkins, log-transformed); MAE, RMSE, Pearson r, SEE (standard error of estimate of the reference from ODKI) and standardised bias.
+- **Rep detection:** recall, precision, F1 and false-rep rate with Wilson 95% CIs.
+- **Test–retest** (lifter × exercise × planned band, mean of the day): ICC(3,1), SEM, MDC95, on ODKI and on the reference. Descriptive.
+- **Strata:** exercise, measured velocity band, lifter, experience, final correction status, phase close reason; exploratory sets apart.
+- **`quality1`:** Spearman ρ with |MV error| and ROC AUC for |error| > 0.10 m/s. Only a useful relation allows calling it more than a "signal-consistency score".
+- **CIs:** cluster bootstrap over **sets** (2000 resamples, fixed seed); with four lifters a bootstrap over lifters is not meaningful.
+- **Exclusions:** only flagged sets (5.2, 4) and sets with a documented equipment failure, logged before the analysis is run. No outlier removal.
 
-The pipeline is checked on synthetic data with a known bias, noise, clock offset and drift, a reference scale error, a reversed encoder, and missed and false reps (`tests/test_pipeline.py`). It also checks the ICC against the worked example in Shrout & Fleiss 1979.
+The code is checked on synthetic data with known errors (`tests/test_pipeline.py`).
 
 ## 8. Acceptance thresholds (fixed before data)
 
-Evaluated on the **primary endpoint** (MV, final value, squat and bench pooled), and also reported per exercise and per velocity band. Single thresholds are arbitrary (Wannouch et al. 2025), so each tier uses **at least three statistics**, as that review recommends. The same values are coded in `common.THRESHOLDS`.
+Evaluated on the **primary endpoint** (MV, final, squat and bench pooled), also reported per exercise, band and lifter. Tiers E and A use the **same six statistics**, so the result can be placed against both classes of device. All criteria of a tier must hold; the highest tier reached is reported. The values are coded in `pipeline/common.py` (`THRESHOLDS`).
 
-| Tier | Criteria (all must hold) | Source |
-|---|---|---|
-| **A: comparable to published results for commercial IMU sensors** | r ≥ 0.95; SEM ≤ 0.06 m/s; \|bias\| ≤ 0.05 m/s; CV < 10%; LoA half-width ≤ 0.12 m/s; ICC(2,1) ≥ 0.90 | Achermann et al. 2023 (best commercial IMU vs 3D motion capture: MV r 0.966, SEE 0.059 m/s); Weakley et al. 2021 (CV < 10%); Koo & Li 2016 (ICC > 0.90 "excellent") |
-| **B: minimum acceptable in the literature** | r > 0.70; CV < 10%; standardised bias < 0.6 | Weakley et al. 2021 |
-| **Internal target** (not from a published source) | \|bias\| ≤ 0.03 m/s; LoA half-width ≤ 0.10 m/s; CV ≤ 5%; ICC(2,1) ≥ 0.90 | ODKI, declared in advance |
-| **Rep detection** (internal target) | recall ≥ 98%; false-rep rate ≤ 2% | ODKI, declared in advance |
+| Tier | r | \|bias\| | LoA half-width | SEE | CV | ICC(2,1) |
+|---|---|---|---|---|---|---|
+| **E: comparable to high-end linear encoders** | ≥ 0.99 | ≤ 0.03 m/s | ≤ 0.06 m/s | ≤ 0.03 m/s | ≤ 5% | ≥ 0.98 |
+| **A: comparable to high-end IMU sensors** | ≥ 0.95 | ≤ 0.05 m/s | ≤ 0.12 m/s | ≤ 0.06 m/s | < 10% | ≥ 0.90 |
+| **B: minimum acceptable in the literature** | > 0.70 | — | — | — | < 10% | — (effect size < 0.60) |
+| Internal target (not from a published source) | — | ≤ 0.03 m/s | ≤ 0.10 m/s | — | ≤ 5% | ≥ 0.90 |
+| Rep detection (internal target) | recall ≥ 98%, false-rep rate ≤ 2% | | | | | |
 
-The literature already identifies peak velocity, loads above 90% 1RM and reps slower than about 0.3 m/s as weak points for all accelerometer-based devices (Weakley et al. 2021). These are reported as such and do not count towards the tier.
+Sources, checked on the full texts on 14/11/2026:
+- **E:** GymAware vs 3D motion capture, back squat: R² 0.99, slope 0.991, no fixed or proportional bias (Thompson et al. 2020, Table 3). As tabulated in Weakley et al. 2021: GymAware vs Vicon SEE 0.024–0.030 m/s; GymAware vs laboratory transducers CV 2.5–3.6%; T-Force vs 3D motion capture bias −0.01 ± 0.03 m/s (LoA about ±0.06); Tendo vs T-Force ICC 0.985–0.989. Here the reference is itself an encoder with its own error, which makes tier E harder to reach, not easier.
+- **A:** Enode Pro on the barbell vs 3D motion capture, back squat: r 0.966, SEE 0.059 m/s (Achermann et al. 2023, Table 2). Vmaxpro vs a linear transducer, squat: bias 0.01 ± 0.04 m/s, LoA 0.10 m/s, r 0.96, ICC 0.94, CV 7.6% (Held et al. 2021, Table 1). ICC > 0.90 "excellent" (Koo & Li 2016).
+- **B:** Weakley et al. 2021 (r > 0.70, CV < 10%, effect size < 0.60).
 
-**Consequence.** Whichever tier is reached, or none, is what gets published, with the full data. Below tier B, no accuracy claim is made at all (section 11).
+Peak velocity, the first reported value and the exploratory sets are reported but do not count towards the tiers. **Whatever tier is reached, or none, is published with the full data. Below tier B no accuracy claim is made.**
 
-## 9. Dataset (CSV, UTF-8, SI units, `.` as the decimal separator)
+## 9. Dataset (CSV, UTF-8, SI units)
 
-The dataset is published on Zenodo, with a DOI, under **CC BY 4.0** (publication needs the CEO's OK). The code stays in this repository.
+Published on Zenodo with a DOI under CC BY 4.0.
 
 | File | Columns |
 |---|---|
-| `lifters.csv` | `lifter_id` (random, `L-xx`), `age_band` (10-year bands), `training_years_band`, `sex` (only if the analysis uses it). **No height, no body mass** |
-| `sessions.csv` | `session_id, lifter_id, day_index (1/2), exercise, firmware_version, firmware_commit, runtime_config_hex, reference_type, reference_id, reference_rate_hz, operator ("ODKI"), notes` (empty or cleaned by hand). **No dates or times** |
-| `units.csv` | `session_id, unit_id, placement, side, distance_to_ref_mm, battery_pct_start` |
-| `reference_verification.csv` | `reference_id, test (static/free_fall/sampling/video), trial, expected, measured, unit` (static: rule length and encoder reading, same unit) |
-| `sets.csv` | `set_id (<physical_set_id>_<unit_id>), physical_set_id, session_id, unit_id, load_band_kg (10 kg bands, or omitted), pct_1rm_est, planned_reps, video (yes/no)` |
-| `sets_alignment.csv` | generated: `set_id, lag_ms, drift_ppm, drift_estimated, set_duration_s, xcorr_r, sync_check_ms, flagged, sign, ref_scale` |
-| `reps_paired.csv` | generated, one row per TP/FN/FP: see `pair_reps.COLUMNS` (reference MV with the standard definition, `ref_mv_std`, and over the ODKI phase window, `ref_mv_window`, the latter only for TP reps whose `P,` row has start and end times; reference PV, MPV and ROM; ODKI first and final MV, PV and ROM; offline MPV; eccentric MV; quality1; correction status first and final; close reason; exclusion reason) |
-| `raw/odki/<set_id>.log` | the original ODKI serial log, unmodified (device uptime only, no wall-clock time) |
-| `raw/odki/<set_id>.sidecar.csv` | `line_no, host_ns, kind` (`host_ns` relative to the start of the capture) |
-| `raw/ref/<physical_set_id>.csv` | `t_s, position_m`: the encoder's clock in s, relative to the start of its recording, and the position in m before the scale factor (written by `import_ref.py`). The encoder software's original export files are kept offline and not published |
-| `aligned/<set_id>.csv` / `.json` | generated: `t_s, v_ref, v_odki_corrected, v_odki_raw, acc_odki_raw`, plus alignment metadata |
-| `results/` | generated: `summary.json`, `RESULTS.md`, plots |
+| `lifters.csv` | `lifter_id` (random `L-xx`), `experience` (beginner / trained). Nothing else: with four lifters, age, sex, height or body mass would identify them |
+| `sessions.csv` | `session_id, lifter_id, day_index, exercise, firmware_version, firmware_commit, runtime_config_hex, reference_type, reference_id, reference_rate_hz, operator, notes`. No dates or times |
+| `units.csv` | `session_id, unit_id, placement, distance_to_ref_mm, battery_pct_start` |
+| `reference_verification.csv` | `reference_id, test (static/machine_velocity/sampling/two_cables), trial, expected, measured, unit` |
+| `sets.csv` | `set_id (<physical set>_<unit>), physical_set_id, session_id, unit_id, velocity_band (planned V1–V3), set_type (primary / E1–E5), planned_reps, tilt_p95_mm`. No loads |
+| `raw/odki/<set_id>.log` | the ODKI serial log, unmodified (device uptime only) |
+| `raw/ref/<physical_set_id>.csv` | `t_s, position_m`, before the scale factor |
+| generated by `analyze.py` | `aligned/`, `sets_alignment.csv`, `reps_paired.csv` (columns in `pipeline/pair_reps.py`), `results/` |
 
-## 10. Consent, anonymisation and data handling
+## 10. Consent and data protection
 
-- **Who takes part:** adults only (≥ 18). Before the first session each participant receives the information sheet and the privacy notice, completes a **non-medical self-screening** and signs a written consent. **No health information is recorded**; the only inclusion criterion is "no current injury that prevents lifting" (yes/no, not stored). Withdrawal is possible at any time until publication. Published anonymous data cannot be withdrawn afterwards, and the consent form says so.
-- **Random IDs:** `L-xx` codes are assigned at random, never initials or birth dates. The ID-to-name table and the signed forms stay offline, outside any repository, and the table is destroyed at the end of the study.
-- **Indirect identifiers:** age in 10-year bands; **no height and no body mass**; sex only if the analysis uses it. Before publication every combination of indirect attributes must cover at least 5 participants, otherwise the columns are aggregated or dropped.
-- **Loads:** `% 1RM` estimate plus, at most, **10 kg bands**. Exact kg are never published, because kg plus %1RM gives away a lifter's maximum.
-- **Time:** **no dates or times of day** anywhere. Sessions become `day_index`; capture times are relative to the start of each set; file names contain no names or dates.
-- **Video:** never in the dataset. Videos frame the bar and body (no faces where possible, no bystanders), are used only for reference verification, stay off cloud backups, and are deleted at the end of the study.
-- **Before publication:** the raw logs are checked for device names, host names and absolute timestamps. The Zenodo metadata gives the collection period as a month only.
+- Adults only. Each participant gets the information sheet and privacy notice, completes a non-medical self-screening and signs a written consent. No health information is recorded.
+- Participation can be refused or withdrawn without explanation until publication; published anonymous data cannot be withdrawn afterwards, and the consent form says so. Participants who know the operator are told this explicitly.
+- With four lifters even anonymous data can be linked to a person by people who know them: each participant is told before consenting and sees `lifters.csv` and `sets.csv` before publication.
+- Random `L-xx` IDs; the ID-to-name table and the signed forms stay offline and the table is destroyed at the end. No dates or times of day anywhere; logs are checked for device names, host names and absolute timestamps before publication.
 
-## 11. What we will and won't claim
+## 11. Claims
 
-**Before results** (the only accuracy statements allowed):
-- "Not yet validated against a linear position transducer. Validation is the current roadmap stage (05). We'll publish the protocol and the raw data, whatever the result."
-- "Validation in progress: protocol published [link]."
+**Before results:** "Not yet validated. Validation is in progress: protocol published [link]."
 
-**After results**, and only with the context in the same block:
-- "Mean velocity vs a linear encoder (verified as in the protocol): mean bias X m/s, 95% limits of agreement L1 to L2 m/s, ICC Y. N lifters, N reps, back squat and bench press, 20–90% 1RM (or 20–80%). Firmware x.y.z. In-house study by ODKI. Full protocol and raw data: [DOI]."
-- The wording is **"agreement with a linear encoder"**. It is never "validated", "accurate", "precise", "lab-grade", "research-grade" or "gold standard", and never "independent".
-- Results apply to the exercises, load range and firmware tested. Untested exercises and conditions are listed as "not tested".
-- No comparison with any named commercial device, because none was measured in the same study.
-- `quality1` is a "signal-consistency score, not an accuracy estimate" unless section 7 shows otherwise.
-- "Validated", with no qualifier, is kept for the laboratory phase against 3D motion capture (section 13).
+**After results**, only with tier B or better and only with the context in the same block:
+- "Validated against a cable encoder: mean velocity bias X m/s, 95% limits of agreement L1 to L2 m/s, ICC Y [tier name, e.g. comparable to high-end linear encoders]. 4 lifters (1 beginner), N reps, back squat and bench press with a free barbell, 0.5–1.2 m/s. Firmware x.y.z. In-house study by ODKI; the reference is not a laboratory instrument. Protocol and raw data: [DOI]."
+- Never "validated" alone, "lab-grade", "research-grade", "gold standard" or "independent".
+- Results apply only to the exercises, velocity range and firmware tested; below 0.5 m/s, the deadlift and other exercises are "not tested".
+- No comparison with a named commercial device, because none was measured in this study.
+- Anyone can repeat the study with their own reference using this protocol and code, and publish their results.
 
 ## 12. Reproducing the analysis
 
 ```
-python align.py --data DATA --all
-python pair_reps.py --data DATA
-python analyze.py --data DATA          # -> DATA/results/summary.json, RESULTS.md, PNGs
+python analyze.py --data DATA      # -> DATA/results/RESULTS.md, summary.json, plots
 ```
 
-Anyone with the dataset gets the same numbers, because the bootstrap seed is fixed. See [`README.md`](README.md).
+The bootstrap seed is fixed, so the published dataset always gives the published numbers.
 
 ## 13. Later phases
 
-- **Laboratory phase (2027):** the same protocol with a university laboratory using 3D motion capture or a laboratory linear position transducer, with the laboratory as authors and under its ethics approval.
-- **Regression at every firmware release:** the dataset logs are replayed through `host_replay` against the new engine.
+- **Deadlift:** an amendment, published before its data is collected.
+- **Phase end at lockout:** after the study, its slow-lockout reps are used to evaluate ending the concentric at the highest bar position; any change is a new firmware version, outside this study.
+- **Laboratory phase:** a university laboratory with a laboratory transducer or 3D motion capture, under its ethics approval.
+- **Every firmware release:** the dataset logs are replayed through `host_replay` against the new engine.
 
-## 14. Deviations
+## 14. Deviations and history
 
-Every change after the first Phase 3 session is listed here with its date and reason. Changes made earlier, after this protocol was published, are listed too.
+- **Version 2.0, 14/11/2026, before any study data.** Replaces version 1.0 (stand-alone linear encoder, six trained lifters, loads in % 1RM, firmware 3.12.4). Reasons: the reference available is a machine's cable encoder; four lifters are available, one a beginner on purpose. Loads by velocity band up to 0.5 m/s; exploratory sets added; tier E added next to the IMU tier; one sensor; no video; firmware 3.12.19.
+- **Primary endpoint reference.** Version 1.0 approximated the firmware's phase definition on the reference (first sample ≥ 0.20 m/s plus a short back-fill). On real lifts that cut the slow start of the push that the firmware keeps, so it measured a definition artefact; the reference is now averaged over the same samples as the firmware (section 6).
+- **Data seen before this version.** On 13/11/2026 the operator recorded two exploratory squat sets (13 reps, firmware 3.12.18) on the same reference to test the set-up. Their analysis led to firmware 3.12.19 (phase look-back 5 → 12 samples) and to the endpoint change above. They are not part of the study.
 
-- **2026-11-14, before any Phase 3 session:** the reference value of the primary endpoint (section 6) is the reference MV over the ODKI phase window, instead of an approximation of the firmware's phase definition applied to the reference. Reason: exploratory data on real lifts showed that the approximation cuts the slow start of the push that the firmware keeps, so it measured a definition artefact, not the sensor. No Phase 3 data had been collected.
-- **2026-11-14, before any Phase 3 session:** the back-fill of the ODKI definition of MV (section 6, `ODKI_LOOKBACK_SAMPLES` in `common.py`) goes from 5 to 12 samples, because the firmware default `phaseLookbackSamples` changes from 5 to 12 in 3.12.19. The reference definition mirrors the firmware; no data had been collected. Superseded on the same day by the entry above: the primary endpoint no longer uses the back-fill.
+Every change after the first study session is listed here with its date and reason.
 
-## 15. Open items to settle before the pilot (TBD, CEO)
+## 15. Open items before the pilot
 
-| Item | Default if not decided |
+| Item | If not settled |
 |---|---|
-| Sign-off of the thresholds in section 8 | not frozen until signed |
-| Export format of the linear encoder: raw position or velocity time series and its sampling rate (if it only exports per-rep values, sections 5 and 9 are revised before the pilot) | — |
-| Phone records at 240 fps | video step skipped and declared |
-| Insurance cover for third-party participants | loads capped at 80% 1RM |
-| Session dates and place; number of lifters (6 planned) | — |
-| Optional OSF pre-registration in addition to this commit | not done |
+| The beginner (fourth lifter) | the study runs with 3 trained lifters; question 3 is dropped and this is declared |
+| Session dates | — |
 
 ## References
 
-- Achermann B. et al. (2023). Velocity-based strength training: the validity and personal monitoring of barbell velocity with the Apple Watch. *Sports* 11(7):125. https://pmc.ncbi.nlm.nih.gov/articles/PMC10383699/
+- Achermann B., Oberhofer K., Ferguson S.J., Lorenzetti S.R. (2023). Velocity-based strength training: the validity and personal monitoring of barbell velocity with the Apple Watch. *Sports* 11(7):125. doi:10.3390/sports11070125
 - Bland J.M., Altman D.G. (2007). Agreement between methods of measurement with multiple observations per individual. *J Biopharm Stat* 17(4):571–582. doi:10.1080/10543400701329422
-- Bonett D.G. (2002). Sample size requirements for estimating intraclass correlations with desired precision. *Stat Med* 21:1331–1335. doi:10.1002/sim.1108
+- Held S., Rappelt L., Deutsch J.-P., Donath L. (2021). Valid and reliable barbell velocity estimation using an inertial measurement unit. *Int J Environ Res Public Health* 18(17):9170. doi:10.3390/ijerph18179170
 - Koo T.K., Li M.Y. (2016). A guideline of selecting and reporting intraclass correlation coefficients for reliability research. *J Chiropr Med* 15(2):155–163. doi:10.1016/j.jcm.2016.02.012
-- McGraw K.O., Wong S.P. (1996). Forming inferences about some intraclass correlation coefficients. *Psychol Methods* 1(1):30–46.
 - Sánchez-Medina L., Pérez C.E., González-Badillo J.J. (2010). Importance of the propulsive phase in strength assessment. *Int J Sports Med* 31(2):123–129. doi:10.1055/s-0029-1242815
 - Shrout P.E., Fleiss J.L. (1979). Intraclass correlations: uses in assessing rater reliability. *Psychol Bull* 86(2):420–428.
-- Wannouch Y.J. et al. (2025). A systematic review using a multi-layered criteria framework for assessing the validity and reliability of velocity monitoring devices in resistance training. *PLoS One* 20(9):e0324606. doi:10.1371/journal.pone.0324606
+- Thompson S.W., Rogerson D., Dorrell H.F., Ruddock A., Barnes A. (2020). The reliability and validity of current technologies for measuring barbell velocity in the free-weight back squat and power clean. *Sports* 8(7):94. doi:10.3390/sports8070094
 - Weakley J. et al. (2021). The validity and reliability of commercially available resistance training monitoring devices: a systematic review. *Sports Med* 51(3):443–502. doi:10.1007/s40279-020-01382-w

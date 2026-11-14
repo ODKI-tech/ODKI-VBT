@@ -20,8 +20,8 @@ Self-test of the validation pipeline on SYNTHETIC data (tests/synth.py).
      commas, times in ms with an offset
   3. end to end: generate a dataset with a known bias, noise, clock offset
      (no shared host clock), clock drift, reference scale error, sign
-     inversion, missed and false reps; run align.py,
-     pair_reps.py and analyze.py through their command lines; assert that
+     inversion, missed and false reps; run analyze.py (align, pair, stats)
+     through its command line; assert that
      the alignment, the confusion matrix and the agreement statistics come
      back as built in
 
@@ -44,8 +44,9 @@ import pandas as pd
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "pipeline"))
 sys.path.insert(0, HERE)
-import analyze  # noqa: E402
+import stats  # noqa: E402
 import import_ref  # noqa: E402
 import synth  # noqa: E402
 
@@ -62,16 +63,16 @@ def test_statistics():
     print("statistics vs worked examples")
     # Shrout & Fleiss 1979, Table 2: 6 targets x 4 judges -> ICC(2,1)=0.29, ICC(3,1)=0.71
     y = [[9, 2, 5, 8], [6, 1, 3, 2], [8, 4, 6, 8], [7, 1, 2, 6], [10, 5, 6, 9], [6, 2, 4, 7]]
-    a1, c1 = analyze.icc_two_way(y)
+    a1, c1 = stats.icc_two_way(y)
     check("ICC(2,1) Shrout & Fleiss = 0.29", abs(a1 - 0.29) < 0.005, f"{a1:.4f}")
     check("ICC(3,1) Shrout & Fleiss = 0.71", abs(c1 - 0.71) < 0.005, f"{c1:.4f}")
     # repeated-measures BA: subject-level bias spread must widen the SD
     rng = np.random.default_rng(1)
     subj = np.repeat(np.arange(10), 30)
     d = rng.normal(0, 0.03, 300) + np.repeat(rng.normal(0, 0.04, 10), 30)
-    sd_rm = analyze.ba_repeated(d, subj)
+    sd_rm = stats.ba_repeated(d, subj)
     check("repeated-measures BA SD ~ sqrt(0.03^2 + 0.04^2)", abs(sd_rm - 0.05) < 0.012, f"{sd_rm:.4f}")
-    lo, hi = analyze.wilson(98, 100)
+    lo, hi = stats.wilson(98, 100)
     check("Wilson CI 98/100", abs(lo - 0.9300) < 0.002 and abs(hi - 0.9945) < 0.002, f"{lo:.4f}-{hi:.4f}")
 
 
@@ -110,8 +111,6 @@ def run(script, *args):
 def test_end_to_end(data):
     print(f"end to end on synthetic data in {data}")
     truth = synth.generate(data)
-    run("align.py", "--data", data, "--all")
-    run("pair_reps.py", "--data", data)
     run("analyze.py", "--data", data)
 
     al = pd.read_csv(os.path.join(data, "sets_alignment.csv"))

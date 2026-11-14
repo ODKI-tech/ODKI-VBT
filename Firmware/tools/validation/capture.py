@@ -31,7 +31,7 @@ unit <unit> this writes:
 host_ns is the PC's monotonic clock when the line arrives, RELATIVE to the
 start of the capture (never an epoch time: the raw files carry no date or
 time of day, PROTOCOL.md section 10). It is kept for diagnostics (USB gaps);
-the alignment with the reference uses the signals only (align.py).
+the alignment with the reference uses the signals only (analyze.py).
 
 Usage:
     python capture.py --odki U1=/dev/cu.usbmodem1101 --odki U2=/dev/cu.usbmodem1201 \

@@ -70,8 +70,8 @@ def viewer():
 
 
 def validation_common():
-    """tools/validation/common.py (rep intervals, metric definitions), if present."""
-    p = os.path.join(TOOLS, "validation", "common.py")
+    """tools/validation/pipeline/common.py (rep intervals, metric definitions), if present."""
+    p = os.path.join(TOOLS, "validation", "pipeline", "common.py")
     return load_module("validation_common", p) if os.path.exists(p) else None
 
 

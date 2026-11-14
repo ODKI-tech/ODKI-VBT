@@ -22,7 +22,7 @@ t_s is the encoder's own clock in seconds (relative to the start of its
 recording with --zero-time); position_m is the bar position in metres. If
 the export only has velocity, it is integrated with the trapezoidal rule
 (position 0 at the first sample). The scale factor from the static
-verification is NOT applied here: align.py applies it, so the raw file stays
+verification is NOT applied here: analyze.py applies it, so the raw file stays
 what the instrument recorded.
 
 Columns are given by header name or by 0-based index.

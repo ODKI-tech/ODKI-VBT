@@ -31,10 +31,10 @@ Rep segmentation and pairing (PROTOCOL.md section 5.3).
 
 Writes reps_paired.csv (one row per TP/FN/FP, PROTOCOL.md section 9) and
 sets_alignment.csv (the align.py result of every set) in the dataset folder.
-Run align.py first.
+Run pipeline/align.py first.
 
-Usage:
-    python pair_reps.py --data DATA_DIR
+Usually run through ../analyze.py. On its own:
+    python pipeline/pair_reps.py --data DATA_DIR
 """
 
 import argparse

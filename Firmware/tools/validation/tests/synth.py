@@ -42,7 +42,7 @@ import numpy as np
 import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(HERE))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "pipeline"))
 import common as C  # noqa: E402
 
 SEED = 2026
@@ -59,6 +59,7 @@ FS_TRUE = 1000.0
 LIFTERS = ["L-07", "L-23", "L-41"]
 EXERCISES = {"back_squat": (1.45, 0.0125, 0.50), "bench_press": (1.60, 0.0150, 0.35)}  # MV = a - b*pct ; ROM m
 LOADS = [(20, 3), (50, 3), (70, 2), (90, 1)]   # (% 1RM, reps)
+BAND = {20: "V1", 50: "V2", 70: "V3", 90: "V4"}  # planned velocity band of each load (V4 is synthetic only)
 UNITS = ["U1", "U2"]
 LONG_SET_LIFTER, LONG_SET_REPS = "L-07", 8
 MISSED = {("L-07", 1, "back_squat", 50, "U1"): 2, ("L-23", 2, "bench_press", 20, "U2"): 3,
@@ -243,15 +244,14 @@ def generate(out):
                         reported, _, _ = write_set(out, set_id, phys, rng, t, v, conc, MISSED.get(key),
                                                    key in EXTRA, p_v2=(unit == "U2"), enc_written=enc_written)
                         sets.append({"set_id": set_id, "physical_set_id": phys, "session_id": sid, "unit_id": unit,
-                                     "load_band_kg": "SYN", "pct_1rm_est": pct, "planned_reps": n_reps,
-                                     "video": "no"})
+                                     "velocity_band": BAND[pct], "set_type": "primary", "planned_reps": n_reps})
                         truth.append({"set_id": set_id, "n_ref": n_reps, "missed": int(key in MISSED),
                                       "extra": int(key in EXTRA)})
                         rep_truth += [{"set_id": set_id, "odki_rep_number": r, "mv_def_true": m,
                                        "odki_mv_final": f, "odki_mv_first": fi} for r, m, f, fi in reported]
     pd.DataFrame(sessions).to_csv(os.path.join(out, "sessions.csv"), index=False)
     pd.DataFrame(sets).to_csv(os.path.join(out, "sets.csv"), index=False)
-    pd.DataFrame({"lifter_id": LIFTERS, "age_band": ["30-39"] * 3, "training_years_band": ["1-3"] * 3}).to_csv(
+    pd.DataFrame({"lifter_id": LIFTERS, "experience": ["trained", "trained", "beginner"]}).to_csv(
         os.path.join(out, "lifters.csv"), index=False)
     ver = [{"reference_id": "REF-SYN", "test": "static", "trial": i + 1, "expected": 1.000,
             "measured": round(REF_SCALE_ERROR + rng.normal(0, 0.0005), 4), "unit": "m"} for i in range(10)]

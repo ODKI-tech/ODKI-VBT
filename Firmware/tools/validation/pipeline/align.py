@@ -27,7 +27,7 @@ host clock and the alignment comes from the signals alone, in three steps:
                gives the clock drift (ppm), corrected linearly
   3. check   - the sync drop at the start of the set: the peak of ODKI's raw
                vertical acceleration and the peak of the reference
-               acceleration must fall within +/-10 ms after alignment,
+               acceleration must fall within +/-20 ms after alignment,
                otherwise the set is flagged; so is a set whose reference
                has a gap above two sample intervals
 
@@ -36,9 +36,9 @@ Output, for set_id S:
                   ODKI sample times (t_s = ODKI session time, 100 Hz)
   aligned/S.json  sign, offset_s, lag_ms, drift_ppm, xcorr_r, sync_check_ms, flagged
 
-Usage:
-    python align.py --data DATA_DIR --set-id L01-D1-SQ-060-S1_U1
-    python align.py --data DATA_DIR --all
+Usually run through ../analyze.py. On its own:
+    python pipeline/align.py --data DATA_DIR --set-id L01-D1-SQ-060-S1_U1
+    python pipeline/align.py --data DATA_DIR --all
   The reference scale factor comes from the static verification in
   reference_verification.csv (the reference_id of the set's session; 1.0 if
   there is none); --ref-scale overrides it.

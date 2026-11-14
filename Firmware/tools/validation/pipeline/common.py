@@ -30,7 +30,7 @@ import numpy as np
 import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TOOLS = os.path.dirname(HERE)
+TOOLS = os.path.dirname(os.path.dirname(HERE))  # Firmware/tools (vbt_log_viewer.py)
 
 # ----------------------------------------------------------------------
 # PRE-REGISTERED constants (PROTOCOL.md sections 5-8). Do not edit after
@@ -46,24 +46,39 @@ PAIR_MIN_IOU = 0.50               # rep pairing: temporal intersection-over-unio
 LAG_SEARCH_S = 0.300              # fine alignment search range around the coarse estimate
 MIN_DRIFT_SET_S = 25.0            # clock drift is estimated only on sets at least this long
 SYNC_WINDOW_S = 8.0               # the sync drop is looked for in the first N s of a set, before the first lift
-SYNC_TOLERANCE_MS = 10.0          # |sync check| above this flags the set
-VELOCITY_BANDS = [(0.0, 0.5, "<0.5"), (0.5, 1.0, "0.5-1.0"), (1.0, 99.0, ">1.0")]  # m/s, on reference MV
+SYNC_TOLERANCE_MS = 20.0          # |sync check| above this flags the set (one sample of a 50 Hz reference)
+VELOCITY_BANDS = [(0.0, 0.5, "<0.5 (not tested)"), (0.5, 0.75, "V3"), (0.75, 1.0, "V2"), (1.0, 99.0, "V1")]  # m/s, reference MV
 DEFAULT_REF_SCALE = 1.0           # reference position scale; replaced by the static verification (section 4)
 
 # Acceptance thresholds (PROTOCOL.md section 8). Mean velocity, final value,
 # pooled squat + bench press. "source" is what the number is taken from.
 THRESHOLDS = {
+    "tier_E": {
+        "label": "comparable to high-end linear encoders",
+        "criteria": {
+            "pearson_r_min": 0.99,
+            "abs_bias_max_mps": 0.03,
+            "loa_halfwidth_max_mps": 0.06,
+            "see_max_mps": 0.03,
+            "cv_pct_max": 5.0,
+            "icc_2_1_min": 0.98,
+        },
+        "source": "Thompson et al. 2020 (GymAware vs 3D, squat: R2 0.99, no fixed or proportional bias); "
+                  "Weakley et al. 2021 (GymAware vs Vicon SEE 0.024-0.030 m/s; vs LPTs CV 2.5-3.6%; "
+                  "T-Force vs 3D bias -0.01 +/- 0.03 m/s; Tendo vs T-Force ICC 0.985-0.989)",
+    },
     "tier_A": {
-        "label": "comparable to published results for commercial IMU sensors",
+        "label": "comparable to high-end IMU sensors",
         "criteria": {
             "pearson_r_min": 0.95,
-            "sem_max_mps": 0.06,
             "abs_bias_max_mps": 0.05,
-            "cv_pct_max": 10.0,
             "loa_halfwidth_max_mps": 0.12,
+            "see_max_mps": 0.06,
+            "cv_pct_max": 10.0,
             "icc_2_1_min": 0.90,
         },
-        "source": "Achermann et al. 2023 (IMU vs 3D mocap, MV SEE 0.059 m/s); Weakley et al. 2021 (CV < 10%); Koo & Li 2016 (ICC > 0.90 excellent)",
+        "source": "Achermann et al. 2023 (Enode Pro vs 3D, squat: r 0.966, SEE 0.059 m/s); Held et al. 2021 "
+                  "(Vmaxpro vs LPT, squat: bias 0.01 +/- 0.04 m/s, LoA 0.10, ICC 0.94, CV 7.6%); Koo & Li 2016",
     },
     "tier_B": {
         "label": "minimum acceptable in the literature",
@@ -72,7 +87,7 @@ THRESHOLDS = {
             "cv_pct_max": 10.0,
             "std_bias_max": 0.60,
         },
-        "source": "Weakley et al. 2021 (r > 0.70, CV < 10%, standardised mean bias < 0.6)",
+        "source": "Weakley et al. 2021 (r > 0.70, CV < 10%, effect size < 0.60)",
     },
     "internal_target": {
         "label": "ODKI internal target (not derived from a published source)",
