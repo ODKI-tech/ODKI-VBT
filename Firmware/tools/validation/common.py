@@ -41,7 +41,7 @@ G = 9.80665                       # m/s^2, standard gravity (MPV definition)
 GRID_HZ = 100.0                   # analysis rate (ODKI native rate)
 REF_WINDOW_S = 0.010              # reference velocity = displacement over a centred 10 ms window
 ODKI_PHASE_START_MPS = 0.20       # firmware default phaseStartVelocityMps (MV "ODKI definition")
-ODKI_LOOKBACK_SAMPLES = 5         # firmware default phaseLookbackSamples
+ODKI_LOOKBACK_SAMPLES = 12        # firmware default phaseLookbackSamples (12 since 3.12.19, 5 before)
 LOOKBACK_FLOOR_MPS = 0.05         # back-filled samples must reach this (see mv_odki_definition)
 REF_MIN_ROM_M = 0.10              # a reference concentric must rise >= 10 cm
 REF_MERGE_GAP_S = 0.05            # positive-velocity runs closer than this are one concentric
@@ -303,14 +303,14 @@ def mv_odki_definition(v, a, b, start=ODKI_PHASE_START_MPS, lookback=ODKI_LOOKBA
                        floor=LOOKBACK_FLOOR_MPS):
     """Mean velocity as the firmware defines it (scorePhase() in
     MotionTracker.cpp): the phase opens at the first sample >= 0.20 m/s,
-    back-filled by up to 5 earlier same-direction samples, and runs to the
-    last same-direction sample. Approximation, declared in PROTOCOL.md: the
-    firmware back-fills on the SIGN of the raw (drifting) velocity, which no
-    reference can reproduce, and a near-zero sample more or less moves a
-    mean by up to a few cm/s; here the back-filled samples and the tail into
-    the turnaround must reach LOOKBACK_FLOOR_MPS, which makes the value
-    independent of the sampling phase and of the reference's quantisation
-    near zero velocity."""
+    back-filled by up to ODKI_LOOKBACK_SAMPLES (12) earlier same-direction
+    samples, and runs to the last same-direction sample. Approximation,
+    declared in PROTOCOL.md: the firmware back-fills on the SIGN of the raw
+    (drifting) velocity, which no reference can reproduce, and a near-zero
+    sample more or less moves a mean by up to a few cm/s; here the
+    back-filled samples and the tail into the turnaround must reach
+    LOOKBACK_FLOOR_MPS, which makes the value independent of the sampling
+    phase and of the reference's quantisation near zero velocity."""
     seg = v[a:b + 1]
     above = np.where(seg >= start)[0]
     if not len(above):

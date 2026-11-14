@@ -255,8 +255,9 @@ namespace {
   // previously two mechanisms decided direction two different ways on the
   // same phase), an approximation for the backfill samples in openPhase()
   // (the current sample's raw-minus-corrected offset, held constant over
-  // the short backfill window - phaseLookbackSamples defaults to 5, ~50ms,
-  // the correction estimate moves slowly on that scale). The only
+  // the short backfill window - phaseLookbackSamples defaults to 12, ~120ms
+  // since v3.12.19 (5, ~50ms, before), the correction estimate moves slowly
+  // on that scale). The only
   // quantity still read from the raw sample in accumulateIntoOpenPhase()
   // is magnitude (absV/phasePeakVelocity/phasePeakAcceleration, used only
   // to size the flat-guard windows, not any reported value) - deliberately
@@ -1306,6 +1307,21 @@ namespace {
   // The position gate keeps its own position (reset at every accepted
   // stillness), so reps and values are identical to 3.12.16 (replay of
   // every recorded log); only worldPosZ and the Y rows change.
+  //
+  // v3.12.19: phaseLookbackSamples default 5 -> 12 (~50 -> ~120 ms). A
+  // phase opens when velZLive reaches phaseStartVelocityMps (0.2 m/s);
+  // openPhase() then back-fills the buffered samples before it that move
+  // the same way. With 5 samples the slow start of a concentric was left
+  // out, so the reported mean velocity sat above the usual LPT definition
+  // (every sample with v > 0). The back-fill still stops at the first
+  // sample that is not of the same sign on the velocity since the session
+  // start, and at the bracket start (t0): it only extends a phase that has
+  // already opened, it cannot open one. Replayed through the host harness:
+  // on 13 recorded squat, deadlift and hip-thrust sets of one session rep
+  // counts are identical with 5 and 12, median mean velocity per exercise
+  // 0.004-0.020 m/s lower; against a reference cable-machine encoder (exploratory, not
+  // the stage-05 validation) the reported mean velocity moves towards the
+  // standard definition. No change to the BLE packets or the log format.
   // ============================================================================
 
   // --- Sampling ---
@@ -2053,7 +2069,8 @@ namespace {
     // v3.11.8: directionHint IS velZLive at idxInBracket (see the call in
     // stepPhaseEngine()) - the raw-vs-corrected gap at this sample, held
     // ~constant over the short backfill window (phaseLookbackSamples
-    // default 5, ~50ms - the correction estimate moves slowly), lets each
+    // default 12, ~120ms since v3.12.19, 5 before - the correction
+    // estimate moves slowly), lets each
     // backfilled sample get an approximated corrected value too instead of
     // falling back to its own raw velZ - see accumulateIntoOpenPhase().
     float driftOffset = bracketBuf[idxInBracket].velZ - directionHint;

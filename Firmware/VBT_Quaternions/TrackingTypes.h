@@ -266,7 +266,11 @@ struct RuntimeConfig {
   float phaseStartVelocityMps = 0.2f;
   float minPhaseDurationS = 0.35f;
   float maxPhaseDurationS = 5.0f;
-  uint8_t phaseLookbackSamples = 5;
+  // v3.12.19: 12 (5 before). Samples before the phaseStartVelocityMps
+  // crossing that a new phase back-fills (same direction only), so the slow
+  // start of the movement is part of the phase. Not clamped by setConfig();
+  // the app offers 0-12.
+  uint8_t phaseLookbackSamples = 12;
   uint8_t reversalConfirmSamples = 3;
 
   // --- Bracket drift correction ---
