@@ -51,7 +51,7 @@ The sensor fuses its onboard accelerometer and gyroscope into a stable orientati
 
 ## Validation
 
-**Not yet validated: the protocol is published before the data.** The study compares the sensor with a verified linear encoder. Its protocol, acceptance thresholds and analysis code are fixed in advance in [`Firmware/tools/validation/PROTOCOL.md`](Firmware/tools/validation/PROTOCOL.md), and the raw paired data will be published whatever it shows. Until then, no accuracy figures are claimed.
+**Not yet validated: the protocol is published before the data.** The study compares the sensor with a verified reference encoder on the same bar (the cable position encoder of a resistance machine, not a laboratory instrument). Its protocol, acceptance thresholds and analysis code are fixed in advance in [`Firmware/tools/validation/PROTOCOL.md`](Firmware/tools/validation/PROTOCOL.md), and the raw paired data will be published whatever it shows. Until then, no accuracy figures are claimed.
 
 ## Community
 

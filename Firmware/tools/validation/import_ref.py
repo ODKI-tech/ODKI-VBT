@@ -13,7 +13,7 @@
 # language governing permissions and limitations under the License.
 
 """
-Converts the reference linear encoder's own export into the dataset format
+Converts the reference encoder's own export into the dataset format
 (PROTOCOL.md sections 5 and 9):
 
   raw/ref/<physical_set_id>.csv      t_s,position_m
@@ -28,7 +28,7 @@ what the instrument recorded.
 Columns are given by header name or by 0-based index.
 
 Usage:
-    python import_ref.py EXPORT.csv --data DATA_DIR --set L01-D1-SQ-060-S1 \
+    python import_ref.py EXPORT.csv --data DATA_DIR --set L-01-D1-SQ-V2-S1 \
         --time-col time --time-unit ms --pos-col position --pos-unit mm
     python import_ref.py EXPORT.csv --out ref.csv \
         --time-col 0 --time-unit s --vel-col 2 --delimiter ";" --decimal "," --zero-time
@@ -80,7 +80,7 @@ def convert(src, time_col, time_unit="s", pos_col=None, pos_unit="m", vel_col=No
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("export", help="CSV exported by the linear encoder's software")
+    ap.add_argument("export", help="CSV exported by the reference encoder's software")
     dest = ap.add_mutually_exclusive_group(required=True)
     dest.add_argument("--out", help="output CSV path")
     dest.add_argument("--data", help="dataset directory: writes raw/ref/<set>.csv (needs --set)")

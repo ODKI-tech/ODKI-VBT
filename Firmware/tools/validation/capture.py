@@ -17,7 +17,7 @@ Serial capture of the ODKI sensor(s) for one validation set (PROTOCOL.md
 section 5).
 
 Reads the USB-serial log of one or more ODKI sensors on the bar. The
-reference linear encoder is recorded separately by its own software and
+reference encoder is recorded separately by its own software and
 converted afterwards with import_ref.py. For a physical set <set> and sensor
 unit <unit> this writes:
 
@@ -35,7 +35,7 @@ the alignment with the reference uses the signals only (analyze.py).
 
 Usage:
     python capture.py --odki U1=/dev/cu.usbmodem1101 --odki U2=/dev/cu.usbmodem1201 \
-        --data DATA_DIR --set L01-D1-SQ-060-S1 [--start] [--duration 60]
+        --data DATA_DIR --set L-01-D1-SQ-V2-S1 [--start] [--duration 60]
 
   --start      sends START to every sensor when capture begins and STOP when it
                ends (Ctrl+C or --duration), same plain-text commands as
@@ -83,7 +83,7 @@ def main():
     ap.add_argument("--odki", required=True, action="append", metavar="UNIT=PORT",
                     help="unit id and serial port of an ODKI sensor (repeat for several units)")
     ap.add_argument("--data", required=True, help="dataset directory (raw/ is created inside)")
-    ap.add_argument("--set", required=True, help="physical set id, e.g. L01-D1-SQ-060-S1")
+    ap.add_argument("--set", required=True, help="physical set id, e.g. L-01-D1-SQ-V2-S1")
     ap.add_argument("--odki-baud", type=int, default=115200)
     ap.add_argument("--start", action="store_true", help="send START/STOP to the sensor")
     ap.add_argument("--duration", type=float, default=None, help="stop after N seconds (default: Ctrl+C)")

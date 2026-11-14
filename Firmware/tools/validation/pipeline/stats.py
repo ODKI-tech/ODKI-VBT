@@ -411,8 +411,9 @@ def write_markdown(s, path):
                        ("test_retest_reference", "Test-retest, reference (biological + reference error)"),
                        ("quality1", "quality1 vs error")]:
         L += ["", f"## {title}", "", "```json", json.dumps(s[key], indent=2), "```"]
-    L += ["", "Limits: in-house study; the reference is a linear encoder, verified as in PROTOCOL.md section 4. "
-          "These numbers describe agreement with a linear encoder, not a validation against 3D motion capture.", ""]
+    L += ["", "Limits: in-house study; the reference is the position encoder described in PROTOCOL.md section 4, "
+          "verified as described there, not a laboratory instrument. These numbers describe agreement with that "
+          "encoder, not a validation against 3D motion capture.", ""]
     with open(path, "w") as f:
         f.write("\n".join(L))
 

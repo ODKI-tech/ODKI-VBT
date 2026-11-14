@@ -13,7 +13,7 @@
 # language governing permissions and limitations under the License.
 
 """
-Time alignment of one ODKI log with the reference linear encoder
+Time alignment of one ODKI log with the reference encoder
 (PROTOCOL.md section 5.2). The two are recorded by different programs on
 different clocks (the encoder by its own software), so there is no shared
 host clock and the alignment comes from the signals alone, in three steps:
@@ -37,7 +37,7 @@ Output, for set_id S:
   aligned/S.json  sign, offset_s, lag_ms, drift_ppm, xcorr_r, sync_check_ms, flagged
 
 Usually run through ../analyze.py. On its own:
-    python pipeline/align.py --data DATA_DIR --set-id L01-D1-SQ-060-S1_U1
+    python pipeline/align.py --data DATA_DIR --set-id L-01-D1-SQ-V2-S1_U1
     python pipeline/align.py --data DATA_DIR --all
   The reference scale factor comes from the static verification in
   reference_verification.csv (the reference_id of the set's session; 1.0 if

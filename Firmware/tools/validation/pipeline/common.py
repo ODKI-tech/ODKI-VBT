@@ -17,7 +17,7 @@ Shared helpers for the validation pipeline (see PROTOCOL.md).
 
 Everything that has to be computed the same way by several scripts lives
 here: reading an ODKI serial log (reusing the parser of vbt_log_viewer.py),
-reading a reference (linear encoder) recording, the per-rep metric definitions
+reading a reference (encoder) recording, the per-rep metric definitions
 (MV, MPV, PV, ROM) and the PRE-REGISTERED constants. Changing a constant in
 the PRE-REGISTERED block after data collection has started is a protocol
 deviation and must be reported as such (PROTOCOL.md, section 14).
@@ -238,7 +238,7 @@ def odki_rep_intervals(s_df, rep_numbers, p_df=None):
 
 
 # ----------------------------------------------------------------------
-# Reference (linear encoder)
+# Reference (position encoder)
 # ----------------------------------------------------------------------
 
 def read_ref(path):
