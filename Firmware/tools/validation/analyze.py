@@ -23,8 +23,8 @@ deterministically from the dataset folder:
                ICC(2,1) absolute agreement and ICC(3,1) consistency, SEM
                (typical error), CV% (log typical error, Hopkins), MAE, RMSE,
                Pearson r, SEE, standardised bias
-  strata       exercise, velocity band (reference MV), correction status, unit,
-               phase close reason
+  strata       exercise, velocity band (reference MV, standard definition),
+               correction status, unit, phase close reason
   detection    TP / FN / FP, recall, precision, F1, false-rep rate (Wilson 95% CI)
   reliability  between units (same reps, two sensors) and test-retest (day 1
                vs day 2, per lifter x exercise x load): ICC, SEM, MDC95, SWC

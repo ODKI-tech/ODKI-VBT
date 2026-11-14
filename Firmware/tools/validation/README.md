@@ -59,5 +59,5 @@ The test generates a full synthetic dataset: 3 lifters, 2 days, squat and bench 
 
 ## Notes
 
-- Logs from every firmware since 3.11.18 work. Firmware 3.11.32 adds per-phase start and end times to the `P,` rows; when they are present, `pair_reps.py` uses them instead of rebuilding the rep interval from the `S,` rows.
+- Logs from every firmware since 3.11.18 work. Firmware 3.11.32 adds per-phase start and end times to the `P,` rows; when they are present, `pair_reps.py` uses them instead of rebuilding the rep interval from the `S,` rows. The primary endpoint (reference MV over the ODKI phase window, `ref_mv_window`) needs these times: reps without them get no primary value.
 - Every number in `results/` is deterministic (the bootstrap seed is fixed), so re-running the scripts on the published dataset must reproduce the published results exactly.

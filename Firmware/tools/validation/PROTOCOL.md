@@ -84,7 +84,7 @@ The two recordings share no clock (they come from different programs), so the al
 |---|---|---|
 | **Primary: mean concentric velocity (MV)**, final value | `meanVelocity` of the last `R,` row of the rep | MV of the reference over the **ODKI phase window**: the samples between the start and end times of the rep's `P,` row (firmware ≥ 3.11.32) that the firmware itself averages (those its signal puts in the phase's direction), as `common.mv_same_window()`. Both devices are averaged over the same samples, which isolates measurement error from definition error |
 | MV, standard definition | same | mean of all samples with v > 0 (usual LPT definition), so definition and measurement error together |
-| MV, first reported value | first `R,` row (what the athlete sees first) | as above |
+| MV, first reported value | first `R,` row (what the athlete sees first) | as the two rows above (phase window and standard definition) |
 | Peak velocity (PV) | `peakVelocity`, first and final | max v |
 | Mean propulsive velocity (MPV) | computed offline from the drift-corrected curve, labelled "ODKI offline" (the firmware does not report it) | from the start to where acceleration first falls below −g after peak velocity (Sánchez-Medina et al. 2010) |
 | Range of motion | `displacementM` | integral of v over the concentric |
@@ -106,7 +106,7 @@ Where each device puts the start and end of the concentric is measured by the st
 - **Test–retest** (per lifter × exercise × load, mean of the day): **ICC(3,1)** (consistency, and the absolute-agreement form), SEM, MDC95 and SWC = 0.2 × the between-lifter SD. The same statistics are computed on the reference, which separates biological variation from device error.
 - **Strata:**
   - exercise;
-  - velocity band of the reference MV: < 0.5, 0.5–1.0 and > 1.0 m/s;
+  - velocity band of the reference MV (standard definition, `ref_mv_std`): < 0.5, 0.5–1.0 and > 1.0 m/s;
   - final correction status;
   - unit;
   - phase close reason.
@@ -143,7 +143,7 @@ The dataset is published on Zenodo, with a DOI, under **CC BY 4.0** (publication
 | `reference_verification.csv` | `reference_id, test (static/free_fall/sampling/video), trial, expected, measured, unit` (static: rule length and encoder reading, same unit) |
 | `sets.csv` | `set_id (<physical_set_id>_<unit_id>), physical_set_id, session_id, unit_id, load_band_kg (10 kg bands, or omitted), pct_1rm_est, planned_reps, video (yes/no)` |
 | `sets_alignment.csv` | generated: `set_id, lag_ms, drift_ppm, drift_estimated, set_duration_s, xcorr_r, sync_check_ms, flagged, sign, ref_scale` |
-| `reps_paired.csv` | generated, one row per TP/FN/FP: see `pair_reps.COLUMNS` (reference MV in both definitions, PV, MPV and ROM; ODKI first and final MV, PV and ROM; offline MPV; eccentric MV; quality1; correction status first and final; close reason; exclusion reason) |
+| `reps_paired.csv` | generated, one row per TP/FN/FP: see `pair_reps.COLUMNS` (reference MV with the standard definition, `ref_mv_std`, and over the ODKI phase window, `ref_mv_window`, the latter only for TP reps whose `P,` row has start and end times; reference PV, MPV and ROM; ODKI first and final MV, PV and ROM; offline MPV; eccentric MV; quality1; correction status first and final; close reason; exclusion reason) |
 | `raw/odki/<set_id>.log` | the original ODKI serial log, unmodified (device uptime only, no wall-clock time) |
 | `raw/odki/<set_id>.sidecar.csv` | `line_no, host_ns, kind` (`host_ns` relative to the start of the capture) |
 | `raw/ref/<physical_set_id>.csv` | `t_s, position_m`: the encoder's clock in s, relative to the start of its recording, and the position in m before the scale factor (written by `import_ref.py`). The encoder software's original export files are kept offline and not published |

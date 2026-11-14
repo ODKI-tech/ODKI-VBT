@@ -26,7 +26,7 @@ as negative and REF_SCALE_ERROR too long, with 0.1 mm resolution), and the
 metadata CSVs, including the static verification that corrects the scale.
 Known truths:
 
-  final ODKI MV  = reference-definition MV + BIAS + N(0, SD) per unit
+  final ODKI MV  = MV over the ODKI phase window (built-in value) + BIAS + N(0, SD) per unit
   first ODKI MV  = ... + BIAS + N(0, SD_FIRST)
   ODKI signal delayed by ODKI_DELAY_S, host arrival jitter 1-4 ms
   some reps silently missed by ODKI (FN), some ODKI-only reps (FP)
