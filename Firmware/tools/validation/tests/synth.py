@@ -143,7 +143,9 @@ def write_set(out, set_id, phys_id, rng, t, v, conc, missed_rep, extra, p_v2, en
             i1 += 1
         idx_close = min(i1 + 12, len(tt) - 1)
         rep_col[idx_close:] = rep_no + 1
-        mv_def = C.mv_odki_definition(v_o, i0, i1)
+        # the firmware averages the samples of its window that its own (noisy)
+        # signal puts in the phase's direction (scorePhase())
+        mv_def = C.mv_same_window(v_o, v_o + noise, i0, i1)
         pv = float(v_o[i0:i1 + 1].max())
         rom = float(np.sum(np.clip(v_o[i0:i1 + 1], 0, None) * dt[i0:i1 + 1]))
         first = [rep_no, pv + PV_BIAS + rng.normal(0, 0.06), mv_def + BIAS + rng.normal(0, SD_FIRST),

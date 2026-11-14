@@ -140,8 +140,8 @@ def test_end_to_end(data):
           n.get("TP", 0) == exp_tp and n.get("FN", 0) == exp_fn and n.get("FP", 0) == exp_fp,
           f"got TP {n.get('TP', 0)} FN {n.get('FN', 0)} FP {n.get('FP', 0)}")
     tp = reps[reps["match"] == "TP"]
-    check("reference MV matches the built-in ODKI-definition MV (pairing is right)",
-          np.abs((tp["odki_mv_final"] - tp["ref_mv_odkidef"]) - synth.BIAS).max() < 6 * synth.SD)
+    check("reference MV over the ODKI window matches the built-in MV (pairing is right)",
+          np.abs((tp["odki_mv_final"] - tp["ref_mv_window"]) - synth.BIAS).max() < 6 * synth.SD)
 
     s = json.load(open(os.path.join(data, "results", "summary.json")))
     p = s["primary"]
@@ -156,10 +156,11 @@ def test_end_to_end(data):
           f"{p['loa_low_rm']:.3f} to {p['loa_high_rm']:.3f}")
     truth = pd.read_csv(os.path.join(data, "_synthetic_reps.csv"))
     mm = tp.merge(truth, on=["set_id", "odki_rep_number"], suffixes=("", "_truth"))
-    err = mm["ref_mv_odkidef"] - mm["mv_def_true"]
-    # a 10 ms sample more or less at the 0.20 m/s opening moves a mean by ~1%:
-    # inherent to the definition, so a few reps per hundred may differ by > 0.01
-    check("reference MV per rep = built-in MV (|error| < 0.01 m/s on >= 97% of reps)",
+    mm = mm[mm["ref_mv_window"].notna()]   # only reps whose P row carries the window's times
+    err = mm["ref_mv_window"] - mm["mv_def_true"]
+    # the reference is averaged over the ODKI window: only the reference noise
+    # and the alignment error separate it from the built-in value
+    check("reference MV over the ODKI window = built-in MV (|error| < 0.01 m/s on >= 97% of reps)",
           np.mean(np.abs(err) < 0.01) >= 0.97, f"{np.mean(np.abs(err) < 0.01) * 100:.1f}% of reps, median |error| {np.median(np.abs(err)):.4f}")
     built = (mm["odki_mv_final"] - mm["mv_def_true"]).mean()  # bias actually drawn, noise included
     check("bias equals the bias actually built into the reps (+/- 0.003)", abs(p["bias"] - built) < 0.003,

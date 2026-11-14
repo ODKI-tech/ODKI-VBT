@@ -82,7 +82,7 @@ The two recordings share no clock (they come from different programs), so the al
 
 | Endpoint | ODKI | Reference |
 |---|---|---|
-| **Primary: mean concentric velocity (MV)**, final value | `meanVelocity` of the last `R,` row of the rep | MV with the **ODKI definition**: from the first sample ≥ 0.20 m/s, back-filled by up to 12 samples ≥ 0.05 m/s (the firmware's `phaseLookbackSamples` default; 5 before firmware 3.12.19), to the last sample ≥ 0.05 m/s. This isolates measurement error from definition error |
+| **Primary: mean concentric velocity (MV)**, final value | `meanVelocity` of the last `R,` row of the rep | MV of the reference over the **ODKI phase window**: the samples between the start and end times of the rep's `P,` row (firmware ≥ 3.11.32) that the firmware itself averages (those its signal puts in the phase's direction), as `common.mv_same_window()`. Both devices are averaged over the same samples, which isolates measurement error from definition error |
 | MV, standard definition | same | mean of all samples with v > 0 (usual LPT definition), so definition and measurement error together |
 | MV, first reported value | first `R,` row (what the athlete sees first) | as above |
 | Peak velocity (PV) | `peakVelocity`, first and final | max v |
@@ -90,7 +90,7 @@ The two recordings share no clock (they come from different programs), so the al
 | Range of motion | `displacementM` | integral of v over the concentric |
 | Rep detection | TP / FN / FP | — |
 
-The firmware back-fills on the sign of a drifting raw velocity, which no reference can reproduce. The 0.05 m/s floor makes the reference value independent of sampling phase and encoder quantisation. In the synthetic self-test it reproduces the definition within 0.01 m/s on ≥ 97% of reps.
+Where each device puts the start and end of the concentric is measured by the standard-definition endpoint and by the phase timing, not by the primary endpoint. A rep whose `P,` row has no times (firmware < 3.11.32) has no primary value. In the synthetic self-test the primary reference value matches the built-in value within 0.01 m/s on ≥ 97% of reps.
 
 ## 7. Statistics (`analyze.py`, deterministic)
 
@@ -193,7 +193,8 @@ Anyone with the dataset gets the same numbers, because the bootstrap seed is fix
 
 Every change after the first Phase 3 session is listed here with its date and reason. Changes made earlier, after this protocol was published, are listed too.
 
-- **2026-11-14, before any Phase 3 session:** the back-fill of the ODKI definition of MV (section 6, `ODKI_LOOKBACK_SAMPLES` in `common.py`) goes from 5 to 12 samples, because the firmware default `phaseLookbackSamples` changes from 5 to 12 in 3.12.19. The reference definition mirrors the firmware; no data had been collected.
+- **2026-11-14, before any Phase 3 session:** the reference value of the primary endpoint (section 6) is the reference MV over the ODKI phase window, instead of an approximation of the firmware's phase definition applied to the reference. Reason: exploratory data on real lifts showed that the approximation cuts the slow start of the push that the firmware keeps, so it measured a definition artefact, not the sensor. No Phase 3 data had been collected.
+- **2026-11-14, before any Phase 3 session:** the back-fill of the ODKI definition of MV (section 6, `ODKI_LOOKBACK_SAMPLES` in `common.py`) goes from 5 to 12 samples, because the firmware default `phaseLookbackSamples` changes from 5 to 12 in 3.12.19. The reference definition mirrors the firmware; no data had been collected. Superseded on the same day by the entry above: the primary endpoint no longer uses the back-fill.
 
 ## 15. Open items to settle before the pilot (TBD, CEO)
 

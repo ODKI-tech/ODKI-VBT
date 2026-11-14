@@ -52,7 +52,7 @@ import common as C
 SEED = 12345
 N_BOOT = 2000
 METRICS = {  # name: (odki column, reference column); {v} = first | final
-    "MV": ("odki_mv_{v}", "ref_mv_odkidef"),
+    "MV": ("odki_mv_{v}", "ref_mv_window"),
     "MV_std_def": ("odki_mv_{v}", "ref_mv_std"),
     "PV": ("odki_pv_{v}", "ref_pv"),
     "MPV": ("odki_mpv_offline", "ref_mpv"),
@@ -259,10 +259,10 @@ def test_retest(tp, col):
 
 
 def quality1(tp):
-    sub = tp[["odki_quality1_final", "odki_mv_final", "ref_mv_odkidef"]].dropna()
+    sub = tp[["odki_quality1_final", "odki_mv_final", "ref_mv_window"]].dropna()
     if len(sub) < 10:
         return {"available": False}
-    err = np.abs(sub["odki_mv_final"] - sub["ref_mv_odkidef"]).values
+    err = np.abs(sub["odki_mv_final"] - sub["ref_mv_window"]).values
     q = sub["odki_quality1_final"].values
     return {"available": True, "n": int(len(sub)), "spearman_rho_quality_vs_abs_error": spearman(q, err),
             "auc_low_quality_flags_error_gt_0.10": auc(100 - q, err > 0.10)}
@@ -320,7 +320,7 @@ def analyze(data):
     if len(tp_prim):
         first_unit = sorted(tp_prim["unit_id"].unique())[0]
         s["test_retest_odki"] = test_retest(tp_prim[tp_prim["unit_id"] == first_unit], "odki_mv_final")
-        s["test_retest_reference"] = test_retest(tp_prim[tp_prim["unit_id"] == first_unit], "ref_mv_odkidef")
+        s["test_retest_reference"] = test_retest(tp_prim[tp_prim["unit_id"] == first_unit], "ref_mv_window")
     else:
         s["test_retest_odki"] = s["test_retest_reference"] = {"available": False}
     s["quality1"] = quality1(tp_prim)
@@ -402,10 +402,10 @@ def plots(reps, out):
     import matplotlib.pyplot as plt
     tp = reps[(reps["match"] == "TP") & (reps["exclude_reason"] == "")]
     for ex, g in tp.groupby("exercise"):
-        g = g.dropna(subset=["odki_mv_final", "ref_mv_odkidef"])
+        g = g.dropna(subset=["odki_mv_final", "ref_mv_window"])
         if len(g) < 3:
             continue
-        o, r = g["odki_mv_final"].values, g["ref_mv_odkidef"].values
+        o, r = g["odki_mv_final"].values, g["ref_mv_window"].values
         a = agreement(o, r, g["lifter_id"].values)
         fig, ax = plt.subplots(1, 2, figsize=(11, 4.5))
         ax[0].scatter((o + r) / 2, o - r, s=10, alpha=0.6, color="#1f4fb4")

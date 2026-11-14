@@ -40,9 +40,6 @@ TOOLS = os.path.dirname(HERE)
 G = 9.80665                       # m/s^2, standard gravity (MPV definition)
 GRID_HZ = 100.0                   # analysis rate (ODKI native rate)
 REF_WINDOW_S = 0.010              # reference velocity = displacement over a centred 10 ms window
-ODKI_PHASE_START_MPS = 0.20       # firmware default phaseStartVelocityMps (MV "ODKI definition")
-ODKI_LOOKBACK_SAMPLES = 12        # firmware default phaseLookbackSamples (12 since 3.12.19, 5 before)
-LOOKBACK_FLOOR_MPS = 0.05         # back-filled samples must reach this (see mv_odki_definition)
 REF_MIN_ROM_M = 0.10              # a reference concentric must rise >= 10 cm
 REF_MERGE_GAP_S = 0.05            # positive-velocity runs closer than this are one concentric
 PAIR_MIN_IOU = 0.50               # rep pairing: temporal intersection-over-union
@@ -299,31 +296,21 @@ def mv_standard(v, a, b):
     return float(np.nanmean(seg[seg > 0])) if np.any(seg > 0) else np.nan
 
 
-def mv_odki_definition(v, a, b, start=ODKI_PHASE_START_MPS, lookback=ODKI_LOOKBACK_SAMPLES,
-                       floor=LOOKBACK_FLOOR_MPS):
-    """Mean velocity as the firmware defines it (scorePhase() in
-    MotionTracker.cpp): the phase opens at the first sample >= 0.20 m/s,
-    back-filled by up to ODKI_LOOKBACK_SAMPLES (12) earlier same-direction
-    samples, and runs to the last same-direction sample. Approximation,
-    declared in PROTOCOL.md: the firmware back-fills on the SIGN of the raw
-    (drifting) velocity, which no reference can reproduce, and a near-zero
-    sample more or less moves a mean by up to a few cm/s; here the
-    back-filled samples and the tail into the turnaround must reach
-    LOOKBACK_FLOOR_MPS, which makes the value independent of the sampling
-    phase and of the reference's quantisation near zero velocity."""
-    seg = v[a:b + 1]
-    above = np.where(seg >= start)[0]
-    if not len(above):
-        return np.nan
-    i0 = above[0]
-    j = i0
-    while j > 0 and i0 - j < lookback and seg[j - 1] >= floor:
-        j -= 1
-    k = len(seg) - 1
-    while k > i0 and not seg[k] >= floor:   # same floor on the tail into the turnaround
-        k -= 1
-    s = seg[j:k + 1]
-    return float(np.nanmean(s[s > 0]))
+def mv_same_window(v_ref, v_odki, a, b):
+    """Mean concentric velocity of the reference over the ODKI phase window
+    [a, b] (PROTOCOL.md section 6, primary endpoint). The firmware averages
+    the samples of its phase that move in the phase's direction (scorePhase()
+    in MotionTracker.cpp); the reference is averaged over exactly those
+    samples (v_odki >= 0), its own values included as they are. Selecting on
+    the reference's own sign instead would drop its negative noise near zero
+    velocity and bias the mean upwards. Both devices are averaged over the
+    same samples, so the difference is measurement error alone; where each
+    device puts the start and end of the phase is measured separately (MV
+    with the standard definition, phase timing)."""
+    seg_r = np.asarray(v_ref[a:b + 1], float)
+    seg_o = np.asarray(v_odki[a:b + 1], float)
+    keep = np.isfinite(seg_r) & np.isfinite(seg_o) & (seg_o >= 0)
+    return float(np.mean(seg_r[keep])) if keep.any() else np.nan
 
 
 def peak_velocity(v, a, b):

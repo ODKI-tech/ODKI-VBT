@@ -23,6 +23,11 @@ Rep segmentation and pairing (PROTOCOL.md section 5.3).
   pairing        : one-to-one, greedy on temporal intersection-over-union,
                    IoU >= 0.5. Paired = TP, ODKI only = FP (false rep),
                    reference only = FN (missed rep)
+  reference MV   : ref_mv_std over the reference's own rep (standard
+                   definition) and, for TP only, ref_mv_window over the ODKI
+                   phase window (primary endpoint, PROTOCOL.md section 6); the
+                   window must come from the P row's times, otherwise
+                   ref_mv_window is left empty
 
 Writes reps_paired.csv (one row per TP/FN/FP, PROTOCOL.md section 9) and
 sets_alignment.csv (the align.py result of every set) in the dataset folder.
@@ -44,7 +49,7 @@ from align import set_paths
 
 COLUMNS = ["rep_uid", "set_id", "physical_set_id", "unit_id", "match", "ref_rep_idx", "odki_rep_number",
            "t_start_ref_s", "t_end_ref_s", "t_start_odki_s", "t_end_odki_s", "iou",
-           "ref_mv_std", "ref_mv_odkidef", "ref_pv", "ref_mpv", "ref_rom_m",
+           "ref_mv_std", "ref_mv_window", "ref_pv", "ref_mpv", "ref_rom_m",
            "odki_mv_first", "odki_mv_final", "odki_pv_first", "odki_pv_final",
            "odki_rom_first", "odki_rom_final", "odki_mpv_offline", "odki_ecc_mv_final",
            "odki_quality1_final", "odki_status_first", "odki_status_final", "close_reason", "exclude_reason"]
@@ -88,11 +93,13 @@ def pair_set(log_path, aligned_path, set_row, align_info=None):
     rl = d["r_final"].set_index("rep") if len(d["r_final"]) else None
     p = d["p"]
     conc_p = p[(p["phaseType"] > 0) & (p["reported"] == 1)] if len(p) else p
+    timed = (set(conc_p.loc[conc_p["t_start_ms"].notna(), "repNumber"].astype(int))
+             if len(conc_p) and "t_start_ms" in conc_p else set())
 
     def ref_fields(i):
         a, b = ref_seg[i]
         return {"ref_rep_idx": i + 1, "t_start_ref_s": t[a], "t_end_ref_s": t[b],
-                "ref_mv_std": C.mv_standard(v_ref, a, b), "ref_mv_odkidef": C.mv_odki_definition(v_ref, a, b),
+                "ref_mv_std": C.mv_standard(v_ref, a, b),
                 "ref_pv": C.peak_velocity(v_ref, a, b), "ref_mpv": C.mpv(t, v_ref, a, b),
                 "ref_rom_m": C.rom(t, v_ref, a, b)}
 
@@ -116,7 +123,11 @@ def pair_set(log_path, aligned_path, set_row, align_info=None):
     rows = []
     paired_r, paired_o = set(), set()
     for i, k, v in pairs:
-        rows.append({**base, "match": "TP", "iou": v, **ref_fields(i), **odki_fields(k)})
+        _t0, _t1, i0, i1 = odki[k]
+        # the primary endpoint needs the firmware's exact window (P row times,
+        # firmware >= 3.11.32); a window rebuilt from the S rows is approximate
+        win = C.mv_same_window(v_ref, v_odki, i0, i1) if int(k) in timed else np.nan
+        rows.append({**base, "match": "TP", "iou": v, **ref_fields(i), **odki_fields(k), "ref_mv_window": win})
         paired_r.add(i)
         paired_o.add(k)
     for i in range(len(ref_seg)):
