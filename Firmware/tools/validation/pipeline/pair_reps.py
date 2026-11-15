@@ -162,7 +162,7 @@ def run(data, quiet=False):
         rs = pair_set(log, apath, row, info)
         rows += rs
         al_rows.append({"set_id": row["set_id"], **{k: info.get(k) for k in
-                        ("lag_ms", "drift_ppm", "drift_estimated", "set_duration_s", "xcorr_r", "sync_check_ms", "flagged", "sign", "ref_scale")}})
+                        ("lag_ms", "drift_ppm", "drift_estimated", "set_duration_s", "xcorr_r", "first_lift_check_ms", "flagged", "sign", "ref_scale")}})
         if not quiet:
             n = pd.Series([r["match"] for r in rs]).value_counts()
             print(f"{row['set_id']:<28} TP {n.get('TP', 0):>3}  FN {n.get('FN', 0):>3}  FP {n.get('FP', 0):>3}")

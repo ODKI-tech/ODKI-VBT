@@ -18,7 +18,10 @@ Self-test of the validation pipeline on SYNTHETIC data (tests/synth.py).
   1. statistics against published worked examples (Shrout & Fleiss 1979 ICCs)
   2. import_ref.py on a velocity-only export with ';' fields and decimal
      commas, times in ms with an offset
-  3. end to end: generate a dataset with a known bias, noise, clock offset
+  3. the first-lift check: a set whose reference timing slips by 60 ms
+     during the first lift only is flagged; the same set without the slip
+     is not
+  4. end to end: generate a dataset with a known bias, noise, clock offset
      (no shared host clock), clock drift, reference scale error, sign
      inversion, missed and false reps; run analyze.py (align, pair, stats)
      through its command line; assert that
@@ -46,6 +49,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "pipeline"))
 sys.path.insert(0, HERE)
+import align  # noqa: E402
 import stats  # noqa: E402
 import import_ref  # noqa: E402
 import synth  # noqa: E402
@@ -100,6 +104,31 @@ def test_import_ref(tmp):
           np.allclose(pos["position_m"].values, df["position_m"].values / 1000.0))
 
 
+def test_first_lift_flag(tmp):
+    print("first-lift check (section 5.2) on a reference that slips during the first lift")
+    rng = np.random.default_rng(7)
+    t, v, conc = synth.true_motion(rng, 0.90, 0.50, 5)
+    slip, t_end = 0.060, conc[0][1] + 0.3     # 60 ms during the first lift, back to 0 over 1 s of rest
+
+    def warp(tt):
+        return slip * np.clip(1.0 - (tt - t_end) / 1.0, 0.0, 1.0)
+
+    out = {}
+    for name, w in (("clean", None), ("slip", warp)):
+        synth.write_set(tmp, f"{name}_U1", name, rng, t, v, conc, None, False, True, set(), ref_warp=w)
+        _, out[name] = align.align_set(os.path.join(tmp, "raw", "odki", f"{name}_U1.log"),
+                                       os.path.join(tmp, "raw", "ref", f"{name}.csv"), 1.0 / synth.REF_SCALE_ERROR)
+    c, s = out["clean"], out["slip"]
+    check("clean set: first lift found, within +/-20 ms, not flagged",
+          c["first_lift_found"] and abs(c["first_lift_check_ms"]) <= 20.0 and not c["flagged"],
+          f"{c['first_lift_check_ms']:+.1f} ms, r {c['first_lift_r']:.3f}")
+    check("slipping reference: first-lift check beyond +/-20 ms, set flagged",
+          s["first_lift_found"] and abs(s["first_lift_check_ms"]) > 20.0 and s["flagged"],
+          f"{s['first_lift_check_ms']:+.1f} ms, whole-set r {s['xcorr_r']:.3f}, gap ok {s['ref_sampling_ok']}")
+    check("the slip is not caught by the other checks (r > 0.90, no reference gap)",
+          s["xcorr_r"] > 0.90 and s["ref_sampling_ok"])
+
+
 def run(script, *args):
     r = subprocess.run([sys.executable, os.path.join(ROOT, script), *args], capture_output=True, text=True)
     if r.returncode != 0:
@@ -121,8 +150,8 @@ def test_end_to_end(data):
     check("clock drift recovered on the long sets (40 ppm +/- 25)",
           len(est) > 0 and (np.abs(est["drift_ppm"] - synth.DRIFT_PPM) < 25).all(),
           f"{len(est)} sets, {', '.join(f'{x:.0f}' for x in est['drift_ppm'])} ppm")
-    check("no set flagged by the sync check", (~al["flagged"].astype(bool)).all(),
-          f"max |sync| {np.nanmax(np.abs(al['sync_check_ms'])):.1f} ms")
+    check("no set flagged by the first-lift check", (~al["flagged"].astype(bool)).all(),
+          f"max |first lift| {np.nanmax(np.abs(al['first_lift_check_ms'])):.1f} ms")
     # alignment accuracy: aligned reference vs the noise-free signal ODKI saw
     errs = []
     for sid in al["set_id"].values[:6]:
@@ -192,6 +221,9 @@ def main():
         imp = os.path.join(data, "_import_ref")
         os.makedirs(imp, exist_ok=True)
         test_import_ref(imp)
+        fl = os.path.join(data, "_first_lift")
+        os.makedirs(fl, exist_ok=True)
+        test_first_lift_flag(fl)
         test_end_to_end(data)
     finally:
         if not args.keep:

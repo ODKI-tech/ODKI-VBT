@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Version | 2.0, 14/11/2026. Replaces version 1.0 before any study data was collected (section 14) |
+| Version | 2.1, 15/11/2026: no sync event (lifter safety); alignment check on the first lift (section 14). Version 2.0 (14/11/2026) replaced 1.0; both before any study data |
 | Device | ODKI-VBT sensor (Seeed XIAO nRF52840 Sense, LSM6DS3TR-C IMU) |
 | Firmware under test | **3.12.19**, default settings. The exact commit is recorded for every session |
 | Reference | the built-in cable position encoder of a commercial cable resistance machine (brand and model not disclosed), its cables attached to the ends of a free barbell, verified as in section 4. It is **not** a laboratory instrument |
@@ -59,9 +59,9 @@ Free-fall and video checks are not possible here (the machine resists the cable;
 
 ## 5. Capture, alignment and pairing
 
-**5.1 Capture.** For each set: `CALIBRATE` with the bar still (at the start of each session), start both recordings, **sync event** (with the bar still for 2 s, lift it sharply by a few cm and set it back; wait 2 s), the set, 2 s still, stop. `capture.py` saves the ODKI log byte for byte. The reference is recorded by its own reader and saved as `raw/ref/<set>.csv` (`t_s, position_m`); `import_ref.py` converts other encoders' exports to the same file. The machine reader itself is not published, because it would identify the machine.
+**5.1 Capture.** For each set: `CALIBRATE` with the bar still (at the start of each session), start both recordings, at least 2 s with the bar still, the set, at least 2 s still, stop (if possible before the bar is racked). There is no sync event: the alignment comes from the set itself (5.2). `capture.py` saves the ODKI log byte for byte. The reference is recorded by its own reader and saved as `raw/ref/<set>.csv` (`t_s, position_m`); `import_ref.py` converts other encoders' exports to the same file. The machine reader itself is not published, because it would identify the machine.
 
-**5.2 Alignment** (`pipeline/align.py`), from the signals alone: coarse full-range cross-correlation of the ODKI drift-corrected velocity with the reference velocity on a 100 Hz grid; fine search ±300 ms in 1 ms steps with parabolic refinement; clock drift on sets ≥ 25 s. A set is **flagged and excluded** if the sync event is not found, if it differs between the ODKI acceleration and the reference by more than **±20 ms** (one reference sample), if the velocity correlation is below 0.90, or if the reference has a gap (section 4, check 3). The number of flagged sets is reported.
+**5.2 Alignment** (`pipeline/align.py`), from the signals alone: coarse full-range cross-correlation of the ODKI drift-corrected velocity with the reference velocity on a 100 Hz grid; fine search ±300 ms in 1 ms steps with parabolic refinement; clock drift on sets ≥ 25 s. **Check on the first lift:** the first concentric of the reference in the set (segmented as in 5.3), from 1 s before it starts to 0.2 s after it ends; on that window alone the same velocity correlation is searched again (±300 ms, 1 ms steps, parabolic refinement), and its peak must fall within **±20 ms** (one reference sample) of the whole-set alignment. A set is **flagged and excluded** if the first lift is not found or its correlation is not above 0.90, if the check differs by more than ±20 ms, if the whole-set velocity correlation is below 0.90, or if the reference has a gap (section 4, check 3). The number of flagged sets is reported.
 
 **5.3 Pairing** (`pipeline/pair_reps.py`). Reference rep: a run of reference velocity > 0 rising ≥ 10 cm (runs < 50 ms apart merged). ODKI rep: every rep with an `R,` row, its interval from the `P,` row. One-to-one pairing on time overlap (IoU ≥ 0.5): paired = TP, ODKI only = false rep (FP), reference only = missed rep (FN).
 
@@ -161,9 +161,10 @@ The bootstrap seed is fixed, so the published dataset always gives the published
 
 ## 14. Deviations and history
 
+- **Version 2.1, 15/11/2026, before any study data.** The sync event (a sharp lift of the bar by a few cm before each set) is removed for lifter safety: in the squat it is a sharp lift with a loaded bar on the back. The firmware also reported it as a rep whenever it lasted longer than the minimum phase duration. The alignment check moves to the first lift of the set (section 5.2). It is a velocity correlation on that lift, not the timing of an acceleration peak: during a squat or bench press concentric the acceleration peak is broad and the reference acceleration, derived from the reference position (section 4), is too noisy to time within ±20 ms. The operator's pilot sets (not part of the study, not published) showed that the alignment does not depend on the sync event.
 - **Version 2.0, 14/11/2026, before any study data.** Replaces version 1.0 (stand-alone linear encoder, six trained lifters, loads in % 1RM, firmware 3.12.4). Reasons: the reference available is a machine's cable encoder; four lifters are available, one a beginner on purpose. Loads by velocity band up to 0.5 m/s; exploratory sets added; tier E added next to the IMU tier; one sensor; no video; firmware 3.12.19.
 - **Primary endpoint reference.** Version 1.0 approximated the firmware's phase definition on the reference (first sample ≥ 0.20 m/s plus a short back-fill). On real lifts that cut the slow start of the push that the firmware keeps, so it measured a definition artefact; the reference is now averaged over the same samples as the firmware (section 6).
-- **Data seen before this version.** On 13/11/2026 the operator recorded two exploratory squat sets (13 reps, firmware 3.12.18) on the same reference to test the set-up. Their analysis led to firmware 3.12.19 (phase look-back 5 → 12 samples) and to the endpoint change above. They are not part of the study.
+- **Data seen before this version.** On 13/11/2026 the operator recorded two exploratory squat sets (13 reps, firmware 3.12.18) on the same reference to test the set-up. Their analysis led to firmware 3.12.19 (phase look-back 5 → 12 samples) and to the endpoint change above. They are not part of the study. On 15/11/2026, before version 2.1, the operator ran the pilot (section 2): the static scale check of the reference cable and a few squat sets to test the capture, two of which were analysed and showed that the alignment does not depend on the sync event. The pilot sets are not part of the study and are not published.
 
 Every change after the first study session is listed here with its date and reason.
 

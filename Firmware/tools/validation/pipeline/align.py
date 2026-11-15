@@ -25,16 +25,19 @@ host clock and the alignment comes from the signals alone, in three steps:
                estimate at 1 ms steps with parabolic refinement; repeated on
                the first and the second half of the set, whose difference
                gives the clock drift (ppm), corrected linearly
-  3. check   - the sync drop at the start of the set: the peak of ODKI's raw
-               vertical acceleration and the peak of the reference
-               acceleration must fall within +/-20 ms after alignment,
-               otherwise the set is flagged; so is a set whose reference
-               has a gap above two sample intervals
+  3. check   - the first lift of the set (the first reference concentric,
+               segmented as for pairing, from 1 s before it starts to 0.2 s
+               after it ends): the same velocity correlation searched
+               +/-300 ms on that window alone must peak within +/-20 ms of
+               the whole-set alignment, with r above 0.90, otherwise the set
+               is flagged; so is a set whose whole-set correlation is below
+               0.90 or whose reference has a gap above two sample intervals
 
 Output, for set_id S:
   aligned/S.csv   t_s, v_ref, v_odki_corrected, v_odki_raw, acc_odki_raw at the
                   ODKI sample times (t_s = ODKI session time, 100 Hz)
-  aligned/S.json  sign, offset_s, lag_ms, drift_ppm, xcorr_r, sync_check_ms, flagged
+  aligned/S.json  sign, offset_s, lag_ms, drift_ppm, xcorr_r, first_lift_check_ms,
+                  first_lift_r, first_lift_found, flagged
 
 Usually run through ../analyze.py. On its own:
     python pipeline/align.py --data DATA_DIR --set-id L-01-D1-SQ-V2-S1_U1
@@ -96,19 +99,25 @@ def search(t_dev, v_o, t_e, x, center, half_range, step, mask):
     return parabolic(offs, rs, k), float(rs[k])
 
 
-def peak_time(t, y, t_max):
-    m = (t <= t[0] + t_max) & np.isfinite(y)
-    if m.sum() < 3:
+def first_lift_check(t_s, t_dev, offset, v_o, t_e, x, v_ref):
+    """Residual lag on the first lift (PROTOCOL.md section 5.2): the
+    velocity correlation searched +/-LAG_SEARCH_S on the first reference
+    concentric alone (FIRST_LIFT_PRE_S before it to FIRST_LIFT_POST_S after
+    it), on top of the whole-set alignment. Returns (residual ms, r); NaN
+    if there is no reference concentric or too few samples."""
+    seg = C.segment_ref_concentrics(t_s, v_ref)
+    if not seg:
         return np.nan, np.nan
-    idx = np.where(m)[0]
-    k = idx[int(np.argmax(y[idx]))]
-    tt = t[k]
-    if 0 < k < len(y) - 1 and np.all(np.isfinite(y[k - 1:k + 2])):
-        y0, y1, y2 = y[k - 1], y[k], y[k + 1]
-        den = y0 - 2 * y1 + y2
-        if den != 0:
-            tt = t[k] + 0.5 * (y0 - y2) / den * (t[k + 1] - t[k])
-    return float(tt), float(y[k])
+    a, b = seg[0]
+    m = (t_s >= t_s[a] - C.FIRST_LIFT_PRE_S) & (t_s <= t_s[b] + C.FIRST_LIFT_POST_S) & np.isfinite(v_o)
+    if m.sum() < 20:
+        return np.nan, np.nan
+    offs = np.arange(-C.LAG_SEARCH_S, C.LAG_SEARCH_S + 0.0005, 0.001)
+    rs = np.array([pearson(v_o[m], C.ref_velocity_at(t_e, x, t_dev[m] + offset[m] + c)) for c in offs])
+    if not np.isfinite(rs).any():
+        return np.nan, np.nan
+    k = int(np.nanargmax(rs))
+    return float(parabolic(offs, rs, k) * 1000.0), float(rs[k])
 
 
 def align_set(log_path, ref_path, ref_scale=C.DEFAULT_REF_SCALE, session=None):
@@ -149,16 +158,10 @@ def align_set(log_path, ref_path, ref_scale=C.DEFAULT_REF_SCALE, session=None):
     aligned = pd.DataFrame({"t_s": t_s, "v_ref": v_ref, "v_odki_corrected": v_o,
                             "v_odki_raw": s["velZ"].values, "acc_odki_raw": s[acc_col].values})
 
-    # sync check: the drop happens before the first lift, within SYNC_WINDOW_S.
-    # Backward difference, like ODKI's acceleration (a mean over the samples
-    # leading up to each sample), so both peaks carry the same 5 ms offset.
-    acc_ref = np.r_[0.0, np.diff(np.nan_to_num(v_ref)) / np.maximum(np.diff(t_s), 1e-4)]
-    seg = C.segment_ref_concentrics(t_s, v_ref)
-    win = C.SYNC_WINDOW_S if not seg else min(C.SYNC_WINDOW_S, t_s[seg[0][0]] - 0.3 - t_s[0])
-    t_pr, a_pr = peak_time(t_s, acc_ref, win)
-    t_po, a_po = peak_time(t_s, aligned["acc_odki_raw"].values, win)
-    found = np.isfinite(a_pr) and a_pr > 5.0 and np.isfinite(a_po) and a_po > 5.0
-    sync_ms = (t_po - t_pr) * 1000.0 if found else np.nan
+    # first-lift check: an independent local estimate of the lag on the
+    # first lift, which the whole-set alignment must agree with
+    fl_ms, fl_r = first_lift_check(t_s, t_dev, offset, v_o, t_e, x, v_ref)
+    found = bool(np.isfinite(fl_ms) and np.isfinite(fl_r) and fl_r > C.FIRST_LIFT_MIN_R)
     r_final = pearson(v_o, v_ref)
     # sampling check (PROTOCOL.md section 4): no reference gap above two sample
     # intervals over the span of the ODKI set
@@ -167,14 +170,15 @@ def align_set(log_path, ref_path, ref_scale=C.DEFAULT_REF_SCALE, session=None):
     ref_dt = float(np.median(np.diff(t_e)))
     max_gap = float(dte.max()) if len(dte) else np.inf
     gap_ok = max_gap <= 2.0 * ref_dt + 1e-9
-    flagged = (not found) or abs(sync_ms) > C.SYNC_TOLERANCE_MS or not (r_final > 0.9) or not gap_ok
+    flagged = (not found) or abs(fl_ms) > C.FIRST_LIFT_TOLERANCE_MS or not (r_final > 0.9) or not gap_ok
     info = {"coarse_method": method, "sign": sign,
             "offset_s": float(c1 + k * (0.5 * (m1 + m2) - m1)),
             "lag_ms": float((c1 + k * (0.5 * (m1 + m2) - m1) - c0) * 1000.0),
             "drift_ppm": float(k * 1e6) if drift_estimated else None, "drift_estimated": bool(drift_estimated),
             "set_duration_s": float(duration), "xcorr_r": r_final,
-            "sync_check_ms": None if not np.isfinite(sync_ms) else float(sync_ms),
-            "sync_event_found": bool(found), "ref_rate_hz": 1.0 / ref_dt,
+            "first_lift_check_ms": None if not np.isfinite(fl_ms) else float(fl_ms),
+            "first_lift_r": None if not np.isfinite(fl_r) else float(fl_r),
+            "first_lift_found": found, "ref_rate_hz": 1.0 / ref_dt,
             "ref_max_gap_ms": max_gap * 1000.0, "ref_sampling_ok": bool(gap_ok), "flagged": bool(flagged),
             "ref_scale": float(ref_scale), "odki_acc_column": acc_col}
     return aligned, info
@@ -218,10 +222,10 @@ def run(data, set_ids=None, scale_override=None, quiet=False):
             json.dump(info, f, indent=2)
         results[row["set_id"]] = info
         if not quiet:
-            sc = "n/a" if info["sync_check_ms"] is None else f"{info['sync_check_ms']:+.1f} ms"
+            sc = "n/a" if info["first_lift_check_ms"] is None else f"{info['first_lift_check_ms']:+.1f} ms"
             dr = "    n/a" if info["drift_ppm"] is None else f"{info['drift_ppm']:+7.0f}"
             print(f"{row['set_id']:<28} lag {info['lag_ms']:+8.1f} ms  drift {dr} ppm  "
-                  f"r {info['xcorr_r']:.3f}  sync {sc}{'  FLAGGED' if info['flagged'] else ''}")
+                  f"r {info['xcorr_r']:.3f}  first lift {sc}{'  FLAGGED' if info['flagged'] else ''}")
     return results
 
 

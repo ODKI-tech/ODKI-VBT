@@ -79,11 +79,8 @@ def true_motion(rng, mv_target, rom, n_reps):
         segs.append(fn(tt, dur))
         t += n / FS_TRUE
 
-    add(1.5, lambda tt, d: np.zeros_like(tt))
-    # sync event: lift ~3 cm, let it drop back onto the hooks (abrupt stop)
-    add(0.25, lambda tt, d: 0.20 * np.sin(np.pi * tt / d))
-    add(0.12, lambda tt, d: -0.45 * np.sin(0.5 * np.pi * tt / d))
-    add(2.0, lambda tt, d: np.zeros_like(tt))
+    # no sync event (PROTOCOL.md 5.1): >= 2 s still, the set, >= 2 s still
+    add(2.5, lambda tt, d: np.zeros_like(tt))
     for _ in range(n_reps):
         mv = mv_target * (1 + rng.normal(0, 0.03))
         dc = rom / mv
@@ -100,7 +97,10 @@ def true_motion(rng, mv_target, rom, n_reps):
     return np.arange(len(v)) / FS_TRUE, v, conc
 
 
-def write_set(out, set_id, phys_id, rng, t, v, conc, missed_rep, extra, p_v2, enc_written):
+def write_set(out, set_id, phys_id, rng, t, v, conc, missed_rep, extra, p_v2, enc_written, ref_warp=None):
+    """ref_warp: optional function of true time (s) giving an extra delay of
+    the reference stream (s), to build a reference whose timing slips locally
+    (self-test of the first-lift check); None for a clean reference."""
     # ---------- ODKI samples (device clock = true time + T0, signal delayed) ----------
     T0 = 812.345 + rng.uniform(0, 5)
     dt = 0.010 + rng.normal(0, 0.00002, int((t[-1] - 0.2) / 0.010))
@@ -208,6 +208,8 @@ def write_set(out, set_id, phys_id, rng, t, v, conc, missed_rep, extra, p_v2, en
         lead = rng.uniform(2.0, 6.0)               # recording started this long before the motion
         te_k = np.arange(0.0, (t[-1] + lead) * (1 + DRIFT_PPM * 1e-6) - 0.02, 1.0 / REF_HZ)
         t_true_k = te_k / (1 + DRIFT_PPM * 1e-6) - lead
+        if ref_warp is not None:
+            t_true_k = t_true_k - ref_warp(t_true_k)
         x = np.cumsum(v) / FS_TRUE
         pos = -REF_SCALE_ERROR * np.interp(t_true_k, t, x, left=0.0)   # reads upward motion as negative
         pos = np.round(pos / REF_RES_M) * REF_RES_M

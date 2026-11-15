@@ -19,7 +19,7 @@ How we test the accuracy of ODKI-VBT against a reference encoder, and the tools 
 | 2. Convert the reference's export | `python import_ref.py export.csv --data DATA --set L-01-D1-SQ-V2-S1 --time-col 0 --time-unit ms --pos-col 1 --pos-unit mm` | `DATA/raw/ref/<set>.csv` |
 | 3. Analyse everything | `python analyze.py --data DATA` | `DATA/results/RESULTS.md` |
 
-Before step 1, calibrate the sensor with the bar still and start the reference recording. During the set: 2 s still, a short sharp lift as sync, the reps, 2 s still, then Ctrl+C. The dataset also needs `sessions.csv`, `sets.csv` and `reference_verification.csv`, described in PROTOCOL.md section 9. Run each script with `--help` for all options.
+Before step 1, calibrate the sensor with the bar still and start the reference recording. During the set: at least 2 s still, the reps, at least 2 s still, then Ctrl+C. No sync movement is needed: the alignment comes from the set itself. The dataset also needs `sessions.csv`, `sets.csv` and `reference_verification.csv`, described in PROTOCOL.md section 9. Run each script with `--help` for all options.
 
 `analyze.py` aligns each set from the signals (no shared clock needed), pairs the reps and computes agreement, rep detection and the thresholds of PROTOCOL.md section 8. The same data always gives the same numbers.
 

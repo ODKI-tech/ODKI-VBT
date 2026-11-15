@@ -45,8 +45,10 @@ REF_MERGE_GAP_S = 0.05            # positive-velocity runs closer than this are 
 PAIR_MIN_IOU = 0.50               # rep pairing: temporal intersection-over-union
 LAG_SEARCH_S = 0.300              # fine alignment search range around the coarse estimate
 MIN_DRIFT_SET_S = 25.0            # clock drift is estimated only on sets at least this long
-SYNC_WINDOW_S = 8.0               # the sync drop is looked for in the first N s of a set, before the first lift
-SYNC_TOLERANCE_MS = 20.0          # |sync check| above this flags the set (one sample of a 50 Hz reference)
+FIRST_LIFT_PRE_S = 1.0            # first-lift check window: from this long before the first reference concentric...
+FIRST_LIFT_POST_S = 0.2           # ...to this long after its end (section 5.2)
+FIRST_LIFT_MIN_R = 0.90           # the first-lift velocity correlation must exceed this, or the check is not found
+FIRST_LIFT_TOLERANCE_MS = 20.0    # |first-lift check| above this flags the set (one sample of a 50 Hz reference)
 VELOCITY_BANDS = [(0.0, 0.5, "<0.5 (not tested)"), (0.5, 0.75, "V3"), (0.75, 1.0, "V2"), (1.0, 99.0, "V1")]  # m/s, reference MV
 DEFAULT_REF_SCALE = 1.0           # reference position scale; replaced by the static verification (section 4)
 
