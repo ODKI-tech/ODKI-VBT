@@ -83,3 +83,7 @@ If **any** of these fail, open the case back up and check the solder joints from
 ## 8. Permanent assembly
 
 Once every check above passes, open the case one last time, apply cyanoacrylate along the mating edges of `case-top` and `case-bottom`, and close them together for good. From this point on the unit is sealed — see the note in [`../CAD/README.md`](../CAD/README.md) about what that means for future battery replacement.
+
+## 9. Calibrate the battery reading
+
+Once, give the sensor a full charge with the switch **on**: it uses the end of the charge to correct its battery reading, so the percentage in the app is right. Follow [`../BATTERY_CALIBRATION.md`](../BATTERY_CALIBRATION.md). You can also do it before gluing, at step 6, if you'd rather see the charge LED.

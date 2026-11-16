@@ -156,11 +156,11 @@ The bootstrap seed is fixed, so the published dataset always gives the published
 
 - **Deadlift:** an amendment, published before its data is collected.
 - **Phase end at lockout:** after the study, its slow-lockout reps are used to evaluate ending the concentric at the highest bar position; any change is a new firmware version, outside this study.
-- **Laboratory phase:** a university laboratory with a laboratory transducer or 3D motion capture, under its ethics approval.
 - **Every firmware release:** ODKI replays the dataset logs through the new engine.
 
 ## 14. Deviations and history
 
+- **16/11/2026, editorial.** Section 13 no longer lists a laboratory phase at a university: none is planned. The design, endpoints, statistics and thresholds do not change.
 - **Version 2.1, 15/11/2026, before any study data.** The sync event (a sharp lift of the bar by a few cm before each set) is removed for lifter safety: in the squat it is a sharp lift with a loaded bar on the back. The firmware also reported it as a rep whenever it lasted longer than the minimum phase duration. The alignment check moves to the first lift of the set (section 5.2). It is a velocity correlation on that lift, not the timing of an acceleration peak: during a squat or bench press concentric the acceleration peak is broad and the reference acceleration, derived from the reference position (section 4), is too noisy to time within ±20 ms. The operator's pilot sets (not part of the study, not published) showed that the alignment does not depend on the sync event.
 - **Version 2.0, 14/11/2026, before any study data.** Replaces version 1.0 (stand-alone linear encoder, six trained lifters, loads in % 1RM, firmware 3.12.4). Reasons: the reference available is a machine's cable encoder; four lifters are available, one a beginner on purpose. Loads by velocity band up to 0.5 m/s; exploratory sets added; tier E added next to the IMU tier; one sensor; no video; firmware 3.12.19.
 - **Primary endpoint reference.** Version 1.0 approximated the firmware's phase definition on the reference (first sample ≥ 0.20 m/s plus a short back-fill). On real lifts that cut the slow start of the push that the firmware keeps, so it measured a definition artefact; the reference is now averaged over the same samples as the firmware (section 6).

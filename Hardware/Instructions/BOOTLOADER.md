@@ -102,6 +102,8 @@ With the switch closed:
 
 From now on, firmware updates come from the app.
 
+Once the battery is connected, charge the sensor fully once with the switch closed, so that it calibrates its battery reading: see [`../BATTERY_CALIBRATION.md`](../BATTERY_CALIBRATION.md).
+
 ## If something goes wrong
 
 | What you see | What to do |
