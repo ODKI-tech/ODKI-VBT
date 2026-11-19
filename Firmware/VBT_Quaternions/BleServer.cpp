@@ -18,7 +18,7 @@
 // BLEDfu (a class from the same Bluefruit52Lib, see bluefruit.h): friend
 // service of the Adafruit bootloader, exposes only the "buttonless DFU"
 // characteristic (writing to it reboots the device into the bootloader,
-// which exposes the ACTUAL Nordic Secure DFU service for the transfer -
+// which exposes the ACTUAL Nordic Legacy DFU service for the transfer -
 // this second step is handled entirely by the factory bootloader, NEVER
 // by this file). App-side DFU libraries (e.g. nordic_dfu on Flutter)
 // recognize this service automatically.
@@ -41,6 +41,13 @@ namespace {
   const uint8_t UUID_CHR_SYSSTAT[]  = {0xAF,0xC2,0x8A,0x83,0xCE,0x89,0x99,0x8B,0x77,0x4D,0x84,0x17,0xBB,0x25,0x73,0x6C};
   const uint8_t UUID_CHR_COMMAND[]  = {0xB0,0xC2,0x8A,0x83,0xCE,0x89,0x99,0x8B,0x77,0x4D,0x84,0x17,0xBB,0x25,0x73,0x6C};
   const uint8_t UUID_CHR_CONFIG[]   = {0xB2,0xC2,0x8A,0x83,0xCE,0x89,0x99,0x8B,0x77,0x4D,0x84,0x17,0xBB,0x25,0x73,0x6C};
+  // Protocol 1.0: ProtocolVersion takes 0xB3, a value never used before.
+  // 0xB1 stays retired rather than reused: firmware from before the
+  // standard Device Information Service carried the firmware version
+  // there, and a client reading it as a protocol version would misread
+  // those bytes. A UUID is never given a new meaning (BLE_PROTOCOL.md,
+  // compatibility policy).
+  const uint8_t UUID_CHR_PROTOVER[] = {0xB3,0xC2,0x8A,0x83,0xCE,0x89,0x99,0x8B,0x77,0x4D,0x84,0x17,0xBB,0x25,0x73,0x6C};
 
   BLEService        vbtService(UUID_SERVICE);
   BLECharacteristic streamChr(UUID_CHR_STREAM);
@@ -49,6 +56,7 @@ namespace {
   BLECharacteristic systemStatusChr(UUID_CHR_SYSSTAT);
   BLECharacteristic commandChr(UUID_CHR_COMMAND);
   BLECharacteristic configChr(UUID_CHR_CONFIG);
+  BLECharacteristic protocolVersionChr(UUID_CHR_PROTOVER);
 
   // Standard Bluetooth SIG services - see the layout comment in BleServer.h.
   BLEBas batteryService;
@@ -235,7 +243,15 @@ namespace {
       applyConfigPacket(data);
       return;
     }
-    if (len < 2 || len > CONFIG_CHUNK_MAX_LEN) return;
+    if (len < 2 || len > CONFIG_CHUNK_MAX_LEN) {
+      // Ignored write (1 or 21-37 bytes). The stack has already stored it
+      // as the Read value of this variable-length characteristic: put the
+      // last full packet back, as for a chunk below, so a Read never shows
+      // bytes the firmware did not accept. The assembly in progress is
+      // left as it is.
+      configChr.write((uint8_t*)&configReadValue, sizeof(configReadValue));
+      return;
+    }
 
     uint16_t offset = data[0];
     uint16_t chunkLen = len - 1;
@@ -291,7 +307,7 @@ void BleServer::begin() {
 
   // Enables the OTA update (BLE DFU): writing to its characteristic
   // reboots the device into the factory Adafruit bootloader, which
-  // exposes the actual Nordic Secure DFU service for transferring the
+  // exposes the actual Nordic Legacy DFU service for transferring the
   // new firmware - see the comment on the include above.
   bledfu.begin();
 
@@ -337,6 +353,18 @@ void BleServer::begin() {
   configChr.begin();
   configChr.setWriteCallback(config_write_callback);
   writeConfigCharacteristic(MotionTracker::defaultConfig());
+
+  // Protocol 1.0: the wire-protocol version (ProtocolVersion in Config.h),
+  // static for the whole session, read-only. Declared last in the custom
+  // service so the characteristics above keep their order.
+  protocolVersionChr.setProperties(CHR_PROPS_READ);
+  protocolVersionChr.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
+  protocolVersionChr.setFixedLen(sizeof(ProtocolVersionPacket));
+  protocolVersionChr.begin();
+  ProtocolVersionPacket protoVer;
+  protoVer.major = ProtocolVersion::MAJOR;
+  protoVer.minor = ProtocolVersion::MINOR;
+  protocolVersionChr.write((uint8_t*)&protoVer, sizeof(protoVer));
 
   // Standard Bluetooth SIG services (see the layout comment in
   // BleServer.h) - battery updated periodically by sendBattery(),

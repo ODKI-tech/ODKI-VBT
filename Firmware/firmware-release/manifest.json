@@ -1,5 +1,5 @@
 {
-  "version": "3.12.19",
-  "url": "https://github.com/ODKI-tech/ODKI-VBT/releases/download/fw-v3.12.19/vbt_firmware_3.12.19_OTA.zip",
-  "notes": "- Mean velocity now includes the slow start of each push (phase look-back 5 -> 12 samples).\n- Use companion app 1.0.9 or later: older apps set the old value back on every connection.\n- Updating from the app requires the OTAFIX bootloader: https://github.com/ODKI-tech/ODKI-VBT/blob/main/Hardware/Instructions/BOOTLOADER.md\n- Known limitation: live velocity and position can be off at the start of some sets."
+  "version": "3.12.25",
+  "url": "https://github.com/ODKI-tech/ODKI-VBT/releases/download/fw-v3.12.25/vbt_firmware_3.12.25_OTA.zip",
+  "notes": "- Fixed: the first rep of a set could read too high after a slow descent.\n- Fixed: touch-and-go reps could be merged into one, and settling or re-racking the bar could count as a rep.\n- Mean velocity now ends at the lockout. Final rep values are steadier and can arrive a little later.\n- Calibration no longer rescales the accelerometer. Readings can differ from the previous version by a few per cent, depending on the sensor (higher on the sensors tested so far).\n- New for app developers: the sensor reports its Bluetooth protocol version (1.0).\n- Use companion app 1.0.9 or later. Updating from the app requires the OTAFIX bootloader: https://github.com/ODKI-tech/ODKI-VBT/blob/main/Hardware/Instructions/BOOTLOADER.md\n- Known limitation: live velocity and position can be off at the start of some sets."
 }

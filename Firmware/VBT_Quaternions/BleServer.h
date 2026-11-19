@@ -17,7 +17,7 @@
 #include <Arduino.h>
 #include "TrackingTypes.h" // MotionSample, RepResult, CorrectedCurveChunk, RuntimeConfig
 
-// BLE server. The CUSTOM service (see UUID_SERVICE in BleServer.cpp) has 6
+// BLE server. The CUSTOM service (see UUID_SERVICE in BleServer.cpp) has 7
 // characteristics:
 //
 //   Stream          (Notify)   - fast, decimated telemetry (see Config.h),
@@ -92,6 +92,13 @@
 //                                 v3.12.4: seven bias/drift-correction
 //                                 fields are firmware-only - ignored on
 //                                 write, see RuntimeConfigPacket below.
+//   ProtocolVersion (Read)     - protocol 1.0: [MAJOR, MINOR] of the wire
+//                                 protocol (ProtocolVersion in Config.h),
+//                                 independent of the firmware version, so
+//                                 a third-party client can tell whether it
+//                                 understands this firmware without
+//                                 tracking firmware releases. See
+//                                 ProtocolVersionPacket below.
 //
 // RepSummary is Notify, NEVER indicate(): indicate() blocks the entire
 // loop() (and therefore also IMU sampling) until the client confirms,
@@ -118,7 +125,7 @@
 // Separately, the Adafruit bootloader also exposes the "buttonless DFU"
 // service (BLEDfu class from the same Bluefruit52Lib, enabled in
 // BleServer::begin()): the app writes to it to make the device reboot
-// into bootloader mode, which then exposes the actual Nordic Secure DFU
+// into bootloader mode, which then exposes the actual Nordic Legacy DFU
 // service for the firmware transfer - handled entirely by the app-side
 // DFU library (e.g. nordic_dfu on Flutter), NEVER by custom code here.
 //
@@ -219,6 +226,15 @@ struct SystemStatusPacket {
   uint8_t trackingActive; // 0/1
 }; // 2 bytes (unchanged)
 
+// Protocol 1.0 - the ProtocolVersion characteristic (Read, static). A
+// client must accept a longer value and ignore the bytes it does not know
+// (a later minor version may append fields), and must treat a missing
+// characteristic as firmware from before protocol versioning.
+struct ProtocolVersionPacket {
+  uint8_t major; // ProtocolVersion::MAJOR - breaking changes
+  uint8_t minor; // ProtocolVersion::MINOR - additive changes
+}; // 2 bytes
+
 // Layout of the Config characteristic (Read/Write) - mirror of
 // RuntimeConfig (MotionTracker.h) in fixed-point format, same scheme as
 // the other characteristics. repDirection is already a direct integer
@@ -294,6 +310,10 @@ struct RuntimeConfigPacket {
 //
 // Config (Read/Write, 38 bytes, v3.11.0/v3.11.24/v3.11.27): see RuntimeConfigPacket above
 // (v3.12.4: seven firmware-only fields, ignored on write).
+//
+// ProtocolVersion (Read, 2 bytes, protocol 1.0):
+//   major            uint8   direct
+//   minor            uint8   direct
 //
 // ============================================================================
 // STANDARD SERVICES (Bluetooth SIG) - see the comment at the top of the file

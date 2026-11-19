@@ -1322,6 +1322,198 @@ namespace {
   // 0.004-0.020 m/s lower; against a reference cable-machine encoder (exploratory, not
   // the stage-05 validation) the reported mean velocity moves towards the
   // standard definition. No change to the BLE packets or the log format.
+  //
+  // v3.12.20: two fixes to the end of a phase, found comparing recorded
+  // squat sets with a reference cable-machine encoder (exploratory, not the
+  // stage-05 validation; no accuracy figure is claimed from it).
+  //   - END OF A CONCENTRIC (score window). A phase closes only at a
+  //     stillness, a confirmed reversal or the timeout, so after the lockout
+  //     (the small bounce, the re-rack) a concentric ran on for up to ~0.4 s
+  //     of near-zero velocity and its mean velocity took those samples in.
+  //     scorePhase() now ends a concentric's window at the first
+  //     zero-crossing of the corrected velocity after the phase's peak, if
+  //     afterwards the forward velocity never reaches phaseStartVelocityMps
+  //     and the forward displacement stays below concentricEndResidualM
+  //     (0.05 m); otherwise (a second push) the phase keeps its own end.
+  //     Same rule in the provisional and the final score, each on its own
+  //     curve. Mean velocity, displacement and quality1 use that window;
+  //     peak values, the reported/too-short test (the phase's own
+  //     duration), the P row and the rep cycle (Y row) are unchanged, and
+  //     eccentrics are not cut. Replay of 16 recorded squat and deadlift
+  //     sets (123 reps): rep counts unchanged, 40 concentrics end earlier,
+  //     mean velocity always higher (median +0.035, max +0.23 m/s).
+  //     Rejected: leaving out the samples under 0.10 m/s after the peak
+  //     (moves away from the v > 0 definition, would also cut a sticking
+  //     point after the peak), a reversal threshold of 0.05 m/s (two squat
+  //     sets lose a rep) or 0.10 m/s, the maximum of the live position, the
+  //     same zero-crossing on velZLive (its bias before the rep-cycle
+  //     calibration misses the first rep): all further from the encoder.
+  //   - RISE GATE. Under heavy loads the sticking point can sit within
+  //     stillGateFromTurnM of the bottom, where the v3.12.16 position gate
+  //     counts the bar as "at the turnaround": a flat-guard stillness was
+  //     confirmed with the bar still rising and the concentric was split
+  //     (two heavy squat sets 9 reps for 8). The phase that closes the rep
+  //     cycle (cycleStartType, v3.12.17) may not end at a flat-guard
+  //     stillness while it has risen less than cycleRiseFraction (0.7) of
+  //     the cycle's excursion before it (from cycleStartPos, the live
+  //     position where the cycle's first phase started, to where this phase
+  //     started; only when that is more than cycleRiseMinDepthM, 0.05 m) and
+  //     both velZLive and refVelZ still point forward at more than
+  //     cycleRiseMovingMps (0.10 m/s); valve stillGateValveSamples as for the
+  //     position gate. Replay: those two sets 9 -> 8 (one still counts a
+  //     re-rack movement), a third 7 -> 6 (a slow movement after the last
+  //     rep); the other recorded sets same reps, no mean velocity moved by
+  //     0.02 m/s or more; same result with 0.6-0.85 and 0.06-0.14 m/s.
+  //     Rejected: a lower stillGateMovingMps (misses a sticking point after
+  //     a real pause at the bottom, where the gate's origin moves to the
+  //     bottom), a velocity-only gate (refuses real stops under strong
+  //     drift: two squat sets lose reps), requiring the bar back within
+  //     0.15 m of the cycle start (live position error at lockout up to
+  //     0.21 m: other sets change).
+  //   New "W," log row (logScoreWindow()): the window of every phase score.
+  //   The four thresholds are firmware-only (not in the BLE Config packet,
+  //   whose layout is unchanged); no change to the BLE packets.
+  //
+  // v3.12.21: the half-cycle test (v3.12.15) is fooled when the live
+  // velocity itself is off. On a squat set recorded with 3.12.20 (4 reps,
+  // touch-and-go, one bracket open for 11 s) the EMA was seeded by the
+  // usual ~20 ms bracket at START (0.11 m/s per s, noise) and, extrapolated,
+  // held velZLive 0.24-0.28 m/s below velZ. At the lockout of rep 1 the raw
+  // velocity dipped to -0.08 m/s for a moment: through that offset the live
+  // descent read 0.10 m (a real top dip reads under 0.01 m), the crossing
+  // became a boundary and the half cycle (bottom to top, +0.52 m/s) and the
+  // next one (top to bottom, -0.34 m/s) started the rep calibration at a
+  // rate of -0.64 m/s per s. velZLive jumped to +0.9 m/s and kept growing
+  // (clamped at 4 m/s): no stillness, no reversal and no further boundary
+  // (the live velocity never went negative again), so reps 2 and 3 became
+  // one 5 s concentric closed by maxPhaseDurationS, with provisional values
+  // of 4.5-6.3 m/s peak and 11-13 m of displacement. 3.12.19 does the same
+  // on that log: not a 3.12.20 regression. Fix: a sample adds to the
+  // descent only the part where both velZLive and the raw velocity since
+  // the bracket anchor (velZ - baselineRawVel, re-anchored at every bracket
+  // close, so its drift is bounded by the bracket) point down - the less
+  // negative of the two. A real eccentric reads as one on both; a top dip
+  // read through a wrong live offset no longer counts. Replay: that set
+  // 3 -> 4 reps, provisional peaks 0.87-1.36 m/s; on the other 37 recorded
+  // squat, deadlift and hip-thrust sessions (pilots, 3.12.20 sets, the
+  // 3.12.14 session) rep counts are identical and only one Romanian-deadlift set
+  // moves (max 0.037 m/s). Rejected: the raw velocity integrated since the
+  // session start instead of since the anchor (it drifts over a long set:
+  // on a Romanian-deadlift set the descent of the last cycles fell to
+  // 0.02-0.06 m and a real boundary was lost), scaling the EMA seed by the
+  // first bracket's duration (every set starts with a ~20 ms bracket: a
+  // Romanian-deadlift set 12 -> 7 reps, a squat set 10 -> 11, mean
+  // velocities of other sets move by up to 0.3 m/s). No change to the BLE
+  // packets or the log format.
+  //
+  // v3.12.22: two fixes for the end of a squat rep, found comparing the
+  // 3.12.20 trial sets with a reference cable-machine encoder (exploratory,
+  // no accuracy figure is claimed from it).
+  //   - SETTLED CLOSE. The flat-guard's rising edge often comes while the
+  //     bar still settles after the lockout (with the short dynamic windows
+  //     of a fast rep, one or two samples of the rebound where the
+  //     acceleration crosses zero suffice). The bracket closed there, so
+  //     drift = velZ - baseline took in the bar's true velocity at that
+  //     sample (up to about +-0.15 m/s) and the linear correction spread it
+  //     over the bracket: the error of a final mean velocity closely
+  //     followed the reference velocity at the closing sample. When
+  //     the bracket has phases to rescore, the rising edge now starts a
+  //     settling (bracketSettling); the bracket closes after
+  //     bracketSettleSamples (20) still samples, with the drift taken as the
+  //     mean raw velocity over them at their mean time (closeBracketSettled()),
+  //     or when the stillness ends, if it lasted bracketSettleMinSamples (5);
+  //     a shorter stillness does not close it. The corrected curve stops at
+  //     the rising edge (the pause is not sent, as since v3.12.1). Only the
+  //     measurement waits: the live anchor (baselineRawVel, bracketStartT,
+  //     repCalibIntercept) follows every still sample as before, and the
+  //     closing bracket keeps its own reference (brkBaseline, brkT0), so the
+  //     decisions (velZLive, flat-guard, phases, rep count) are unchanged.
+  //     shiftVelocityFrame() runs only where the bracket restarts, so a
+  //     bracket's S rows stay in the frame of its B row. Replay (19 squat
+  //     sets with the encoder, pilot squat/deadlift sessions, the 3.12.14
+  //     session): rep counts identical; final mean velocity vs the encoder on
+  //     the same window: rep-to-rep scatter clearly lower, average difference
+  //     unchanged (exploratory, not an accuracy claim); final values later
+  //     (median 0.02 -> 0.31 s after the concentric, p90 0.12 -> 0.93 s).
+  //     Rejected: closing on every stillness with the mean (no gain), a
+  //     minimum of 3 (less gain) or 10 samples (final values up to 3 s
+  //     later), 30-40 samples (same gain, later), closing anyway once the
+  //     bracket is 2-4 s old (gain lost), letting the live anchor wait too
+  //     (the live estimate drifted: five logs changed rep count).
+  //   - MINIMUM REP DISPLACEMENT. The bar settling after the lockout or
+  //     moved onto the hooks could open a short concentric just above
+  //     phaseStartVelocityMps and count as a rep (8 in 19 sets, under 7 cm
+  //     each; every real rep of every recorded log moves at least 14 cm). A
+  //     concentric whose provisional displacement is below
+  //     minRepDisplacementM (0.10 m) is not reported nor counted, unless an
+  //     eccentric of at least that much was reported since the last rep
+  //     (eccDispSinceRepM): early in a set the provisional displacement can
+  //     be far off (a Romanian-deadlift rep read 7 cm provisional, 29 cm
+  //     final). Replay: 7 of the 8 gone, no other rep changes; same with
+  //     0.08 and 0.12 m; 0.15 m loses two hip-thrust reps.
+  //   The three fields are firmware-only (not in the BLE Config packet);
+  //   no change to the BLE packets or the log format.
+  //
+  // v3.12.25: descent gate. On squat sets recorded against a reference
+  // encoder (exploratory) the first rep of some sets read clearly too high.
+  // The first descent ended with a slow, steady movement (bar going down at
+  // a near-constant 0.14-0.30 m/s, acceleration near zero): the flat-guard
+  // confirmed stillness there - |velZLive| was under flatGuardMaxVelocity,
+  // in one set only because the EMA seed of the START bracket offset it -
+  // and neither position test refused it (the bar is at its extreme while
+  // it descends, and slower than stillGateTurnSlowFraction of the phase
+  // peak). The bracket closed with the bar's real velocity as "drift", the
+  // next bracket started from that wrong anchor and its opposite drift was
+  // spread over the concentric. The phase that opens the rep cycle, when it
+  // goes down (cycleStartType, or any phase before the first is reported),
+  // now cannot end at a flat-guard stillness while refVelZ still points the
+  // phase's way, away from the start (rawRel * stillGatePosM > 0), faster
+  // than descentGateRawMps (0.10 m/s), until descentGateValveSamples (60)
+  // flat samples. Replay of every recorded log: those first reps back in
+  // line with the other reps of their sets; one squat set loses a spurious
+  // rep at its end (now the reference's count); every other rep count the
+  // same; deadlifts, Romanian deadlifts and hip thrusts identical. Same
+  // result from 0.08 to 0.12 m/s and from 45 to 120 samples; 0.15 m/s misses
+  // one of the two sets, a valve of 30 the other. Rejected: the same test on
+  // every phase (reps lost on squat and hip-thrust sets), on the opening
+  // phase in both directions (a deadlift rep's displacement 0.61 -> 0.78 m),
+  // a smaller EMA seed or no seed from a bracket without a phase (neither
+  // removes the stillness; other logs change).
+  //
+  // v3.12.23: no isotropic accelerometer scale. Since v3.11 CALIBRATE set
+  // accelScaleG = G / |a| (|a| = the at-rest magnitude in g), assuming the
+  // excess of |a| over 1 g was a sensitivity error. A six-face test of a
+  // real unit (exploratory) showed it is mostly a zero-g offset of the axis
+  // pointing up, with gains close to 1: |a| reads above 1 g with that axis
+  // up and below 1 g with it down. The engine subtracts gravity as gravBody *
+  // accelScaleG, so the offset - plus the G - accelScaleG the scale left
+  // behind - ended up in accBiasVec anyway, and the scale only reduced
+  // every dynamic acceleration (and so velocity, displacement and peak) by
+  // the factor |a|: a few per cent, of either sign depending on the unit
+  // and the orientation CALIBRATE ran in. accelScaleG is now G whatever |a| reads;
+  // CALIBRATE still measures and prints |a|. Every acceleration of the
+  // engine is the old one times the |a| CALIBRATE measured (exactly; only
+  // the fixed thresholds see a different scale), and
+  // the at-rest residual the thresholds see (|a| - accelScaleG, the
+  // accBiasVec seed) changes by second order only: G(|a| - 1) instead of
+  // G(1 - 1/|a|). Replay on every recorded log (squat sets with the
+  // encoder from two sensors, the pilot squat/deadlift/hip-thrust
+  // sessions, the 3.12.14 session): rep counts identical except one squat
+  // session reconstructed from a pre-3.11.32 log (no accRaw), 11 -> 10 in
+  // a stretch that is already wrong at START (a 5 s timeout phase); the
+  // systematic under-reading of mean velocity, peak and displacement
+  // against the encoder is gone on both sensors (a smaller over-reading
+  // remains on one of them); the remaining error depends on the
+  // unit (its gain, and the part of its offset perpendicular to gravity,
+  // which the scalar-along-gravity bias update does not learn and which
+  // shows up while the bar tilts during the rep). A per-axis offset and
+  // gain from a six-face test removes that too in the same replay; it
+  // needs per-unit calibration data and is not part of this version.
+  // Values reported by this version are 3.12.22's on the same lift times
+  // the |a| CALIBRATE measured: higher when it read above 1 g, lower when
+  // below (a few per cent). No change
+  // to the BLE packets or the log format (the accelScaleG column now reads
+  // G).
   // ============================================================================
 
   // --- Sampling ---
@@ -1667,6 +1859,9 @@ namespace {
   int8_t cycleStartType = 0;
   bool cycleHasStart = false;
   float cycleStartT = 0;
+  // v3.12.20: live position at the start of the phase that started the
+  // current cycle (the top of a squat), for the rise gate in stepPhaseEngine().
+  float cycleStartPos = 0;
   float stillGateTurnM = 0;
   float stillGatePrevVelLive = 0;
   uint16_t stillGateFlatRun = 0;
@@ -1709,6 +1904,7 @@ namespace {
     uint16_t discarded;
     float durationS;
     uint8_t closeReason; // 0=flat, 1=reversal, 2=timeout
+    unsigned long tStartMs; // v3.12.20: device millis() of startIdx, for the "W," row
   };
   ClosedPhaseInfo closedPhases[MAX_CLOSED_PHASES_PER_BRACKET];
   uint8_t closedPhaseCount = 0;
@@ -1727,6 +1923,7 @@ namespace {
   float sinceCrossingMin = 0;
   // v3.12.15: descent of the live velocity (integral of -velZLive while it
   // is negative, m) since the last cycle boundary - see checkZeroCrossing().
+  // v3.12.21: of the less negative of velZLive and velZ - baselineRawVel.
   float sinceCrossingDescentM = 0;
   uint16_t repCalibCount = 0;
   float repCalibSumT = 0, repCalibSumY = 0, repCalibSumTT = 0, repCalibSumTY = 0;
@@ -1873,7 +2070,13 @@ namespace {
     return false;
   }
 
-  struct PhaseScore { float peak = 0, mean = 0, peakAcc = 0, meanAcc = 0, disp = 0; uint8_t quality1 = 0; };
+  // v3.12.20: cutoff/durationS = the window the score was computed over
+  // (offset of its last sample from startIdx, and its duration): the
+  // phase's own cutoff, or an earlier one for a concentric (see scorePhase()).
+  struct PhaseScore {
+    float peak = 0, mean = 0, peakAcc = 0, meanAcc = 0, disp = 0; uint8_t quality1 = 0;
+    int16_t cutoff = -1; float durationS = 0;
+  };
 
   // Recomputes peak/mean/displacement/quality1 for a closed phase
   // [startIdx..endIdx] (inclusive, in bracketBuf) - see _score_phase in
@@ -1888,18 +2091,61 @@ namespace {
     PhaseScore r;
     float meanNum = 0, accNum = 0, dispAcc = 0, prevCv = 0;
     uint32_t meanCnt = 0, accCnt = 0;
-    for (uint16_t i = startIdx; i <= endIdx; i++) {
-      const BracketSample& s = bracketBuf[i];
-      float cv;
+    auto correctedVel = [&](const BracketSample& s) -> float {
       if (useRepCalib) {
-        cv = s.velZ - (repCalibRate * s.t + repCalibIntercept);
+        return s.velZ - (repCalibRate * s.t + repCalibIntercept);
       } else if (corrected) {
         float pos = s.t - posT0;
-        cv = (basisTotal > 1e-9f) ? (s.velZ - baseline - drift * pos / basisTotal) : (s.velZ - baseline);
-      } else {
-        float pos = s.t - bracketStartT;
-        cv = s.velZ - baseline - emaRate * pos;
+        return (basisTotal > 1e-9f) ? (s.velZ - baseline - drift * pos / basisTotal) : (s.velZ - baseline);
       }
+      float pos = s.t - bracketStartT;
+      return s.velZ - baseline - emaRate * pos;
+    };
+
+    // v3.12.20: end of a concentric at the first zero-crossing of the
+    // corrected velocity after its peak, when what follows is only a small
+    // bounce: after the crossing the forward velocity never reaches
+    // phaseStartVelocityMps and the forward displacement stays below
+    // concentricEndResidualM. Without it the phase ran on through the
+    // lockout bounce or the re-rack until the next stillness or reversal
+    // and the mean velocity took in up to ~0.3 s of near-zero samples. See
+    // the version note. Computed on the same corrected curve as the score
+    // (provisional and final alike), so the two can end at different
+    // samples. Backwards from the end: the forward motion left after a
+    // sample only grows as the sample moves earlier, so the first crossing
+    // that qualifies is the earliest one met before the test fails.
+    if (pType > 0 && cutoff > 0) {
+      int16_t peakOff = 0;
+      float peakFwd = 0.0f;
+      for (int16_t k = 0; k <= cutoff; k++) {
+        float f = correctedVel(bracketBuf[startIdx + k]);
+        if (f > peakFwd) { peakFwd = f; peakOff = k; }
+      }
+      float tailMax = 0.0f, tailDisp = 0.0f, fNext = 0.0f;
+      bool haveNext = false;
+      int16_t newCutoff = -1;
+      for (int16_t k = cutoff; k >= peakOff; k--) {
+        const BracketSample& s = bracketBuf[startIdx + k];
+        float f = correctedVel(s);
+        if (haveNext && fNext < 0.0f && f >= 0.0f) newCutoff = k; // crossing between k and k+1
+        if (k == peakOff) break;
+        if (f > 0.0f) tailDisp += f * s.dt;
+        if (f > tailMax) tailMax = f;
+        if (!(tailMax < activeConfig.phaseStartVelocityMps && tailDisp < activeConfig.concentricEndResidualM)) break;
+        fNext = f;
+        haveNext = true;
+      }
+      if (newCutoff >= 0) {
+        cutoff = newCutoff;
+        durationS = fmax(0.0f, bracketBuf[startIdx + cutoff].t - bracketBuf[startIdx].t);
+      }
+    }
+    r.cutoff = cutoff;
+    r.durationS = durationS;
+
+    for (uint16_t i = startIdx; i <= endIdx; i++) {
+      const BracketSample& s = bracketBuf[i];
+      float cv = correctedVel(s);
       // v3.11.8: direction-inclusion test moved from the raw sample (s.velZ)
       // to the corrected value (cv) computed just above - see the version
       // note near the top of this file for the full diagnosis. s.velZ never
@@ -2164,6 +2410,31 @@ namespace {
     return ms;
   }
 
+  // v3.12.20, log-only: one "W," row per phase score (provisional at the
+  // phase close, final at the bracket close; the last one of a phase is the
+  // window of its last R value). t_end_ms is the device millis() of the
+  // last sample the score used: the P row's t_end_ms, or earlier when the
+  // concentric end moved it (see scorePhase()). startMs is the millis() of
+  // the phase's first sample (the P row's t_start_ms).
+  void logScoreWindow(uint16_t id, uint8_t repNumber, int8_t pType, CorrectionStatus status,
+                      uint16_t startIdx, const PhaseScore& ps, unsigned long startMs) {
+    if (!serialLogActive()) return;
+    unsigned long ms = startMs;
+    for (int16_t k = 1; k <= ps.cutoff; k++) {
+      ms += (unsigned long)(bracketBuf[startIdx + k].dt * 1000.0f + 0.5f);
+    }
+    Serial.print("W,"); Serial.print(id); Serial.print(',');
+    Serial.print(repNumber); Serial.print(',');
+    Serial.print(pType); Serial.print(',');
+    Serial.print((uint8_t)status); Serial.print(',');
+    Serial.print(ps.durationS, 4); Serial.print(',');
+    Serial.println(ms);
+  }
+
+  // v3.12.22: largest provisional displacement of an eccentric reported
+  // since the last counted concentric (see closePhaseFn()).
+  float eccDispSinceRepM = 0.0f;
+
   void closePhaseFn(uint8_t reason, uint16_t idxInBracket) {
     uint16_t n = phaseSampleCount;
     int16_t discardedI, cutoff;
@@ -2185,6 +2456,20 @@ namespace {
     float tEnd = (cutoff >= 0) ? bracketBuf[startIdx + cutoff].t : tStart;
     float durationS = fmax(0.0f, tEnd - tStart);
     bool reported = durationS > activeConfig.minPhaseDurationS;
+    // v3.12.22: a concentric that rises less than minRepDisplacementM in its
+    // provisional score, after no eccentric of at least that much since the
+    // last rep, is not a rep (the bar settling after the lockout, the
+    // re-rack): not reported, not counted. See the version note.
+    bool useRepCalib = (repCalibCount >= 2);
+    PhaseScore ps;
+    if (reported) {
+      ps = scorePhase(startIdx, idxInBracket, cutoff, durationS, reason, phaseType,
+                      false, useRepCalib, baselineRawVel, 0, 0, 0);
+      if (phaseType > 0 && ps.disp < activeConfig.minRepDisplacementM &&
+          eccDispSinceRepM < activeConfig.minRepDisplacementM) {
+        reported = false;
+      }
+    }
 
     // v3.11.18: one line per phase close attempt (reported OR silently
     // discarded for being too short) - added specifically to diagnose
@@ -2224,7 +2509,9 @@ namespace {
         uint16_t endKept = (cutoff >= 0) ? (uint16_t)(startIdx + cutoff) : startIdx;
         if (cycleStartType == 0) cycleStartType = phaseType;
         if (phaseType == cycleStartType) {
-          if (!cycleHasStart) { cycleHasStart = true; cycleStartT = bracketBuf[startIdx].t; }
+          if (!cycleHasStart) {
+            cycleHasStart = true; cycleStartT = bracketBuf[startIdx].t; cycleStartPos = bracketBuf[startIdx].pos;
+          }
         } else if (cycleHasStart) {
           float residual = bracketBuf[endKept].pos;
           if (serialLogActive()) {
@@ -2239,16 +2526,16 @@ namespace {
           cycleHasStart = false;
         }
       }
+      unsigned long startMs = bracketSampleMillis(startIdx, idxInBracket);
       if (closedPhaseCount < MAX_CLOSED_PHASES_PER_BRACKET) {
         ClosedPhaseInfo& cp = closedPhases[closedPhaseCount++];
         cp.id = phaseId; cp.repNumber = phaseRepNumber; cp.phaseType = phaseType;
         cp.startIdx = startIdx; cp.endIdx = endIdx; cp.cutoff = cutoff;
         cp.discarded = (uint16_t)discardedI; cp.durationS = durationS; cp.closeReason = reason;
+        cp.tStartMs = startMs;
       }
-      bool useRepCalib = (repCalibCount >= 2);
-      PhaseScore ps = scorePhase(startIdx, endIdx, cutoff, durationS, reason, phaseType,
-                                  false, useRepCalib, baselineRawVel, 0, 0, 0);
       CorrectionStatus status = useRepCalib ? CorrectionStatus::RepCalibrated : CorrectionStatus::Provisional;
+      logScoreWindow(phaseId, phaseRepNumber, phaseType, status, startIdx, ps, startMs);
       reportPhaseScore(phaseRepNumber, phaseType, status, ps.peak, ps.mean, ps.peakAcc, ps.meanAcc, ps.disp, ps.quality1);
 
       // v3.11.18: unconditional on phaseType>0, not on alternation with the
@@ -2258,6 +2545,9 @@ namespace {
       // before it.
       if (phaseType > 0) {
         currentRepNumberEngine++;
+        eccDispSinceRepM = 0.0f;
+      } else if (ps.disp > eccDispSinceRepM) {
+        eccDispSinceRepM = ps.disp;
       }
     }
 
@@ -2278,8 +2568,7 @@ namespace {
     phaseAccWindowSamples = activeConfig.minAccelerationFlatWindowSamples;
   }
 
-  void enqueueCorrectedCurveChunks(float t0, float baseline, float drift, float basisTotal) {
-    uint16_t total = bracketCount;
+  void enqueueCorrectedCurveChunks(float t0, float baseline, float drift, float basisTotal, uint16_t total) {
     if (total == 0) return;
     uint16_t totalChunks = (total + CorrectedCurveChunk::CAPACITY - 1) / CorrectedCurveChunk::CAPACITY;
     uint16_t bracketId = nextBracketId++;
@@ -2482,15 +2771,31 @@ namespace {
   // stepPhaseEngine() call - see shiftVelocityFrame() below.
   bool bracketClosedThisStep = false;
 
-  void closeBracketFn() {
+  // v3.12.22: settling of a bracket close - see closeBracketSettled().
+  bool bracketSettling = false;
+  uint16_t settleEdgeIdx = 0;
+  uint16_t settleSamples = 0;
+  float settleSumVel = 0.0f;
+  float settleSumT = 0.0f;
+  // v3.12.22: the reference of the bracket being measured (its start and
+  // the raw velZ there). Equal to the live anchor (bracketStartT,
+  // baselineRawVel) except while a bracket with phases to rescore stays
+  // open across a stillness too short to close it: the live anchor follows
+  // every confirmed-still sample, as before; this one moves only when the
+  // bracket closes or restarts.
+  float brkBaseline = 0.0f;
+  float brkT0 = 0.0f;
+
+  // Closes the open bracket at t1 with the given drift (relative to
+  // baselineRawVel); newAnchor is the raw velZ value that becomes the next
+  // bracket's zero, chunkSamples how many buffered samples the corrected
+  // curve sends. closeBracketFn() below is the instantaneous close (t1 =
+  // now, drift and anchor from this sample).
+  void closeBracketAt(float t1, float drift, float newAnchor, uint16_t chunkSamples, bool moveLiveAnchor) {
     bracketClosedThisStep = true;
-    float t0 = bracketStartT;
-    float t1 = sessionT;
-    float baseline = baselineRawVel;
-    // Drift measured RELATIVE to the anchor already reported to 0 by the
-    // previous bracket, NEVER to absolute zero - guarantees continuity
-    // (no steps at the close of each bracket).
-    float drift = velZ - baseline;
+    bracketSettling = false;
+    float t0 = brkT0;
+    float baseline = brkBaseline;
     float basisTotal = t1 - t0;
     float rate = (basisTotal > 1e-6f) ? (drift / basisTotal) : 0.0f;
     if (!emaInitialized) {
@@ -2520,6 +2825,7 @@ namespace {
       ClosedPhaseInfo& cp = closedPhases[i];
       PhaseScore ps = scorePhase(cp.startIdx, cp.endIdx, cp.cutoff, cp.durationS, cp.closeReason, cp.phaseType,
                                   true, false, baseline, drift, t0, basisTotal);
+      logScoreWindow(cp.id, cp.repNumber, cp.phaseType, CorrectionStatus::Corrected, cp.startIdx, ps, cp.tStartMs);
       reportPhaseScore(cp.repNumber, cp.phaseType, CorrectionStatus::Corrected,
                         ps.peak, ps.mean, ps.peakAcc, ps.meanAcc, ps.disp, ps.quality1);
     }
@@ -2548,12 +2854,13 @@ namespace {
       Serial.println(basisTotal, 4);
     }
 
-    enqueueCorrectedCurveChunks(t0, baseline, drift, basisTotal);
+    enqueueCorrectedCurveChunks(t0, baseline, drift, basisTotal, chunkSamples);
 
     // The new anchor: this bracket has just reported velZ's raw value,
     // HERE, to 0 - future brackets measure their drift starting from this
     // point, not from absolute zero.
-    baselineRawVel = velZ;
+    brkBaseline = newAnchor;
+    if (moveLiveAnchor) baselineRawVel = newAnchor;
 
     // Carries the still-open phase's samples forward into the new
     // bracket (possible only if flatGuardMaxVelocityMps >
@@ -2568,13 +2875,33 @@ namespace {
       }
     }
 
-    bracketStartT = t1;
+    brkT0 = t1;
+    if (moveLiveAnchor) bracketStartT = t1;
     bracketCount = carryCount;
     closedPhaseCount = 0;
 
     if (phaseOpen) {
       phaseStartIdxInBracket = 0;
     }
+  }
+
+  void closeBracketFn() {
+    // Drift measured RELATIVE to the anchor already reported to 0 by the
+    // previous bracket, NEVER to absolute zero - guarantees continuity
+    // (no steps at the close of each bracket).
+    closeBracketAt(sessionT, velZ - brkBaseline, velZ, bracketCount, true);
+  }
+
+  // v3.12.22: the close of a bracket that waited for its stillness to
+  // settle (RuntimeConfig::bracketSettleSamples). The drift is the mean of
+  // the raw velocity over the still samples since the rising edge, taken at
+  // their mean time; the corrected curve stops at the rising edge (the
+  // pause after it is never sent, as since v3.12.1). See the version note.
+  void closeBracketSettled() {
+    float n = (float)settleSamples;
+    float meanVel = settleSumVel / n;
+    float meanT = settleSumT / n;
+    closeBracketAt(meanT, meanVel - brkBaseline, meanVel, settleEdgeIdx + 1, false);
   }
 
   // v3.12.2: zeroes velZ during confirmed stillness. Until 3.12.1 velZ was
@@ -2610,6 +2937,8 @@ namespace {
     velZ -= c;
     prevVelZ -= c;
     baselineRawVel -= c;
+    brkBaseline -= c;
+    settleSumVel -= (float)settleSamples * c;
     if (lastCrossingT >= 0.0f) lastCrossingRawPos += c * (sessionT - lastCrossingT);
     for (uint16_t i = 0; i < bracketCount; i++) bracketBuf[i].velZ -= c;
     repCalibSumY -= (float)repCalibCount * c;
@@ -2802,8 +3131,16 @@ namespace {
     debugStateVar.velocityClampedToMax = clamped;
     debugStateVar.velZLive = velZLive;
     // v3.12.15: descent since the last rep-cycle boundary, read by the next
-    // checkZeroCrossing() - velZLive is invariant under shiftVelocityFrame().
-    if (velZLive < 0.0f) sinceCrossingDescentM -= velZLive * dt;
+    // checkZeroCrossing(). v3.12.21: only where the raw velocity since the
+    // bracket anchor points down too (the less negative of the two), so a
+    // wrong live offset cannot turn a top dip into a descent - see the
+    // version note. Both are invariant under shiftVelocityFrame(), which
+    // shifts velZ and baselineRawVel by the same amount.
+    {
+      float rawSinceAnchor = velZ - baselineRawVel;
+      float descentVel = (rawSinceAnchor > velZLive) ? rawSinceAnchor : velZLive;
+      if (descentVel < 0.0f) sinceCrossingDescentM -= descentVel * dt;
+    }
 
     velLiveRing[ringHead] = velZLive;
     accZRing[ringHead] = worldAccZDirected;
@@ -2863,6 +3200,32 @@ namespace {
       bool midRange = monotonic || (!nearStart && !atTurn);
       bool moving = fabs(velZLive) > activeConfig.stillGateMovingMps;
       if (midRange && moving && stillGateFlatRun < activeConfig.stillGateValveSamples) flatCombined = false;
+      // v3.12.25: descent gate - the slow end of a descent (the first one
+      // of a set, typically) is not a stillness while the raw velocity still
+      // moves down, away from the start; see the version note.
+      if (phaseOpen && phaseType < 0 && (cycleStartType == 0 || phaseType == cycleStartType) &&
+          rawRel * (float)phaseType > activeConfig.descentGateRawMps && rawRel * stillGatePosM > 0.0f &&
+          stillGateFlatRun < activeConfig.descentGateValveSamples) {
+        flatCombined = false;
+      }
+      // v3.12.20: rise gate - the phase that closes the rep cycle (the
+      // concentric of a squat) is not over while it has covered less than
+      // cycleRiseFraction of the excursion the cycle made before it and the
+      // bar still moves forward on both the live and the raw velocity: a
+      // sticking point near the bottom, where the position gate above
+      // counts as "at the turnaround". See the version note.
+      if (phaseOpen && cycleHasStart && cycleStartType != 0 && phaseType == -cycleStartType) {
+        float phaseStartPos = bracketBuf[phaseStartIdxInBracket].pos;
+        float depth = (cycleStartPos - phaseStartPos) * (float)phaseType;
+        float rise = (livePosM - phaseStartPos) * (float)phaseType;
+        float fwdLive = velZLive * (float)phaseType;
+        float fwdRaw = rawRel * (float)phaseType;
+        float fwd = (fwdRaw < fwdLive) ? fwdRaw : fwdLive;
+        if (depth > activeConfig.cycleRiseMinDepthM && rise < activeConfig.cycleRiseFraction * depth &&
+            fwd > activeConfig.cycleRiseMovingMps && stillGateFlatRun < activeConfig.stillGateValveSamples) {
+          flatCombined = false;
+        }
+      }
     } else {
       stillGateFlatRun = 0;
     }
@@ -2901,9 +3264,38 @@ namespace {
     }
 
     debugStateVar.bracketClosed = shockClosedBracketNow;
-    if (risingEdge) {
-      closeBracketFn();
-      debugStateVar.bracketClosed = true;
+    // v3.12.22: with bracketSettleSamples > 1 the rising edge only starts
+    // the settling; the bracket closes once the stillness has lasted
+    // bracketSettleSamples samples, or when it ends after at least
+    // bracketSettleMinSamples (shorter: no close, the bracket goes on) -
+    // see closeBracketSettled() and the version note.
+    if (risingEdge && !bracketSettling) {
+      if (activeConfig.bracketSettleSamples <= 1 || closedPhaseCount == 0) {
+        closeBracketFn();
+        debugStateVar.bracketClosed = true;
+      } else {
+        bracketSettling = true;
+        settleEdgeIdx = idx;
+        settleSamples = 0;
+        settleSumVel = 0.0f;
+        settleSumT = 0.0f;
+      }
+    }
+    if (bracketSettling) {
+      if (flatCombined) {
+        settleSamples++;
+        settleSumVel += velZ;
+        settleSumT += sessionT;
+        if (settleSamples >= activeConfig.bracketSettleSamples) {
+          closeBracketSettled();
+          debugStateVar.bracketClosed = true;
+        }
+      } else if (settleSamples >= activeConfig.bracketSettleMinSamples) {
+        closeBracketSettled();
+        debugStateVar.bracketClosed = true;
+      } else {
+        bracketSettling = false;
+      }
     }
 
     // v3.11.2: while the engine CONFIRMS stillness (flatCombined, the
@@ -2966,12 +3358,20 @@ namespace {
       // no phase is open and none is waiting to be re-scored (their
       // indices point into bracketBuf); on the rising edge itself
       // closeBracketFn() has already emptied the buffer (bracketCount==0).
-      if (!phaseOpen && closedPhaseCount == 0 && bracketCount > 1) {
-        bracketBuf[0] = bracketBuf[bracketCount - 1];
-        bracketCount = 1;
+      if (!phaseOpen && closedPhaseCount == 0) {
+        if (bracketCount > 1) {
+          bracketBuf[0] = bracketBuf[bracketCount - 1];
+          bracketCount = 1;
+        }
+        // v3.12.22: nothing to rescore - the bracket restarts here.
+        brkBaseline = velZ;
+        brkT0 = sessionT;
+        // v3.12.2: velZ to 0 while still - see shiftVelocityFrame(). Since
+        // v3.12.22 only here: a bracket that stays open across a short
+        // stillness keeps one frame, so its "B," row and its "S," rows
+        // still rebuild the corrected curve offline.
+        if (!bracketClosedThisStep) shiftVelocityFrame(velZ);
       }
-      // v3.12.2: velZ to 0 while still - see shiftVelocityFrame().
-      if (!bracketClosedThisStep) shiftVelocityFrame(velZ);
     }
   }
 
@@ -2994,6 +3394,7 @@ namespace {
     wasFlatCombined = false;
     stillGatePosM = 0; stillGateTurnM = 0; stillGatePrevVelLive = 0; stillGateFlatRun = 0;
     livePosM = 0; livePrevVelLive = 0; cycleStartType = 0; cycleHasStart = false; cycleStartT = 0;
+    cycleStartPos = 0;
 
     phaseOpen = false; phaseType = 0; phaseId = 0; phaseRepNumber = 1;
     phaseStartIdxInBracket = 0; phaseLastSameDirIdx = -1;
@@ -3009,6 +3410,9 @@ namespace {
 
     bracketCount = 0; bracketStartT = 0; nextBracketId = 1;
     closedPhaseCount = 0;
+    bracketSettling = false; settleSamples = 0; settleSumVel = 0; settleSumT = 0; settleEdgeIdx = 0;
+    brkBaseline = 0; brkT0 = 0;
+    eccDispSinceRepM = 0;
 
     emaRate = 0; emaInitialized = false; baselineRawVel = 0;
 
@@ -3391,17 +3795,22 @@ void MotionTracker::calibrateOrientation() {
   gyroBiasX = sumGx / CALIBRATION_SAMPLES;
   gyroBiasY = sumGy / CALIBRATION_SAMPLES;
   gyroBiasZ = sumGz / CALIBRATION_SAMPLES;
+  // v3.12.23: the at-rest magnitude is measured and printed (diagnostic)
+  // but no longer turned into an isotropic scale - accelScaleG stays G.
+  // On a real part the excess of |a| at rest is mostly the zero-g offset
+  // of the axis pointing up, which the accBiasVec estimator already
+  // removes; scaling by G / |a| cut the dynamic gain by the same factor.
+  // See the version note.
   float measuredMagG = sqrt(meanAx * meanAx + meanAy * meanAy + meanAz * meanAz);
+  accelScaleG = G;
   if (measuredMagG > 0.85f && measuredMagG < 1.15f) {
-    accelScaleG = G / measuredMagG;
-    Serial.print("Accelerometer scale: measured magnitude="); Serial.print(measuredMagG, 4);
-    Serial.print("g (ideal 1.0000g), accelScaleG="); Serial.print(accelScaleG, 4);
-    Serial.println(" m/s^2/g (was ideal G=9.8066).");
+    Serial.print("Accelerometer at rest: measured magnitude="); Serial.print(measuredMagG, 4);
+    Serial.print("g (ideal 1.0000g); accelScaleG="); Serial.print(accelScaleG, 4);
+    Serial.println(" m/s^2/g (ideal G, not scaled since v3.12.23).");
   } else {
-    accelScaleG = G;
     Serial.print("WARNING: implausible at-rest accelerometer magnitude (");
     Serial.print(measuredMagG, 4);
-    Serial.println("g, expected close to 1.0) - scale NOT corrected, using ideal G.");
+    Serial.println("g, expected close to 1.0) - the device may have moved during CALIBRATE.");
   }
   accBiasVec[0] = accBiasVec[1] = accBiasVec[2] = 0;
   lastAccZBiasApplied = 0;
@@ -3455,6 +3864,8 @@ void MotionTracker::setTrackingActive(bool active) {
                       "t_start_ms,t_end_ms");
       // v3.12.17: one row per completed rep cycle (see closePhaseFn()).
       Serial.println("Y,repNumber,residualM,cycleDurationS,cycleStartType,t_end_ms");
+      // v3.12.20: one row per phase score - the window the score used (see logScoreWindow()).
+      Serial.println("W,phaseId,repNumber,phaseType,correctionStatus,durationS,t_end_ms");
       // v3.11.33: firmware identity and orientation filter, once per
       // recording.
       printInfoLine();

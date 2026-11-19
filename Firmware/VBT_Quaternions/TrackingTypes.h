@@ -297,9 +297,13 @@ struct RuntimeConfig {
   // crossing to count as one. A dip of the bar at the top of a pull
   // crosses zero too, with a few millimetres of descent: counted as a
   // boundary it split the rep into two half cycles whose net
-  // displacement is the full range of motion, not drift. NOT in the BLE
-  // Config packet (its 38-byte layout is unchanged): packetToConfig()
-  // starts from RuntimeConfig{}, so it always keeps this default.
+  // displacement is the full range of motion, not drift. v3.12.21: a
+  // sample counts only where the raw velocity since the bracket anchor
+  // points down as well (the less negative of the two is integrated), so
+  // a wrong live offset cannot make a top dip read as a descent. NOT in
+  // the BLE Config packet (its 38-byte layout is unchanged):
+  // packetToConfig() starts from RuntimeConfig{}, so it always keeps this
+  // default.
   float minCrossingDescentM = 0.05f;
   // v3.12.16: the first bracket's rate seeds the EMA unweighted; its
   // magnitude is limited to this (m/s per s). The first bracket usually
@@ -330,6 +334,54 @@ struct RuntimeConfig {
   // the extreme (which, in a monotonic motion, is the current position).
   float stillGateTurnSlowFraction = 0.6f;
   float stillGateRawMovingMps = 0.30f;
+
+  // --- End of the concentric phase (v3.12.20) ---
+  // FIRMWARE-ONLY, NOT in the BLE Config packet (packetToConfig() starts
+  // from RuntimeConfig{}, so these always keep the compiled defaults).
+  // Score window of a concentric phase: it ends at the first zero-crossing
+  // of the corrected velocity after the phase's peak when, after that
+  // crossing, the bar never rises again at phaseStartVelocityMps or more
+  // and rises less than concentricEndResidualM in total (the bounce at
+  // lockout, the re-rack). Peak velocity, the reported/too-short decision
+  // and the logged phase times are not affected.
+  float concentricEndResidualM = 0.05f;
+  // Rise gate on the phase that closes a rep cycle (the concentric of a
+  // squat or bench press, the eccentric of a deadlift from the floor): a
+  // flat-guard stillness is refused while that phase has covered less than
+  // cycleRiseFraction of the excursion the cycle made before it (when that
+  // excursion is more than cycleRiseMinDepthM) and both the live and the
+  // raw velocity still point forward at more than cycleRiseMovingMps. The
+  // same valve as the position gate (stillGateValveSamples) applies.
+  float cycleRiseFraction = 0.7f;
+  float cycleRiseMinDepthM = 0.05f;
+  float cycleRiseMovingMps = 0.10f;
+  // Descent gate on the phase that opens a rep cycle when it goes down (the
+  // eccentric of a squat or bench press; any phase before the first one is
+  // reported): a flat-guard stillness is refused while the raw velocity
+  // since the last stillness (refVelZ) still moves the phase's way, away
+  // from where the excursion started, faster than descentGateRawMps - the
+  // slow, steady end of a descent, which the flat-guard cannot tell from
+  // rest. Accepted anyway after descentGateValveSamples flat samples.
+  float descentGateRawMps = 0.10f;
+  uint8_t descentGateValveSamples = 60;
+
+  // --- Settling of a bracket close (v3.12.22) ---
+  // FIRMWARE-ONLY, NOT in the BLE Config packet. A bracket with phases to
+  // rescore no longer closes on the first confirmed-still sample: the drift
+  // is measured as the mean raw velocity over the first bracketSettleSamples
+  // still samples (the first one is often still in the rebound after the
+  // lockout). A stillness that ends before bracketSettleMinSamples does not
+  // close the bracket; one that ends between the two closes it with the
+  // samples it had. 1 / 1 = the instantaneous close of 3.12.21 and earlier.
+  uint8_t bracketSettleSamples = 20;
+  uint8_t bracketSettleMinSamples = 5;
+
+  // --- Minimum rep displacement (v3.12.22) ---
+  // FIRMWARE-ONLY, NOT in the BLE Config packet. A concentric whose
+  // provisional displacement is below this (m), with no eccentric of at
+  // least this much reported since the last rep, is not reported and does
+  // not count as a rep. 0 = no minimum (3.12.21 and earlier).
+  float minRepDisplacementM = 0.10f;
 
   // --- Shock handling: landing impulse + orientation hold (v3.12.6) ---
   // FIRMWARE-ONLY, and NOT carried by the BLE Config packet at all (its

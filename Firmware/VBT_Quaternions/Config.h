@@ -31,7 +31,22 @@
 namespace FirmwareVersion {
   const uint8_t MAJOR = 3;
   const uint8_t MINOR = 12;
-  const uint8_t PATCH = 19;
+  const uint8_t PATCH = 25;
+}
+
+// BLE protocol version, separate from the firmware version: it changes only
+// when what is on the wire changes (Firmware/BLE_PROTOCOL.md, "Protocol
+// version and compatibility"), so a third-party client can check the one
+// number that matters to it. Exposed as two bytes [MAJOR, MINOR] on the
+// read-only ProtocolVersion characteristic (UUID_CHR_PROTOVER in
+// BleServer.cpp). MINOR: additive, backwards-compatible change (a new
+// characteristic, a new command value, bytes appended to a notification).
+// MAJOR: anything that breaks an existing client. Do not change it for a
+// firmware release that leaves the wire format alone, and update the spec
+// in the same commit when you do.
+namespace ProtocolVersion {
+  const uint8_t MAJOR = 1;
+  const uint8_t MINOR = 0;
 }
 
 // v3.12.0: the x-io Fusion AHRS (src/Fusion/, MIT, wrapped by
