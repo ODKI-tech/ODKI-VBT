@@ -8,7 +8,7 @@ Before anything else: **read the licenses** — the map is in [`LICENSE`](LICENS
 
 | Area | License | Commercial use |
 |---|---|---|
-| Tracking engine (`Firmware/VBT_Quaternions/MotionTracker.*`, the tools that compile it in, `Firmware/DOCUMENTATION.md`) | [PolyForm Noncommercial 1.0.0](LICENSE-ENGINE) + ODKI's additional permissions — source-available, not open source | needs a commercial licence from ODKI |
+| Tracking engine (`Firmware/VBT_Quaternions/MotionTracker.*`, `Firmware/DOCUMENTATION.md`) | [PolyForm Noncommercial 1.0.0](LICENSE-ENGINE) + ODKI's additional permissions — source-available, not open source | needs a commercial licence from ODKI |
 | Rest of the firmware and the tools (`Firmware/`, other files) | [Apache-2.0](LICENSE-APACHE) — open source | allowed under Apache-2.0 |
 | BLE protocol spec (`Firmware/BLE_PROTOCOL.md`) | CC0 1.0 | allowed |
 | Hardware design (`Hardware/`) | [CC BY-NC-SA 4.0](LICENSE-HARDWARE) | needs ODKI's permission |

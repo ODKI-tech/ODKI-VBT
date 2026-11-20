@@ -1319,9 +1319,7 @@ namespace {
   // already opened, it cannot open one. Replayed through the host harness:
   // on 13 recorded squat, deadlift and hip-thrust sets of one session rep
   // counts are identical with 5 and 12, median mean velocity per exercise
-  // 0.004-0.020 m/s lower; against a reference cable-machine encoder (exploratory, not
-  // the stage-05 validation) the reported mean velocity moves towards the
-  // standard definition. No change to the BLE packets or the log format.
+  // 0.004-0.020 m/s lower. No change to the BLE packets or the log format.
   //
   // v3.12.20: two fixes to the end of a phase, found comparing recorded
   // squat sets with a reference cable-machine encoder (exploratory, not the
@@ -1431,9 +1429,7 @@ namespace {
   //     shiftVelocityFrame() runs only where the bracket restarts, so a
   //     bracket's S rows stay in the frame of its B row. Replay (19 squat
   //     sets with the encoder, pilot squat/deadlift sessions, the 3.12.14
-  //     session): rep counts identical; final mean velocity vs the encoder on
-  //     the same window: rep-to-rep scatter clearly lower, average difference
-  //     unchanged (exploratory, not an accuracy claim); final values later
+  //     session): rep counts identical; final values later
   //     (median 0.02 -> 0.31 s after the concentric, p90 0.12 -> 0.93 s).
   //     Rejected: closing on every stillness with the mean (no gain), a
   //     minimum of 3 (less gain) or 10 samples (final values up to 3 s
@@ -1500,10 +1496,8 @@ namespace {
   // encoder from two sensors, the pilot squat/deadlift/hip-thrust
   // sessions, the 3.12.14 session): rep counts identical except one squat
   // session reconstructed from a pre-3.11.32 log (no accRaw), 11 -> 10 in
-  // a stretch that is already wrong at START (a 5 s timeout phase); the
-  // systematic under-reading of mean velocity, peak and displacement
-  // against the encoder is gone on both sensors (a smaller over-reading
-  // remains on one of them); the remaining error depends on the
+  // a stretch that is already wrong at START (a 5 s timeout phase). Any
+  // remaining error depends on the
   // unit (its gain, and the part of its offset perpendicular to gravity,
   // which the scalar-along-gravity bias update does not learn and which
   // shows up while the bar tilts during the rep). A per-axis offset and
