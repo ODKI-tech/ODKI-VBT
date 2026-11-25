@@ -90,7 +90,7 @@ If it prints anything else, delete the file and download it again. Don't continu
 2. Bluetooth icon → **SCAN FOR DEVICES**. At the top of the list, an orange card says **Sensor in update mode**.
 3. Tap **FINISH UPDATE** and keep the screen open until it reaches 100 %. The app downloads the latest firmware from this repository by itself.
 
-If the card doesn't appear, use Sensor settings (gear icon) → **FINISH INTERRUPTED UPDATE**. As a last resort, use Nordic's *nRF Device Firmware Update* app with the `.zip` from [`Firmware/firmware-release/`](../../Firmware/firmware-release/), on target `XIAO_DFU`.
+If the card doesn't appear, use Settings (gear icon) → SENSOR → **FIRMWARE RECOVERY** → **FINISH UPDATE** (in older app versions: Sensor settings → **FINISH INTERRUPTED UPDATE**). As a last resort, use Nordic's *nRF Device Firmware Update* app with the `.zip` from [`Firmware/firmware-release/`](../../Firmware/firmware-release/), on target `XIAO_DFU`.
 
 ## 5. Check it works
 
